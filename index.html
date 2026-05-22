@@ -1394,60 +1394,87 @@ function renderVentasLinea(){
 
 function renderVentasBOM(){
   if(bomCache&&bomCache.periodo===vPeriodo1) return bomCache.html;
+
   const recetas={};
   DATA.compuestos.forEach(r=>{
-    const cod=(r['Código Compuesto']||'').trim();if(!cod) return;
+    const cod=(r['Código Compuesto']||'').trim();
+    if(!cod) return;
     if(!recetas[cod]) recetas[cod]=[];
     recetas[cod].push({componente:(r['Código Componente']||'').trim(),cantidad:num(r['Cantidad']),nombre:(r['Producto Componente']||'').trim()});
   });
-  // Iterative BOM explosion using a stack (avoids recursion limits)
-  function explotar(skuInicial, qtyInicial) {
-    const result = [];
-    const stack = [{sku: skuInicial, qty: qtyInicial, nivel: 0}];
-    const visited = new Set();
-    while(stack.length > 0) {
-      const {sku, qty, nivel} = stack.pop();
-      if(nivel > 6) { result.push({sku, qty}); continue; }
-      const receta = recetas[sku];
-      if(!receta || !receta.length) {
-        result.push({sku, qty});
-      } else {
-        receta.forEach(comp => {
-          stack.push({sku: comp.componente, qty: qty * comp.cantidad, nivel: nivel + 1});
-        });
-      }
-    }
-    return result;
-  }
-  const rows=ventasPeriodo(vPeriodo1);
-  const nivel0={};
-  rows.forEach(r=>{const sku=(getSku(r)||'').trim();const qty=num(r['Cantidad del producto']);if(!sku) return;if(!nivel0[sku])nivel0[sku]={sku,qty:0,nombre:r['nombre']||'',linea:r['LINEA']||'',rubro:r['RUBRO']||''};nivel0[sku].qty+=qty;});
-  const nivel1={};
-  Object.values(nivel0).forEach(item=>{
-    const receta=recetas[item.sku];
-    if(receta&&receta.length&&/^KIT/i.test(item.sku)){
-      receta.forEach(comp=>{if(!nivel1[comp.componente])nivel1[comp.componente]={sku:comp.componente,qty:0,nombre:comp.nombre};nivel1[comp.componente].qty+=item.qty*comp.cantidad;});
-    }
-    if(!nivel1[item.sku])nivel1[item.sku]={sku:item.sku,qty:0,nombre:item.sku};
-    nivel1[item.sku].qty+=item.qty;
-  });
-  const nivel2={};
-  Object.values(nivel1).forEach(item=>{explotar(item.sku,item.qty).forEach(ins=>{if(!nivel2[ins.sku])nivel2[ins.sku]={sku:ins.sku,qty:0};nivel2[ins.sku].qty+=ins.qty;});});
+
   const nombreDux={},unidadDux={};
-  DATA.dux.forEach(r=>{const c=(r['Código Producto']||'').trim();nombreDux[c]=r['Producto']||'';unidadDux[c]=(r['Unidad']||'UNIDAD').toUpperCase();});
-  function renderNivel(items,titulo){
+  DATA.dux.forEach(r=>{
+    const c=(r['Código Producto']||'').trim();
+    nombreDux[c]=r['Producto']||'';
+    unidadDux[c]=(r['Unidad']||'UNIDAD').toUpperCase();
+  });
+
+  const rows=ventasPeriodo(vPeriodo1);
+
+  // PASO 1: acumular ventas por SKU
+  const ventasPorSku={};
+  rows.forEach(r=>{
+    const sku=getSku(r);const qty=num(r['qty']);
+    if(!sku) return;
+    if(!ventasPorSku[sku]) ventasPorSku[sku]={sku,qty:0,nombre:r['nombre']||'',linea:r['LINEA']||''};
+    ventasPorSku[sku].qty+=qty;
+  });
+
+  // PASO 2: consumo productos (kits → 1 nivel → productos)
+  const consumoProductos={};
+  Object.values(ventasPorSku).forEach(item=>{
+    const esKit=/^KIT/i.test(item.sku);
+    const receta=recetas[item.sku];
+    if(esKit&&receta&&receta.length){
+      receta.forEach(comp=>{
+        if(!consumoProductos[comp.componente]) consumoProductos[comp.componente]={sku:comp.componente,qty:0,nombre:comp.nombre||nombreDux[comp.componente]||comp.componente};
+        consumoProductos[comp.componente].qty+=item.qty*comp.cantidad;
+      });
+    } else {
+      if(!consumoProductos[item.sku]) consumoProductos[item.sku]={sku:item.sku,qty:0,nombre:item.nombre||nombreDux[item.sku]||item.sku};
+      consumoProductos[item.sku].qty+=item.qty;
+    }
+  });
+
+  // PASO 3: consumo insumos (productos → 1 nivel → insumos)
+  const consumoInsumos={};
+  Object.values(consumoProductos).forEach(item=>{
+    const receta=recetas[item.sku];
+    if(receta&&receta.length){
+      receta.forEach(comp=>{
+        if(!consumoInsumos[comp.componente]) consumoInsumos[comp.componente]={sku:comp.componente,qty:0,nombre:comp.nombre||nombreDux[comp.componente]||comp.componente};
+        consumoInsumos[comp.componente].qty+=item.qty*comp.cantidad;
+      });
+    } else {
+      if(!consumoInsumos[item.sku]) consumoInsumos[item.sku]={sku:item.sku,qty:0,nombre:item.nombre||nombreDux[item.sku]||item.sku};
+      consumoInsumos[item.sku].qty+=item.qty;
+    }
+  });
+
+  function renderTabla(items,titulo){
     const sorted=Object.values(items).filter(x=>x.qty>0.001).sort((a,b)=>b.qty-a.qty);
     if(!sorted.length) return '';
-    return `<div class="v-chart-wrap"><div class="v-chart-title">${titulo}</div>
-      <table class="v-bom-table"><thead><tr><th>Producto / Insumo</th><th>SKU</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Unidad</th></tr></thead>
-      <tbody>${sorted.map(item=>{const nombre=item.nombre||item.nombreTN||nombreDux[item.sku]||item.sku;const unidad=unidadDux[item.sku]||'UNIDAD';const qf=item.qty%1===0?item.qty.toLocaleString('es-AR'):item.qty.toFixed(3);return `<tr><td>${nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;}).join('')}
+    return `<div class="v-chart-wrap">
+      <div class="v-chart-title">${titulo} · ${sorted.length} ítems</div>
+      <table class="v-bom-table"><thead><tr>
+        <th>Nombre</th><th>SKU</th>
+        <th style="text-align:right">Cantidad</th>
+        <th style="text-align:right">Unidad</th>
+      </tr></thead><tbody>
+      ${sorted.map(item=>{
+        const unidad=unidadDux[item.sku]||'UNIDAD';
+        const qf=Number.isInteger(Math.round(item.qty*1000)/1000)?item.qty.toLocaleString('es-AR'):item.qty.toFixed(3);
+        return `<tr><td>${item.nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;
+      }).join('')}
       </tbody></table></div>`;
   }
+
   const html=`
-    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Consumo real para <strong style="color:var(--text);">${vPeriodo1}</strong> — explosión BOM en cascada.</div>
-    ${renderNivel(nivel0,'Nivel 0 · Lo que se vendió (SKUs directos)')}
-    ${renderNivel(nivel1,'Nivel 1 · Productos individuales (kits explosionados)')}
-    ${renderNivel(nivel2,'Nivel 2 · Insumos al último nivel')}`;
+    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong></div>
+    ${renderTabla(consumoProductos,'Consumo de productos · kits abiertos a productos')}
+    ${renderTabla(consumoInsumos,'Consumo de insumos · productos abiertos a insumos')}
+  `;
   bomCache={periodo:vPeriodo1,html};
   return html;
 }
