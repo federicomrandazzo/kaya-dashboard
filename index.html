@@ -652,7 +652,13 @@ async function loadData() {
     console.log('Ventas first row keys:', ventasParsed.length>0?Object.keys(ventasParsed[0]).slice(0,10):[]);
     console.log('Ventas sample periodo:', ventasParsed.length>0?ventasParsed[0]['periodo']:'none');
     console.log('Ventas sample SKU.1:', ventasParsed.length>0?ventasParsed[0]['SKU.1']:'none');
-    DATA.ventas=ventasParsed.filter(r=>r['periodo']&&r['periodo'].trim()&&r['SKU.1']&&r['SKU.1'].trim());
+    // detect actual SKU column name
+    if(ventasParsed.length>0) {
+      const keys=Object.keys(ventasParsed[0]);
+      const skuKey=keys.find(k=>k.includes('SKU'));
+      console.log('SKU keys found:', keys.filter(k=>k.toLowerCase().includes('sku')));
+    }
+    DATA.ventas=ventasParsed.filter(r=>r['periodo']&&r['periodo'].trim());
     console.log('Ventas after filter:', DATA.ventas.length);
     CACHE.ventas=null;
     const now=new Date();
@@ -1236,6 +1242,7 @@ let vPeriodo1 = '';
 let vPeriodo2 = '';
 let bomCache = null;
 
+function getSku(r){return getSku(r)||r['SKU_1']||r['SKU.1 ']||'';}
 function metricaLabel(m){return m==='ars'?'ARS':m==='usd'?'USD':'AXI';}
 function metricaCol(m){return m==='ars'?'importe neto':m==='usd'?'importe usd':'importe axi';}
 function metricaFormat(m,v){
@@ -1407,7 +1414,7 @@ function renderVentasBOM(){
   }
   const rows=ventasPeriodo(vPeriodo1);
   const nivel0={};
-  rows.forEach(r=>{const sku=(r['SKU.1']||'').trim();const qty=num(r['Cantidad del producto']);if(!sku) return;if(!nivel0[sku])nivel0[sku]={sku,qty:0,linea:r['LINEA']||'',rubro:r['RUBRO']||''};nivel0[sku].qty+=qty;});
+  rows.forEach(r=>{const sku=(getSku(r)||'').trim();const qty=num(r['Cantidad del producto']);if(!sku) return;if(!nivel0[sku])nivel0[sku]={sku,qty:0,linea:r['LINEA']||'',rubro:r['RUBRO']||''};nivel0[sku].qty+=qty;});
   const nivel1={};
   Object.values(nivel0).forEach(item=>{
     const receta=recetas[item.sku];
