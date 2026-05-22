@@ -449,6 +449,65 @@
     color: var(--muted);
     letter-spacing: 0.06em;
   }
+
+  /* VENTAS */
+  .v-kpi-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px; }
+  .v-kpi { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px; }
+  .v-kpi-label { font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px; }
+  .v-kpi-val { font-size:20px;font-weight:500;font-variant-numeric:tabular-nums; }
+  .v-kpi-sub { font-size:10px;color:var(--muted);margin-top:3px; }
+  .v-kpi-delta-pos { color:var(--accent);font-size:11px; }
+  .v-kpi-delta-neg { color:var(--accent3);font-size:11px; }
+
+  .v-section { margin-bottom:32px; }
+  .v-section-title { font-family:'DM Serif Display',serif;font-size:15px;font-weight:400;margin-bottom:16px; }
+
+  .v-filters { display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap; }
+  .v-filter-label { font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase; }
+  .v-select {
+    background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    padding:6px 10px;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;
+    cursor:pointer;
+  }
+  .v-select:focus { outline:none;border-color:var(--accent); }
+
+  .v-metric-toggle { display:flex;gap:4px; }
+  .v-metric-btn {
+    padding:5px 12px;border-radius:4px;font-size:10px;letter-spacing:0.08em;
+    text-transform:uppercase;cursor:pointer;border:1px solid var(--border);
+    background:transparent;color:var(--muted);font-family:'DM Mono',monospace;transition:all 0.15s;
+  }
+  .v-metric-btn.active { background:var(--accent);color:#0e0e0e;border-color:var(--accent); }
+
+  .v-chart-wrap { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:24px; }
+  .v-chart-title { font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:16px; }
+
+  .v-bar-chart { display:flex;align-items:flex-end;gap:4px;height:160px;padding-bottom:24px;position:relative; }
+  .v-bar-wrap { flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end; }
+  .v-bar { width:100%;border-radius:3px 3px 0 0;transition:opacity 0.15s;cursor:default;min-height:2px; }
+  .v-bar:hover { opacity:0.8; }
+  .v-bar-label { font-size:8px;color:var(--muted);white-space:nowrap;transform:rotate(-45deg);transform-origin:top right;margin-top:4px; }
+  .v-bar-val { font-size:8px;color:var(--muted);white-space:nowrap; }
+
+  .v-compare-wrap { display:grid;grid-template-columns:1fr 1fr;gap:4px;height:160px;padding-bottom:24px; }
+  .v-compare-group { display:flex;align-items:flex-end;gap:2px;height:100%;justify-content:flex-end;flex-direction:column; }
+
+  .v-rubro-table { width:100%;border-collapse:collapse; }
+  .v-rubro-table th { text-align:left;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding:0 10px 10px; }
+  .v-rubro-table td { padding:9px 10px;border-top:1px solid var(--border);font-size:12px; }
+  .v-rubro-table tr:hover td { background:var(--surface2); }
+  .v-bar-inline { height:4px;border-radius:2px;background:var(--accent);margin-top:4px; }
+
+  .v-tabs { display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border); }
+  .v-tab { padding:8px 16px;cursor:pointer;color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s; }
+  .v-tab:hover { color:var(--text); }
+  .v-tab.active { color:var(--accent);border-bottom-color:var(--accent); }
+
+  .v-bom-table { width:100%;border-collapse:collapse; }
+  .v-bom-table th { text-align:left;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding:0 10px 10px; }
+  .v-bom-table td { padding:9px 10px;border-top:1px solid var(--border);font-size:12px; }
+  .v-bom-table tr:hover td { background:var(--surface2); }
+
 </style>
 </head>
 <body>
@@ -463,7 +522,7 @@
     <div class="nav-item active" onclick="showModule('stock')" id="nav-stock">
       <span class="nav-icon">◈</span> Stock
     </div>
-    <div class="nav-item" style="opacity:0.4; cursor:not-allowed;" title="Próximamente">
+    <div class="nav-item" onclick="showModule('ventas')" id="nav-ventas">
       <span class="nav-icon">◉</span> Ventas
     </div>
     <div class="nav-item" style="opacity:0.4; cursor:not-allowed;" title="Próximamente">
@@ -490,6 +549,7 @@
       <span>Cargando datos desde Google Sheets…</span>
     </div>
     <div id="module-stock" style="display:none;"></div>
+    <div id="module-ventas" style="display:none;"></div>
     <div id="welcome" style="display:none;">
       <h3>Seleccioná un módulo</h3>
       <span>Usá el panel izquierdo para navegar.</span>
@@ -504,6 +564,7 @@ const URLS = {
   dux:       `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2130058495&single=true&output=csv`,
   tn:        `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=611485435&single=true&output=csv`,
   compuestos:`https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1843338909&single=true&output=csv`,
+  ventas:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2087055810&single=true&output=csv`,
 };
 
 const SKU_MAP = {
@@ -525,7 +586,8 @@ const ADAPTO_SKU_MAP = {
 const JOJOBA_SKU_MAP = {30:'JOJ-30G',60:'JOJ-60',125:'JOJ-125'};
 const MOSQUETA_SKU = 'ROS-MOS';
 
-let DATA = {dux:[],tn:[],compuestos:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[]};
+let CACHE = {ventas:null};
 let currentModule = 'stock';
 let currentTab = 'venta';
 let modalSku = null;
@@ -569,12 +631,14 @@ function pesos(v) {
 async function loadData() {
   document.getElementById('loading').style.display='flex';
   document.getElementById('module-stock').style.display='none';
+  document.getElementById('module-ventas').style.display='none';
   document.getElementById('welcome').style.display='none';
   try {
-    const [duxText,tnText,compText]=await Promise.all([
+    const [duxText,tnText,compText,ventasText]=await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
+      fetch(URLS.ventas).then(r=>r.text()),
     ]);
     const duxLines=duxText.split('\n');
     const duxClean=duxLines.slice(2).join('\n');
@@ -583,6 +647,8 @@ async function loadData() {
     const compLines=compText.split('\n');
     const compClean=compLines.slice(2).join('\n');
     DATA.compuestos=parseCSV(compClean).filter(r=>r['Código Compuesto']);
+    DATA.ventas=parseCSV(ventasText).filter(r=>r['periodo']&&r['SKU.1']&&!['Rechazado','Reembolsado','Parcialmente reembolsado'].includes(r['Estado del pago']));
+    CACHE.ventas=null;
     const now=new Date();
     const label=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
     document.getElementById('last-update-label').textContent=label;
@@ -606,11 +672,14 @@ function showModule(mod) {
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const navEl=document.getElementById('nav-'+mod);
   if(navEl) navEl.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod.charAt(0).toUpperCase()+mod.slice(1);
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':'Ventas';
+  document.getElementById('module-stock').style.display='none';
+  document.getElementById('module-ventas').style.display='none';
   renderCurrentModule();
 }
 function renderCurrentModule() {
   if(currentModule==='stock') renderStock();
+  if(currentModule==='ventas') renderVentasModule();
 }
 
 // ── STOCK KPIs ──────────────────────────────────────────────────
