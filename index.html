@@ -647,7 +647,13 @@ async function loadData() {
     const compLines=compText.split('\n');
     const compClean=compLines.slice(2).join('\n');
     DATA.compuestos=parseCSV(compClean).filter(r=>r['Código Compuesto']);
-    DATA.ventas=parseCSV(ventasText).filter(r=>r['periodo']&&r['SKU.1']&&!['Rechazado','Reembolsado','Parcialmente reembolsado'].includes(r['Estado del pago']));
+    const ventasParsed=parseCSV(ventasText);
+    console.log('Ventas total rows:', ventasParsed.length);
+    console.log('Ventas first row keys:', ventasParsed.length>0?Object.keys(ventasParsed[0]).slice(0,10):[]);
+    console.log('Ventas sample periodo:', ventasParsed.length>0?ventasParsed[0]['periodo']:'none');
+    console.log('Ventas sample SKU.1:', ventasParsed.length>0?ventasParsed[0]['SKU.1']:'none');
+    DATA.ventas=ventasParsed.filter(r=>r['periodo']&&r['periodo'].trim()&&r['SKU.1']&&r['SKU.1'].trim());
+    console.log('Ventas after filter:', DATA.ventas.length);
     CACHE.ventas=null;
     const now=new Date();
     const label=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
