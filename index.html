@@ -1233,7 +1233,7 @@ let vPeriodo1 = '';
 let vPeriodo2 = '';
 let bomCache = null;
 
-function getSku(r){return getSku(r)||r['SKU_1']||r['SKU.1 ']||'';}
+function getSku(r){return (r['SKU']||r['SKU_1']||r['SKU.1']||'').trim();}
 function metricaLabel(m){return m==='ars'?'ARS':m==='usd'?'USD':'AXI';}
 function metricaCol(m){return m==='ars'?'importe_neto':m==='usd'?'importe_usd':'importe_axi';}
 function metricaFormat(m,v){
