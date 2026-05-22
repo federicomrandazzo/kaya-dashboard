@@ -508,6 +508,50 @@
   .v-bom-table td { padding:9px 10px;border-top:1px solid var(--border);font-size:12px; }
   .v-bom-table tr:hover td { background:var(--surface2); }
 
+  /* COLLAPSIBLE TREE */
+  .tree-row {
+    display:flex; align-items:center; cursor:pointer;
+    padding:10px 12px; border-top:1px solid var(--border);
+    transition:background 0.12s;
+    user-select:none;
+  }
+  .tree-row:hover { background:var(--surface2); }
+  .tree-row.level-0 { background:var(--surface2); font-weight:500; }
+  .tree-row.level-1 { padding-left:28px; }
+  .tree-row.level-2 { padding-left:48px; font-size:12px; color:var(--muted); }
+  .tree-toggle {
+    width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center;
+    font-size:9px; color:var(--muted); margin-right:8px; flex-shrink:0;
+    border:1px solid var(--border); border-radius:3px; transition:transform 0.15s;
+  }
+  .tree-toggle.open { color:var(--accent); border-color:var(--accent); }
+  .tree-label { flex:1; }
+  .tree-units { font-variant-numeric:tabular-nums; color:var(--muted); font-size:11px; margin-right:16px; }
+  .tree-valor { font-variant-numeric:tabular-nums; font-weight:500; font-size:13px; min-width:110px; text-align:right; }
+  .tree-children { overflow:hidden; transition:max-height 0.25s ease; }
+  .tree-children.collapsed { max-height:0; }
+
+  /* STICKY KPI BAR (ventas) */
+  #v-sticky-kpis {
+    position:sticky; top:61px; z-index:4;
+    background:var(--bg); border-bottom:1px solid var(--border);
+    padding:10px 32px;
+    display:none;
+    gap:0;
+  }
+  #v-sticky-kpis.visible { display:flex; }
+  .v-sticky-kpi {
+    flex:1; padding:0 20px; border-right:1px solid var(--border);
+  }
+  .v-sticky-kpi:first-child { padding-left:0; }
+  .v-sticky-kpi:last-child { border-right:none; }
+  .v-sticky-kpi-label { font-size:9px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+  .v-sticky-kpi-val { font-size:15px; font-weight:500; font-variant-numeric:tabular-nums; }
+
+  /* LINE CHART */
+  .linechart-wrap { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:24px;overflow:hidden; }
+  .linechart-svg { width:100%; overflow:visible; }
+
 </style>
 </head>
 <body>
@@ -541,6 +585,13 @@
       <span class="last-update" id="last-update-label"></span>
       <button id="refresh-btn" onclick="loadData()">↺ Actualizar</button>
     </div>
+  </div>
+
+  <div id="v-sticky-kpis">
+    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Venta</div><div class="v-sticky-kpi-val" id="sk-venta" style="color:var(--accent);">—</div></div>
+    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Órdenes</div><div class="v-sticky-kpi-val" id="sk-ordenes">—</div></div>
+    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Unidades</div><div class="v-sticky-kpi-val" id="sk-unidades">—</div></div>
+    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Ticket prom.</div><div class="v-sticky-kpi-val" id="sk-ticket">—</div></div>
   </div>
 
   <div id="content">
@@ -678,6 +729,9 @@ function showModule(mod) {
   document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':'Ventas';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
+  // Hide sticky KPIs when not in ventas
+  const sbar=document.getElementById('v-sticky-kpis');
+  if(sbar) sbar.classList.toggle('visible', mod==='ventas');
   renderCurrentModule();
 }
 function renderCurrentModule() {
@@ -872,6 +926,17 @@ function getTnSkus(){
 }
 
 // ── A LA VENTA ──────────────────────────────────────────────────
+const ventaTreeState = {}; // key → bool open
+function ventaTreeToggle(key) {
+  ventaTreeState[key] = !ventaTreeState[key];
+  const childEl = document.getElementById('vtree-'+key);
+  const iconEl  = document.getElementById('vtree-icon-'+key);
+  if (!childEl) return;
+  childEl.classList.toggle('collapsed', !ventaTreeState[key]);
+  if (iconEl) { iconEl.textContent = ventaTreeState[key] ? '−' : '+'; iconEl.classList.toggle('open', ventaTreeState[key]); }
+}
+function ventaTreeOpen(key) { if (ventaTreeState[key] === undefined) ventaTreeState[key] = true; }
+
 function renderVenta() {
   const products=buildTNProducts();
   const costoDux={};
@@ -917,87 +982,103 @@ function renderVenta() {
   const vBlancaJoj=valorizar(blancaJojoba);
   const vBlancaResto=valorizar(blancaResto);
   const totalSinKits=vNegra50+vNegra100+vBlancaJoj+vBlancaResto;
+  const vKits=valorizar(kits);
 
-  function renderTable(prods, showMl) {
-    if(!prods.length) return '<div class="empty">Sin productos</div>';
-    let html=`<table class="data-table"><thead><tr>
-      <th>Producto</th><th>SKU</th>
-      <th style="text-align:right">Stock</th>
-      <th style="text-align:right">Precio venta</th>
-      <th style="text-align:right">Valorización</th>
-    </tr></thead><tbody>`;
+  // helper: tree section header (level 0)
+  function treeL0(key, label, valor, defaultOpen=false) {
+    if(ventaTreeState[key]===undefined) ventaTreeState[key]=defaultOpen;
+    const open=ventaTreeState[key];
+    return `<div class="tree-row level-0" onclick="ventaTreeToggle('${key}')">
+      <span class="tree-toggle ${open?'open':''}" id="vtree-icon-${key}">${open?'−':'+'}</span>
+      <span class="tree-label">${label}</span>
+      <span class="tree-valor" style="color:var(--accent);">${pesos(valor)}</span>
+    </div><div class="tree-children ${open?'':'collapsed'}" id="vtree-${key}" style="max-height:${open?'2000px':'0'};">`;
+  }
+  function treeL1(key, label, valor, unidades, defaultOpen=false) {
+    if(ventaTreeState[key]===undefined) ventaTreeState[key]=defaultOpen;
+    const open=ventaTreeState[key];
+    return `<div class="tree-row level-1" onclick="ventaTreeToggle('${key}');event.stopPropagation()">
+      <span class="tree-toggle ${open?'open':''}" id="vtree-icon-${key}">${open?'−':'+'}</span>
+      <span class="tree-label">${label}</span>
+      <span class="tree-units">${Math.round(unidades)} uds</span>
+      <span class="tree-valor">${pesos(valor)}</span>
+    </div><div class="tree-children ${open?'':'collapsed'}" id="vtree-${key}" style="max-height:${open?'2000px':'0'};">`;
+  }
+  function treeClose() { return '</div>'; }
+
+  function productRows(prods) {
+    let html='';
     prods.forEach(p=>{
       p.variantes.filter(v=>v.stock>0).forEach(v=>{
         const val=v.stock*v.precio;
         const sc=v.stock===0?'stock-zero':v.stock<20?'stock-low':'stock-ok';
-        html+=`<tr>
-          <td>${p.nombre}</td>
-          <td><span class="sku-badge">${v.sku}</span></td>
-          <td style="text-align:right"><span class="stock-num ${sc}">${v.stock}</span></td>
-          <td style="text-align:right;color:var(--muted);font-size:11px;">${pesos(v.precio)}</td>
-          <td style="text-align:right;font-variant-numeric:tabular-nums;font-size:12px;">${pesos(val)}</td>
-        </tr>`;
+        html+=`<div class="tree-row level-2" style="cursor:default;">
+          <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+          <span class="tree-label">${p.nombre} <span class="sku-badge" style="margin-left:6px;">${v.sku}</span></span>
+          <span class="tree-units"><span class="stock-num ${sc}">${v.stock}</span></span>
+          <span class="tree-valor" style="font-size:11px;color:var(--muted);">${v.precio>0?pesos(v.precio):'—'}</span>
+        </div>`;
       });
     });
-    html+=`</tbody></table>`;
     return html;
   }
 
-  function subtotalRow(label, valor) {
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface2);border-radius:4px;margin-top:8px;margin-bottom:20px;">
-      <span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">${label}</span>
-      <span style="font-size:14px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(valor)}</span>
-    </div>`;
-  }
+  function unidades(prods){return prods.reduce((s,p)=>s+p.variantes.reduce((sv,v)=>sv+v.stock,0),0);}
 
-  return `
-    <div class="subsection">
-      <div class="subsection-label">Línea Negra · 50ml</div>
-      ${renderTable(negra50)}
-      ${subtotalRow('Subtotal Línea Negra 50ml',vNegra50)}
+  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;">`;
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
+    <span style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Producto</span>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:60px;text-align:right;">Uds</span>
+      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:110px;text-align:right;">Valor venta</span>
+    </div></div>`;
 
-      <div class="subsection-label">Línea Negra · 100ml</div>
-      ${renderTable(negra100)}
-      ${subtotalRow('Subtotal Línea Negra 100ml',vNegra100)}
+  // LÍNEA NEGRA
+  html += treeL0('negra','Línea Negra',vNegra50+vNegra100,true);
+    html += treeL1('negra50','50 ml',vNegra50,unidades(negra50),true);
+      html += productRows(negra50);
+    html += treeClose();
+    html += treeL1('negra100','100 ml',vNegra100,unidades(negra100),true);
+      html += productRows(negra100);
+    html += treeClose();
+  html += treeClose();
 
-      ${subtotalRow('SUBTOTAL LÍNEA NEGRA',vNegra50+vNegra100)}
-    </div>
+  // LÍNEA BLANCA
+  html += treeL0('blanca','Línea Blanca',vBlancaJoj+vBlancaResto,true);
+    html += treeL1('blancaJoj','Aceite de Jojoba',vBlancaJoj,unidades(blancaJojoba),true);
+      html += productRows(blancaJojoba);
+    html += treeClose();
+    html += treeL1('blancaResto','Resto',vBlancaResto,unidades(blancaResto),true);
+      html += productRows(blancaResto);
+    html += treeClose();
+  html += treeClose();
 
-    <div class="subsection">
-      <div class="subsection-label">Línea Blanca · Aceite de Jojoba</div>
-      ${renderTable(blancaJojoba)}
-      ${subtotalRow('Subtotal Jojoba',vBlancaJoj)}
+  // KITS
+  html += treeL0('kits','Kits',vKits,false);
+    html += productRows(kits);
+  html += treeClose();
 
-      <div class="subsection-label">Línea Blanca · Resto</div>
-      ${renderTable(blancaResto)}
-      ${subtotalRow('Subtotal Resto Línea Blanca',vBlancaResto)}
+  html += `</div>`;
 
-      ${subtotalRow('SUBTOTAL LÍNEA BLANCA',vBlancaJoj+vBlancaResto)}
-    </div>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;margin-bottom:32px;">
-      <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL A LA VENTA (sin kits)</span>
-      <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalSinKits)}</span>
-    </div>
-
-    <div class="subsection">
-      <div class="subsection-label">Kits · ${kits.length} productos · sin valorizar</div>
-      <table class="data-table"><thead><tr>
-        <th>Producto</th><th>SKU</th><th style="text-align:right">Stock</th>
-      </tr></thead><tbody>
-      ${kits.map(p=>`
-        ${p.variantes.filter(v=>v.stock>0).map(v=>`<tr>
-          <td>${p.nombre}</td>
-          <td><span class="sku-badge">${v.sku}</span></td>
-          <td style="text-align:right"><span class="stock-num ${v.stock<20?'stock-low':'stock-ok'}">${v.stock}</span></td>
-        </tr>`).join('')}
-      `).join('')}
-      </tbody></table>
-    </div>
-  `;
+  // TOTAL
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;margin-bottom:8px;">
+    <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL A LA VENTA</span>
+    <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalSinKits+vKits)}</span>
+  </div>`;
+  return html;
 }
 
 // ── INSUMOS ─────────────────────────────────────────────────────
+const insumosTreeState = {};
+function insumosTreeToggle(key) {
+  insumosTreeState[key] = !insumosTreeState[key];
+  const childEl = document.getElementById('itree-'+key);
+  const iconEl  = document.getElementById('itree-icon-'+key);
+  if (!childEl) return;
+  childEl.classList.toggle('collapsed', !insumosTreeState[key]);
+  if (iconEl) { iconEl.textContent = insumosTreeState[key] ? '−' : '+'; iconEl.classList.toggle('open', insumosTreeState[key]); }
+}
+
 function renderInsumos() {
   const tnSkus=getTnSkus();
   const RUBROS_INSUMO=['ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','PRODUCTO LIQUIDO'];
@@ -1014,49 +1095,50 @@ function renderInsumos() {
   const rubroOrder=['PRODUCTO LIQUIDO','ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','OTRO'];
   let totalCosto=0;
 
-  const sections=rubroOrder.filter(r=>byRubro[r]?.length).map(rubro=>{
+  let html=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;">`;
+  html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
+    <span style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Rubro / Producto</span>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:70px;text-align:right;">Stock</span>
+      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:90px;text-align:right;">Costo unit.</span>
+      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:110px;text-align:right;">Total costo</span>
+    </div></div>`;
+
+  rubroOrder.filter(r=>byRubro[r]?.length).forEach(rubro=>{
     const items=byRubro[rubro];
     const rubroCosto=items.reduce((s,r)=>s+num(r['Stock Disponible'])*num(r['Costo']),0);
     totalCosto+=rubroCosto;
-    return `
-      <div class="subsection">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">
-          <span style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted);">${rubro} · ${items.length} ítems</span>
-          <span style="font-size:12px;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(rubroCosto)}</span>
-        </div>
-        <table class="data-table"><thead><tr>
-          <th>Producto</th><th>SKU</th>
-          <th style="text-align:right">Stock</th>
-          <th style="text-align:right">Unidad</th>
-          <th style="text-align:right">Costo unit.</th>
-          <th style="text-align:right">Total costo</th>
-        </tr></thead><tbody>
-        ${items.map(r=>{
-          const stock=num(r['Stock Disponible']);
-          const costo=num(r['Costo']);
-          const total=stock*costo;
-          const unidad=(r['Unidad']||'').toUpperCase();
-          const sc=stock===0?'stock-zero':stock<20&&unidad==='LITROS'?'stock-low':stock<100?'stock-low':'stock-ok';
-          return `<tr>
-            <td>${r['Producto']}</td>
-            <td><span class="sku-badge">${r['Código Producto']}</span></td>
-            <td style="text-align:right"><span class="stock-num ${sc}">${stock.toLocaleString('es-AR')}</span></td>
-            <td style="text-align:right;color:var(--muted);font-size:11px;">${unidad}</td>
-            <td style="text-align:right;color:var(--muted);font-size:11px;">${costo>0?pesos(costo):'—'}</td>
-            <td style="text-align:right;font-variant-numeric:tabular-nums;">${total>0?pesos(total):'—'}</td>
-          </tr>`;
-        }).join('')}
-        </tbody></table>
-      </div>
-    `;
-  });
-
-  return sections.join('')+`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent2);border-radius:6px;margin-top:8px;">
-      <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL INSUMOS A COSTO</span>
-      <span style="font-size:18px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(totalCosto)}</span>
+    const key='ins-'+rubro.replace(/\s/g,'-');
+    if(insumosTreeState[key]===undefined) insumosTreeState[key]=false;
+    const open=insumosTreeState[key];
+    html+=`<div class="tree-row level-0" onclick="insumosTreeToggle('${key}')">
+      <span class="tree-toggle ${open?'open':''}" id="itree-icon-${key}">${open?'−':'+'}</span>
+      <span class="tree-label">${rubro} <span style="color:var(--muted);font-size:10px;font-weight:400;">· ${items.length} ítems</span></span>
+      <span class="tree-valor" style="color:var(--accent2);">${pesos(rubroCosto)}</span>
     </div>
-  `;
+    <div class="tree-children ${open?'':'collapsed'}" id="itree-${key}" style="max-height:${open?'2000px':'0'};">`;
+    items.forEach(r=>{
+      const stock=num(r['Stock Disponible']);
+      const costo=num(r['Costo']);
+      const total=stock*costo;
+      const unidad=(r['Unidad']||'').toUpperCase();
+      const sc=stock===0?'stock-zero':stock<20&&unidad==='LITROS'?'stock-low':stock<100?'stock-low':'stock-ok';
+      html+=`<div class="tree-row level-1" style="cursor:default;gap:8px;">
+        <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+        <span class="tree-label">${r['Producto']} <span class="sku-badge" style="margin-left:4px;">${r['Código Producto']}</span></span>
+        <span style="min-width:70px;text-align:right;font-size:11px;"><span class="stock-num ${sc}">${stock.toLocaleString('es-AR')}</span> <span style="color:var(--muted);font-size:9px;">${unidad}</span></span>
+        <span style="min-width:90px;text-align:right;font-size:11px;color:var(--muted);">${costo>0?pesos(costo):'—'}</span>
+        <span style="min-width:110px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;">${total>0?pesos(total):'—'}</span>
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+  html+=`</div>`;
+  html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent2);border-radius:6px;margin-top:8px;">
+    <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL INSUMOS A COSTO</span>
+    <span style="font-size:18px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(totalCosto)}</span>
+  </div>`;
+  return html;
 }
 
 // ── POR ARMAR ───────────────────────────────────────────────────
@@ -1120,6 +1202,13 @@ function buildArmarCards() {
   return cards;
 }
 
+// ── POR ARMAR ───────────────────────────────────────────────────
+let armarExpanded = false;
+function toggleArmarExpand() {
+  armarExpanded = !armarExpanded;
+  renderTab();
+}
+
 function renderArmar() {
   const precioVenta={};
   DATA.tn.forEach(r=>{
@@ -1134,16 +1223,31 @@ function renderArmar() {
   const cards=buildArmarCards();
   if(!cards.length) return '<div class="empty">Sin datos disponibles</div>';
 
+  const negra=cards.filter(c=>c.grupo==='negra');
+  const blanca=cards.filter(c=>c.grupo==='blanca');
+
   let totalArmar=0;
   cards.forEach(c=>{totalArmar+=c.unidades*(precioVenta[c.sku]||0);});
+  const totalNegra=negra.reduce((s,c)=>s+c.unidades*(precioVenta[c.sku]||0),0);
+  const totalBlanca=blanca.reduce((s,c)=>s+c.unidades*(precioVenta[c.sku]||0),0);
 
-  return `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;margin-bottom:24px;">
-      <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL POTENCIAL POR ARMAR</span>
-      <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalArmar)}</span>
-    </div>
-    <div class="armar-grid">
-      ${cards.map((c,i)=>{
+  function renderSummaryRow(c, idx) {
+    const pv=precioVenta[c.sku]||0;
+    const sc=c.unidades===0?'stock-zero':c.unidades<20?'stock-low':'stock-ok';
+    const limText=c.limitante?c.limitante.nombre:'OK';
+    return `<div class="tree-row level-1" style="cursor:pointer;" onclick="openModal(${idx})">
+      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+      <span class="tree-label">${c.nombre} <span class="sku-badge" style="margin-left:6px;">${c.sku}</span></span>
+      <span style="font-size:10px;color:${c.limitante?'var(--accent3)':'var(--muted)'};min-width:130px;text-align:right;margin-right:16px;" title="Insumo limitante">⚠ ${limText}</span>
+      <span class="tree-units"><span class="stock-num ${sc}">${c.unidades}</span> uds</span>
+      <span class="tree-valor">${pv>0?pesos(c.unidades*pv):'—'}</span>
+    </div>`;
+  }
+
+  function renderCards(group) {
+    return `<div class="armar-grid" style="padding:16px;">
+      ${group.map((c,i)=>{
+        const globalIdx=cards.indexOf(c);
         const pv=precioVenta[c.sku]||0;
         const valorPotencial=c.unidades*pv;
         const sc=c.unidades===0?'stock-zero':c.unidades<20?'stock-low':'stock-ok';
@@ -1152,7 +1256,7 @@ function renderArmar() {
              <div class="armar-limitante-item"><span>${c.limitante.nombre}</span>
              <span class="armar-limitante-stock">${c.limitante.stock.toLocaleString('es-AR')} uds</span></div></div>`
           :`<div class="armar-ok">✓ Sin limitantes</div>`;
-        return `<div class="armar-card" onclick="openModal(${i})" style="cursor:pointer;">
+        return `<div class="armar-card" onclick="openModal(${globalIdx})" style="cursor:pointer;">
           <div class="armar-card-header">
             <div class="armar-product-name">${c.nombre}</div>
             <div>
@@ -1164,14 +1268,58 @@ function renderArmar() {
             ${c.litrosAsignados.toFixed(2)} L · ${Math.round(c.pct*100)}% del granel
           </div>
           <div style="font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums;margin-bottom:4px;">
-            ${pesos(valorPotencial)} potencial
+            ${pv>0?pesos(valorPotencial)+' potencial':'—'}
           </div>
           ${limitanteHtml}
           <div style="font-size:10px;color:var(--muted);margin-top:8px;letter-spacing:0.06em;">Clic para ver receta →</div>
         </div>`;
       }).join('')}
-    </div>
-  `;
+    </div>`;
+  }
+
+  // Build the two-group tree
+  let html=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;flex:1;margin-right:12px;">
+        <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL POTENCIAL POR ARMAR</span>
+        <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalArmar)}</span>
+      </div>
+      <button onclick="toggleArmarExpand()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 14px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.08em;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+        ${armarExpanded?'↑ Vista resumen':'↓ Vista detalle'}
+      </button>
+    </div>`;
+
+  if(armarExpanded) {
+    // Card grid view grouped
+    html+=`<div style="margin-bottom:12px;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--border);">Línea Negra · ${pesos(totalNegra)}</div>`;
+    html+=renderCards(negra);
+    html+=`<div style="margin-bottom:12px;margin-top:8px;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--border);">Línea Blanca · ${pesos(totalBlanca)}</div>`;
+    html+=renderCards(blanca);
+  } else {
+    // Compact tree view
+    html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
+    // Negra group header
+    html+=`<div class="tree-row level-0" style="cursor:default;">
+      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+      <span class="tree-label">Línea Negra · ${negra.length} productos</span>
+      <span style="font-size:10px;color:var(--muted);min-width:130px;text-align:right;margin-right:16px;">insumo limitante</span>
+      <span class="tree-units" style="min-width:60px;">uds</span>
+      <span class="tree-valor">valor</span>
+    </div>`;
+    negra.forEach((c,i)=>{ html+=renderSummaryRow(c,cards.indexOf(c)); });
+
+    html+=`<div style="height:1px;background:var(--border);"></div>`;
+    html+=`<div class="tree-row level-0" style="cursor:default;">
+      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+      <span class="tree-label">Línea Blanca · ${blanca.length} productos</span>
+      <span class="tree-valor" style="color:var(--muted);font-size:11px;"></span>
+    </div>`;
+    blanca.forEach((c,i)=>{ html+=renderSummaryRow(c,cards.indexOf(c)); });
+    html+=`</div>`;
+    html+=`<div style="font-size:10px;color:var(--muted);margin-top:10px;text-align:center;letter-spacing:0.06em;">Clic en cualquier fila para ver receta completa</div>`;
+  }
+
+  return html;
 }
 
 // ── MODAL RECETA ────────────────────────────────────────────────
@@ -1245,6 +1393,31 @@ function getPeriodosOrdenados(){
   const ps=[...new Set(DATA.ventas.map(r=>r['periodo']))].filter(Boolean);
   return ps.sort((a,b)=>{const[ya,ma]=a.split('-').map(Number);const[yb,mb]=b.split('-').map(Number);return ya!==yb?ya-yb:ma-mb;});
 }
+
+// Fix: normalize LINEA and RUBRO — trim and uppercase
+function getLinea(r){return (r['LINEA']||r['linea']||'').trim().toUpperCase();}
+function getRubro(r){return (r['RUBRO']||r['rubro']||'').trim().toUpperCase()||'OTRO';}
+
+function updateStickyKPIs() {
+  const sbar = document.getElementById('v-sticky-kpis');
+  if(!sbar) return;
+  const rows1=ventasPeriodo(vPeriodo1);
+  const v1=sumMetrica(rows1,vMetrica);
+  const u1=sumUnidades(rows1);
+  const ord1=DATA.ordenes.find(r=>r['periodo']===vPeriodo1);
+  const orders1=ord1?num(ord1['ordenes']):new Set(rows1.map(r=>r['Número de orden'])).size||1;
+  const tck1=orders1>0?v1/orders1:0;
+  const sk=document.getElementById('sk-venta');
+  const so=document.getElementById('sk-ordenes');
+  const su=document.getElementById('sk-unidades');
+  const st=document.getElementById('sk-ticket');
+  if(sk) sk.textContent=metricaFormat(vMetrica,v1);
+  if(so) so.textContent=orders1.toLocaleString('es-AR');
+  if(su) su.textContent=Math.round(u1).toLocaleString('es-AR');
+  if(st) st.textContent=metricaFormat(vMetrica,tck1);
+  sbar.classList.toggle('visible', true);
+}
+
 function renderVentasModule(){
   const el=document.getElementById('module-ventas');
   el.style.display='block';
@@ -1275,7 +1448,8 @@ function renderVentasModule(){
     <div class="v-tabs">
       <div class="v-tab ${vTab==='general'?'active':''}" onclick="setVTab('general')">General</div>
       <div class="v-tab ${vTab==='linea'?'active':''}" onclick="setVTab('linea')">Por Línea</div>
-      <div class="v-tab ${vTab==='bom'?'active':''}" onclick="setVTab('bom')">Consumo BOM</div>
+      <div class="v-tab ${vTab==='consumo_prod'?'active':''}" onclick="setVTab('consumo_prod')">Consumo Productos</div>
+      <div class="v-tab ${vTab==='consumo_ins'?'active':''}" onclick="setVTab('consumo_ins')">Consumo Insumos</div>
     </div>
     <div id="v-tab-content"></div>
     <div id="modal-overlay" onclick="closeModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
@@ -1283,10 +1457,11 @@ function renderVentasModule(){
         <div id="modal-content"></div>
       </div>
     </div>`;
+  updateStickyKPIs();
   renderVTab();
 }
 function setMetrica(m){vMetrica=m;renderVentasModule();}
-function setPeriodo1(p){vPeriodo1=p;bomCache=null;renderVTab();}
+function setPeriodo1(p){vPeriodo1=p;bomCache=null;updateStickyKPIs();renderVTab();}
 function setPeriodo2(p){vPeriodo2=p;renderVTab();}
 function setVTab(t){vTab=t;document.querySelectorAll('.v-tab').forEach(x=>x.classList.remove('active'));event.target.classList.add('active');renderVTab();}
 function setVLinea(l){vLinea=l;renderVTab();}
@@ -1295,7 +1470,8 @@ function renderVTab(){
   if(!el) return;
   if(vTab==='general') el.innerHTML=renderVentasGeneral();
   if(vTab==='linea')   el.innerHTML=renderVentasLinea();
-  if(vTab==='bom'){el.innerHTML='<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando BOM...</div></div>';setTimeout(()=>{el.innerHTML=renderVentasBOM();},50);}
+  if(vTab==='consumo_prod'){el.innerHTML='<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando...</div></div>';setTimeout(()=>{el.innerHTML=renderConsumoProductos();},50);}
+  if(vTab==='consumo_ins'){el.innerHTML='<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando...</div></div>';setTimeout(()=>{el.innerHTML=renderConsumoInsumos();},50);}
 }
 function ventasPeriodo(p){return DATA.ventas.filter(r=>r['periodo']===p);}
 function sumMetrica(rows,m){
@@ -1313,26 +1489,96 @@ function renderVentasGeneral(){
   const u1=sumUnidades(rows1),u2=sumUnidades(rows2);
   const ord1=DATA.ordenes.find(r=>r['periodo']===vPeriodo1);
   const ord2=DATA.ordenes.find(r=>r['periodo']===vPeriodo2);
-  const orders1=ord1?num(ord1['ordenes']):new Set(rows1.map(r=>r['Número de orden'])).size;
-  const orders2=ord2?num(ord2['ordenes']):new Set(rows2.map(r=>r['Número de orden'])).size;
+  const orders1=ord1?num(ord1['ordenes']):new Set(rows1.map(r=>r['Número de orden'])).size||1;
+  const orders2=ord2?num(ord2['ordenes']):new Set(rows2.map(r=>r['Número de orden'])).size||1;
   const tck1=orders1>0?v1/orders1:0,tck2=orders2>0?v2/orders2:0;
   function delta(a,b){if(!b||b===0)return '';const p=((a-b)/b*100).toFixed(1);return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p)}%</span>`;}
-  const ultimos=periodos.slice(-12);
-  const vals=ultimos.map(p=>sumMetrica(ventasPeriodo(p),vMetrica));
-  const maxVal=Math.max(...vals,1);
-  const barras=ultimos.map((p,i)=>{
-    const v=vals[i],h=Math.max(4,Math.round((v/maxVal)*130));
-    const color=p===vPeriodo1?'var(--accent)':p===vPeriodo2?'var(--accent2)':'var(--border)';
-    const short=p.replace('20','').replace('-','/');
-    return `<div class="v-bar-wrap" title="${p}: ${metricaFormat(vMetrica,v)}"><div class="v-bar" style="height:${h}px;background:${color};"></div><div class="v-bar-label">${short}</div></div>`;
-  }).join('');
+
+  // ── LINE CHART: one line per year, x-axis = month ──
+  // Group all periods by year
+  const byYear={};
+  periodos.forEach(p=>{
+    const[y,m]=p.split('-').map(Number);
+    if(!byYear[y]) byYear[y]=Array(12).fill(null);
+    byYear[y][m-1]=sumMetrica(ventasPeriodo(p),vMetrica);
+  });
+  const years=Object.keys(byYear).map(Number).sort();
+  const months=['E','F','M','A','M','J','J','A','S','O','N','D'];
+  const chartW=700, chartH=160, padL=50, padR=10, padT=10, padB=30;
+  const plotW=chartW-padL-padR, plotH=chartH-padT-padB;
+  const allVals=Object.values(byYear).flatMap(arr=>arr.filter(v=>v!==null));
+  const maxV=Math.max(...allVals,1);
+  const yearColors=['#c8f05a','#f0c85a','#f05a7a','#5af0c8','#c85af0'];
+  const selectedYear1=vPeriodo1?Number(vPeriodo1.split('-')[0]):null;
+  const selectedYear2=vPeriodo2?Number(vPeriodo2.split('-')[0]):null;
+
+  function xOf(monthIdx){ return padL + (monthIdx/(11))*plotW; }
+  function yOf(val){ return padT + plotH - (val/maxV)*plotH; }
+
+  let svgLines='', svgDots='', svgLabels='', svgLegend='';
+
+  // Y axis gridlines
+  const gridVals=[0,0.25,0.5,0.75,1].map(f=>f*maxV);
+  gridVals.forEach(gv=>{
+    const y=yOf(gv);
+    svgLines+=`<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#2a2a2a" stroke-width="1"/>`;
+    const label=gv>=1e6?`${(gv/1e6).toFixed(1)}M`:gv>=1e3?`${Math.round(gv/1e3)}k`:`${Math.round(gv)}`;
+    svgLabels+=`<text x="${padL-4}" y="${y+4}" text-anchor="end" fill="#7a7570" font-size="9" font-family="DM Mono,monospace">${label}</text>`;
+  });
+  // X axis months
+  months.forEach((m,i)=>{
+    const x=xOf(i);
+    svgLabels+=`<text x="${x}" y="${chartH-padB+16}" text-anchor="middle" fill="#7a7570" font-size="9" font-family="DM Mono,monospace">${m}</text>`;
+  });
+
+  years.forEach((yr,yi)=>{
+    const color=yearColors[yi%yearColors.length];
+    const opacity=(yr===selectedYear1||yr===selectedYear2)?1:0.35;
+    const strokeW=(yr===selectedYear1)?2.5:(yr===selectedYear2)?2:1.5;
+    const data=byYear[yr];
+    // build path
+    const pts=data.map((v,i)=>v!==null?{x:xOf(i),y:yOf(v),v,i}:null).filter(Boolean);
+    if(pts.length<1) return;
+    let d=`M ${pts[0].x} ${pts[0].y}`;
+    for(let k=1;k<pts.length;k++){
+      const p0=pts[k-1],p1=pts[k];
+      const cpx=(p0.x+p1.x)/2;
+      d+=` C ${cpx} ${p0.y} ${cpx} ${p1.y} ${p1.x} ${p1.y}`;
+    }
+    svgLines+=`<path d="${d}" fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${opacity}" stroke-linejoin="round"/>`;
+    // dots + labels for selected years
+    pts.forEach(pt=>{
+      svgDots+=`<circle cx="${pt.x}" cy="${pt.y}" r="${yr===selectedYear1||yr===selectedYear2?4:2.5}" fill="${color}" opacity="${opacity}"/>`;
+      if(yr===selectedYear1||yr===selectedYear2){
+        const label=pt.v>=1e6?`${(pt.v/1e6).toFixed(1)}M`:pt.v>=1e3?`${Math.round(pt.v/1e3)}k`:`${Math.round(pt.v)}`;
+        const above=pt.y>padT+20;
+        svgLabels+=`<text x="${pt.x}" y="${pt.y+(above?-8:14)}" text-anchor="middle" fill="${color}" font-size="8" font-family="DM Mono,monospace" opacity="${opacity}">${label}</text>`;
+      }
+    });
+    // legend
+    svgLegend+=`<rect x="${10+yi*90}" y="2" width="10" height="10" fill="${color}" opacity="${opacity}" rx="2"/>`;
+    svgLegend+=`<text x="${24+yi*90}" y="11" fill="${opacity===1?'#f0ece4':'#7a7570'}" font-size="9" font-family="DM Mono,monospace">${yr}</text>`;
+  });
+
+  const lineChart=`<div class="linechart-wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="v-chart-title" style="margin-bottom:0;">Evolución mensual · ${metricaLabel(vMetrica)} · comparativa por año</div>
+    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${chartW} ${chartH+20}" class="linechart-svg" style="max-height:200px;">
+      <svg y="0" x="0" width="${chartW}" height="20">${svgLegend}</svg>
+      <g transform="translate(0,20)">${svgLines}${svgDots}${svgLabels}</g>
+    </svg>
+  </div>`;
+
+  // Por rubro with RUBRO fix
   const byRubro={};
-  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro[k])byRubro[k]={v:0,u:0};byRubro[k].v+=num(r[col]);byRubro[k].u+=num(r['qty']);});
+  rows1.forEach(r=>{const k=getRubro(r);if(!byRubro[k])byRubro[k]={v:0,u:0};byRubro[k].v+=num(r[col]);byRubro[k].u+=num(r['qty']);});
   const maxR=Math.max(...Object.values(byRubro).map(x=>x.v),1);
   const rubroRows=Object.entries(byRubro).sort((a,b)=>b[1].v-a[1].v).map(([rub,d])=>{
     const pct=(d.v/v1*100).toFixed(1),bw=Math.round(d.v/maxR*100);
     return `<tr><td>${rub}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFormat(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
   }).join('');
+
   return `
     <div class="v-kpi-grid">
       <div class="v-kpi"><div class="v-kpi-label">Venta ${metricaLabel(vMetrica)}</div><div class="v-kpi-val" style="color:var(--accent);">${metricaFormat(vMetrica,v1)}</div><div class="v-kpi-sub">${delta(v1,v2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
@@ -1340,16 +1586,7 @@ function renderVentasGeneral(){
       <div class="v-kpi"><div class="v-kpi-label">Unidades</div><div class="v-kpi-val">${Math.round(u1).toLocaleString('es-AR')}</div><div class="v-kpi-sub">${delta(u1,u2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Ticket promedio</div><div class="v-kpi-val">${metricaFormat(vMetrica,tck1)}</div><div class="v-kpi-sub">${delta(tck1,tck2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
     </div>
-    <div class="v-chart-wrap">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div class="v-chart-title">Evolución mensual · ${metricaLabel(vMetrica)} · últimos 12 períodos</div>
-        <div style="display:flex;gap:12px;font-size:10px;color:var(--muted);">
-          <span style="display:flex;gap:4px;align-items:center;"><span style="width:8px;height:8px;background:var(--accent);display:inline-block;border-radius:2px;"></span>${vPeriodo1}</span>
-          ${vPeriodo2?`<span style="display:flex;gap:4px;align-items:center;"><span style="width:8px;height:8px;background:var(--accent2);display:inline-block;border-radius:2px;"></span>${vPeriodo2}</span>`:''}
-        </div>
-      </div>
-      <div class="v-bar-chart">${barras}</div>
-    </div>
+    ${lineChart}
     <div class="v-chart-wrap">
       <div class="v-chart-title">Por rubro · ${vPeriodo1}</div>
       <table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">Venta</th><th style="text-align:right">%</th><th style="text-align:right">Uds</th><th></th></tr></thead>
@@ -1360,16 +1597,16 @@ function renderVentasGeneral(){
 function renderVentasLinea(){
   const col=metricaCol(vMetrica);
   const lineas=['TODAS','BLANCA','NEGRA','KITS'];
-  const rows1=ventasPeriodo(vPeriodo1).filter(r=>vLinea==='TODAS'||r['LINEA']===vLinea);
-  const rows2=vPeriodo2?ventasPeriodo(vPeriodo2).filter(r=>vLinea==='TODAS'||r['LINEA']===vLinea):[];
+  const rows1=ventasPeriodo(vPeriodo1).filter(r=>vLinea==='TODAS'||getLinea(r)===vLinea);
+  const rows2=vPeriodo2?ventasPeriodo(vPeriodo2).filter(r=>vLinea==='TODAS'||getLinea(r)===vLinea):[];
   const byRubro1={},byRubro2={};
-  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro1[k])byRubro1[k]={v:0,u:0};byRubro1[k].v+=num(r[col]);byRubro1[k].u+=num(r['qty']);});
-  rows2.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro2[k])byRubro2[k]={v:0,u:0};byRubro2[k].v+=num(r[col]);byRubro2[k].u+=num(r['qty']);});
+  rows1.forEach(r=>{const k=getRubro(r);if(!byRubro1[k])byRubro1[k]={v:0,u:0};byRubro1[k].v+=num(r[col]);byRubro1[k].u+=num(r['qty']);});
+  rows2.forEach(r=>{const k=getRubro(r);if(!byRubro2[k])byRubro2[k]={v:0,u:0};byRubro2[k].v+=num(r[col]);byRubro2[k].u+=num(r['qty']);});
   const allRubros=[...new Set([...Object.keys(byRubro1),...Object.keys(byRubro2)])].sort((a,b)=>(byRubro1[b]?.v||0)-(byRubro1[a]?.v||0));
   const maxV=Math.max(...allRubros.map(r=>byRubro1[r]?.v||0),1);
   const rowsAll1=ventasPeriodo(vPeriodo1);
   const byLinea={};
-  rowsAll1.forEach(r=>{const k=r['LINEA']||'OTRO';if(!byLinea[k])byLinea[k]={v:0,u:0};byLinea[k].v+=num(r[col]);byLinea[k].u+=num(r['qty']);});
+  rowsAll1.forEach(r=>{const k=getLinea(r)||'OTRO';if(!byLinea[k])byLinea[k]={v:0,u:0};byLinea[k].v+=num(r[col]);byLinea[k].u+=num(r['qty']);});
   const totalV=sumMetrica(rowsAll1,vMetrica);
   const lineaCards=['BLANCA','NEGRA','KITS'].map(l=>{
     const d=byLinea[l]||{v:0,u:0};const pct=totalV>0?(d.v/totalV*100).toFixed(1):0;
@@ -1392,8 +1629,8 @@ function renderVentasLinea(){
     </div>`;
 }
 
-function renderVentasBOM(){
-  if(bomCache&&bomCache.periodo===vPeriodo1) return bomCache.html;
+function buildBOMData() {
+  if(bomCache&&bomCache.periodo===vPeriodo1) return bomCache.data;
 
   const recetas={};
   DATA.compuestos.forEach(r=>{
@@ -1411,17 +1648,14 @@ function renderVentasBOM(){
   });
 
   const rows=ventasPeriodo(vPeriodo1);
-
-  // PASO 1: acumular ventas por SKU
   const ventasPorSku={};
   rows.forEach(r=>{
     const sku=getSku(r);const qty=num(r['qty']);
     if(!sku) return;
-    if(!ventasPorSku[sku]) ventasPorSku[sku]={sku,qty:0,nombre:r['nombre']||'',linea:r['LINEA']||''};
+    if(!ventasPorSku[sku]) ventasPorSku[sku]={sku,qty:0,nombre:r['nombre']||'',linea:getLinea(r)};
     ventasPorSku[sku].qty+=qty;
   });
 
-  // PASO 2: consumo productos (kits → 1 nivel → productos)
   const consumoProductos={};
   Object.values(ventasPorSku).forEach(item=>{
     const esKit=/^KIT/i.test(item.sku);
@@ -1437,7 +1671,6 @@ function renderVentasBOM(){
     }
   });
 
-  // PASO 3: consumo insumos (productos → 1 nivel → insumos)
   const consumoInsumos={};
   Object.values(consumoProductos).forEach(item=>{
     const receta=recetas[item.sku];
@@ -1452,31 +1685,45 @@ function renderVentasBOM(){
     }
   });
 
-  function renderTabla(items,titulo){
-    const sorted=Object.values(items).filter(x=>x.qty>0.001).sort((a,b)=>b.qty-a.qty);
-    if(!sorted.length) return '';
-    return `<div class="v-chart-wrap">
-      <div class="v-chart-title">${titulo} · ${sorted.length} ítems</div>
-      <table class="v-bom-table"><thead><tr>
-        <th>Nombre</th><th>SKU</th>
-        <th style="text-align:right">Cantidad</th>
-        <th style="text-align:right">Unidad</th>
-      </tr></thead><tbody>
-      ${sorted.map(item=>{
-        const unidad=unidadDux[item.sku]||'UNIDAD';
-        const qf=Number.isInteger(Math.round(item.qty*1000)/1000)?item.qty.toLocaleString('es-AR'):item.qty.toFixed(3);
-        return `<tr><td>${item.nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;
-      }).join('')}
-      </tbody></table></div>`;
-  }
+  const data={consumoProductos,consumoInsumos,unidadDux};
+  bomCache={periodo:vPeriodo1,data};
+  return data;
+}
 
-  const html=`
-    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong></div>
-    ${renderTabla(consumoProductos,'Consumo de productos · kits abiertos a productos')}
-    ${renderTabla(consumoInsumos,'Consumo de insumos · productos abiertos a insumos')}
-  `;
-  bomCache={periodo:vPeriodo1,html};
-  return html;
+function renderConsumoTabla(items, unidadDux) {
+  const sorted=Object.values(items).filter(x=>x.qty>0.001).sort((a,b)=>b.qty-a.qty);
+  if(!sorted.length) return '<div class="empty">Sin datos para este período</div>';
+  return `<table class="v-bom-table"><thead><tr>
+    <th>Nombre</th><th>SKU</th>
+    <th style="text-align:right">Cantidad</th>
+    <th style="text-align:right">Unidad</th>
+  </tr></thead><tbody>
+  ${sorted.map(item=>{
+    const unidad=unidadDux[item.sku]||'UNIDAD';
+    const qf=item.qty>=1?item.qty.toLocaleString('es-AR',{maximumFractionDigits:2}):item.qty.toFixed(3);
+    return `<tr><td>${item.nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;
+  }).join('')}
+  </tbody></table>`;
+}
+
+function renderConsumoProductos() {
+  const {consumoProductos,unidadDux}=buildBOMData();
+  return `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong> · Kits desagregados a productos</div>
+    <div class="v-chart-wrap">
+      <div class="v-chart-title">Consumo de productos · ${Object.values(consumoProductos).filter(x=>x.qty>0.001).length} ítems</div>
+      ${renderConsumoTabla(consumoProductos,unidadDux)}
+    </div>`;
+}
+
+function renderConsumoInsumos() {
+  const {consumoInsumos,unidadDux}=buildBOMData();
+  return `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong> · Productos desagregados a insumos</div>
+    <div class="v-chart-wrap">
+      <div class="v-chart-title">Consumo de insumos · ${Object.values(consumoInsumos).filter(x=>x.qty>0.001).length} ítems</div>
+      ${renderConsumoTabla(consumoInsumos,unidadDux)}
+    </div>`;
 }
 
 
