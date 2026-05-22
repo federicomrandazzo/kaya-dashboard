@@ -508,49 +508,38 @@
   .v-bom-table td { padding:9px 10px;border-top:1px solid var(--border);font-size:12px; }
   .v-bom-table tr:hover td { background:var(--surface2); }
 
-  /* COLLAPSIBLE TREE */
-  .tree-row {
-    display:flex; align-items:center; cursor:pointer;
-    padding:10px 12px; border-top:1px solid var(--border);
-    transition:background 0.12s;
-    user-select:none;
-  }
-  .tree-row:hover { background:var(--surface2); }
-  .tree-row.level-0 { background:var(--surface2); font-weight:500; }
-  .tree-row.level-1 { padding-left:28px; }
-  .tree-row.level-2 { padding-left:48px; font-size:12px; color:var(--muted); }
-  .tree-toggle {
-    width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center;
-    font-size:9px; color:var(--muted); margin-right:8px; flex-shrink:0;
-    border:1px solid var(--border); border-radius:3px; transition:transform 0.15s;
-  }
-  .tree-toggle.open { color:var(--accent); border-color:var(--accent); }
-  .tree-label { flex:1; }
-  .tree-units { font-variant-numeric:tabular-nums; color:var(--muted); font-size:11px; margin-right:16px; }
-  .tree-valor { font-variant-numeric:tabular-nums; font-weight:500; font-size:13px; min-width:110px; text-align:right; }
-  .tree-children { overflow:hidden; transition:max-height 0.25s ease; }
-  .tree-children.collapsed { max-height:0; }
 
-  /* STICKY KPI BAR (ventas) */
-  #v-sticky-kpis {
-    position:sticky; top:61px; z-index:4;
-    background:var(--bg); border-bottom:1px solid var(--border);
-    padding:10px 32px;
-    display:none;
-    gap:0;
-  }
-  #v-sticky-kpis.visible { display:flex; }
-  .v-sticky-kpi {
-    flex:1; padding:0 20px; border-right:1px solid var(--border);
-  }
-  .v-sticky-kpi:first-child { padding-left:0; }
-  .v-sticky-kpi:last-child { border-right:none; }
-  .v-sticky-kpi-label { font-size:9px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
-  .v-sticky-kpi-val { font-size:15px; font-weight:500; font-variant-numeric:tabular-nums; }
-
+  /* TREE */
+  .tr { display:flex;align-items:center;padding:9px 12px;border-top:1px solid var(--border);cursor:pointer;transition:background 0.1s;user-select:none; }
+  .tr:hover { background:var(--surface2); }
+  .tr.l0 { background:var(--surface2);font-weight:500; }
+  .tr.l1 { padding-left:32px; }
+  .tr.l2 { padding-left:52px;font-size:12px; }
+  .tr.l3 { padding-left:72px;font-size:11px;color:var(--muted); }
+  .tr.nc { cursor:default; }
+  .tr.nc:hover { background:inherit; }
+  .tr.l0.nc:hover { background:var(--surface2); }
+  .tog { width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:var(--muted);margin-right:8px;flex-shrink:0;border:1px solid var(--border);border-radius:3px; }
+  .tog.open { color:var(--accent);border-color:var(--accent); }
+  .tl { flex:1; }
+  .tu { font-variant-numeric:tabular-nums;color:var(--muted);font-size:11px;margin-right:12px; }
+  .tv { font-variant-numeric:tabular-nums;font-weight:500;font-size:13px;min-width:110px;text-align:right; }
+  .tc { overflow:hidden; }
+  /* STICKY BARS */
+  .sticky-bar { position:sticky;top:61px;z-index:4;background:var(--bg);border-bottom:1px solid var(--border);padding:8px 32px;display:none;gap:0; }
+  .sticky-bar.vis { display:flex; }
+  .sk { flex:1;padding:0 16px;border-right:1px solid var(--border); }
+  .sk:first-child { padding-left:0; }
+  .sk:last-child { border-right:none; }
+  .sk-label { font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:1px; }
+  .sk-val { font-size:14px;font-weight:500;font-variant-numeric:tabular-nums; }
   /* LINE CHART */
-  .linechart-wrap { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:24px;overflow:hidden; }
-  .linechart-svg { width:100%; overflow:visible; }
+  .linechart-wrap { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:24px; }
+  /* VENTAS TABS */
+  .v-tabs { display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border); }
+  .v-tab { padding:8px 16px;cursor:pointer;color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s; }
+  .v-tab:hover { color:var(--text); }
+  .v-tab.active { color:var(--accent);border-bottom-color:var(--accent); }
 
 </style>
 </head>
@@ -569,7 +558,7 @@
     <div class="nav-item" onclick="showModule('ventas')" id="nav-ventas">
       <span class="nav-icon">◉</span> Ventas
     </div>
-    <div class="nav-item" style="opacity:0.4; cursor:not-allowed;" title="Próximamente">
+    <div class="nav-item" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">
       <span class="nav-icon">◎</span> Finanzas
     </div>
   </div>
@@ -587,11 +576,20 @@
     </div>
   </div>
 
-  <div id="v-sticky-kpis">
-    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Venta</div><div class="v-sticky-kpi-val" id="sk-venta" style="color:var(--accent);">—</div></div>
-    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Órdenes</div><div class="v-sticky-kpi-val" id="sk-ordenes">—</div></div>
-    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Unidades</div><div class="v-sticky-kpi-val" id="sk-unidades">—</div></div>
-    <div class="v-sticky-kpi"><div class="v-sticky-kpi-label">Ticket prom.</div><div class="v-sticky-kpi-val" id="sk-ticket">—</div></div>
+  <div id="sbar-stock" class="sticky-bar">
+    <div class="sk"><div class="sk-label">Venta · stock</div><div class="sk-val" id="sk-vs" style="color:var(--accent);">—</div></div>
+    <div class="sk"><div class="sk-label">Venta · por armar</div><div class="sk-val" id="sk-va" style="color:var(--accent);">—</div></div>
+    <div class="sk"><div class="sk-label">Venta · total</div><div class="sk-val" id="sk-vt" style="color:var(--white);">—</div></div>
+    <div class="sk"><div class="sk-label">Costo · stock</div><div class="sk-val" id="sk-cs" style="color:var(--accent2);">—</div></div>
+    <div class="sk"><div class="sk-label">Costo · insumos</div><div class="sk-val" id="sk-ci" style="color:var(--accent2);">—</div></div>
+    <div class="sk"><div class="sk-label">Costo · total</div><div class="sk-val" id="sk-ct" style="color:var(--white);">—</div></div>
+  </div>
+
+  <div id="sbar-ventas" class="sticky-bar">
+    <div class="sk"><div class="sk-label">Venta</div><div class="sk-val" id="sv-venta" style="color:var(--accent);">—</div></div>
+    <div class="sk"><div class="sk-label">Órdenes</div><div class="sk-val" id="sv-ordenes">—</div></div>
+    <div class="sk"><div class="sk-label">Unidades</div><div class="sk-val" id="sv-unidades">—</div></div>
+    <div class="sk"><div class="sk-label">Ticket prom.</div><div class="sk-val" id="sv-ticket">—</div></div>
   </div>
 
   <div id="content">
@@ -609,14 +607,14 @@
 </div>
 
 <script>
-// ── CONFIG ─────────────────────────────────────────────────────
+// ── CONFIG ──────────────────────────────────────────────────────
 const PUB_ID = '2PACX-1vQUYvdo1IOKfZS3NupXy24eIctfNsXLIZ_wfH6671Y7rr0hWesmdAmmTjNj69b1VxjjVe1RLbqGE-7R';
 const URLS = {
-  dux:       `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2130058495&single=true&output=csv`,
-  tn:        `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=611485435&single=true&output=csv`,
-  compuestos:`https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1843338909&single=true&output=csv`,
-  ventas_resumen: `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1630061936&single=true&output=csv`,
-  ordenes_resumen:`https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
+  dux:        `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2130058495&single=true&output=csv`,
+  tn:         `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=611485435&single=true&output=csv`,
+  compuestos: `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1843338909&single=true&output=csv`,
+  ventas:     `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1630061936&single=true&output=csv`,
+  ordenes:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
 };
 
 const SKU_MAP = {
@@ -625,7 +623,6 @@ const SKU_MAP = {
   'FUN-SHI-100':'FUN-SHI100','TIN-ASH-100':'TIN-ASH100','TIN-GIN-100':'TIN-GIN100',
   'JOJ60':'JOJ-60','JOJ125':'JOJ-125',
 };
-
 const ADAPTOGENOS = ['MELENA','CORDYCEPS','REISHI','SHIITAKE','PAVO','ASHWAGANDHA','GINSENG','TREM'];
 const DIST_ADAPTO = [{ml:50,pct:0.65},{ml:100,pct:0.35}];
 const DIST_JOJOBA = [{ml:30,pct:0.38},{ml:60,pct:0.36},{ml:125,pct:0.26}];
@@ -639,44 +636,79 @@ const JOJOBA_SKU_MAP = {30:'JOJ-30G',60:'JOJ-60',125:'JOJ-125'};
 const MOSQUETA_SKU = 'ROS-MOS';
 
 let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[]};
-let CACHE = {ventas:null};
 let currentModule = 'stock';
 let currentTab = 'venta';
-let modalSku = null;
+let armarCardMode = false; // false=compact tree, true=card grid
+let bomCache = null;
 
 // ── UTILS ───────────────────────────────────────────────────────
 function parseCSV(text) {
   const lines = text.split('\n');
-  const headers = splitCSVLine(lines[0]);
+  const headers = splitLine(lines[0]);
   const rows = [];
   for (let i=1;i<lines.length;i++) {
-    const line=lines[i].trim();
-    if(!line) continue;
-    const vals=splitCSVLine(line);
-    const obj={};
-    headers.forEach((h,idx)=>{obj[h.trim()]=(vals[idx]||'').trim();});
+    const line=lines[i].trim(); if(!line) continue;
+    const vals=splitLine(line), obj={};
+    headers.forEach((h,idx)=>{ obj[h.trim()]=(vals[idx]||'').trim(); });
     rows.push(obj);
   }
   return rows;
 }
-function splitCSVLine(line) {
-  const result=[];let cur='',inQ=false;
+function splitLine(line) {
+  const r=[]; let cur='',inQ=false;
   for(let i=0;i<line.length;i++){
     const c=line[i];
     if(c==='"'){inQ=!inQ;}
-    else if(c===','&&!inQ){result.push(cur);cur='';}
+    else if(c===','&&!inQ){r.push(cur);cur='';}
     else{cur+=c;}
   }
-  result.push(cur);
-  return result;
+  r.push(cur); return r;
 }
 function num(v) {
   if(v===undefined||v===null||v==='') return 0;
   const s=String(v).replace(/\./g,'').replace(',','.').replace(/[^\d.\-]/g,'');
   return parseFloat(s)||0;
 }
-function pesos(v) {
-  return '$'+Math.round(v).toLocaleString('es-AR');
+function pesos(v){ return '$'+Math.round(v).toLocaleString('es-AR'); }
+function getLinea(r){ return (r['LINEA']||r['linea']||'').trim().toUpperCase(); }
+function getRubro(r){ return (r['RUBRO']||r['rubro']||'').trim().toUpperCase()||'OTRO'; }
+function getSku(r){ return (r['sku']||r['SKU']||'').trim(); }
+
+// ── TREE ENGINE ─────────────────────────────────────────────────
+// Pure JS expand/collapse – no CSS max-height hacks
+const TS = {}; // treeState: 'ns:key' → bool
+function tsGet(ns,key,def){ const k=ns+':'+key; if(TS[k]===undefined) TS[k]=def; return TS[k]; }
+function tsToggle(ns,key) {
+  const k=ns+':'+key;
+  TS[k] = !TS[k];
+  const el=document.getElementById('tc-'+ns+'-'+key);
+  const ic=document.getElementById('ti-'+ns+'-'+key);
+  if(!el) return;
+  if(TS[k]){
+    el.style.display='block';
+    if(ic){ic.textContent='−';ic.className='tog open';}
+  } else {
+    el.style.display='none';
+    if(ic){ic.textContent='+';ic.className='tog';}
+  }
+}
+// Build a tree row HTML (no children)
+function TR(ns,key,level,label,right1,right2,hasChildren,def){
+  const open = hasChildren ? tsGet(ns,key,def) : false;
+  const l = ['l0','l1','l2','l3'][level]||'l3';
+  const nc = hasChildren ? '' : ' nc';
+  const onclick = hasChildren ? ` onclick="tsToggle('${ns}','${key}')"` : '';
+  const tog = hasChildren
+    ? `<span class="tog${open?' open':''}" id="ti-${ns}-${key}">${open?'−':'+'}</span>`
+    : `<span style="width:16px;margin-right:8px;flex-shrink:0;"></span>`;
+  const r1 = right1 ? `<span class="tu">${right1}</span>` : '';
+  const r2 = right2 ? `<span class="tv">${right2}</span>` : '';
+  return `<div class="tr ${l}${nc}"${onclick}>${tog}<span class="tl">${label}</span>${r1}${r2}</div>`;
+}
+// Build children wrapper
+function TC(ns,key,content,def){
+  const open = tsGet(ns,key,def);
+  return `<div id="tc-${ns}-${key}" class="tc" style="display:${open?'block':'none'};">${content}</div>`;
 }
 
 // ── FETCH ───────────────────────────────────────────────────────
@@ -684,168 +716,166 @@ async function loadData() {
   document.getElementById('loading').style.display='flex';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
-  document.getElementById('welcome').style.display='none';
   try {
-    const [duxText,tnText,compText,ventasText,ordenesText]=await Promise.all([
+    const [dT,tT,cT,vT,oT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
-      fetch(URLS.ventas_resumen).then(r=>r.text()),
-      fetch(URLS.ordenes_resumen).then(r=>r.text()),
+      fetch(URLS.ventas).then(r=>r.text()),
+      fetch(URLS.ordenes).then(r=>r.text()),
     ]);
-    const duxLines=duxText.split('\n');
-    const duxClean=duxLines.slice(2).join('\n');
-    DATA.dux=parseCSV(duxClean).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
-    DATA.tn=parseCSV(tnText);
-    const compLines=compText.split('\n');
-    const compClean=compLines.slice(2).join('\n');
-    DATA.compuestos=parseCSV(compClean).filter(r=>r['Código Compuesto']);
-    DATA.ventas=parseCSV(ventasText).filter(r=>r['periodo']&&r['periodo'].trim());
-    DATA.ordenes=parseCSV(ordenesText).filter(r=>r['periodo']&&r['periodo'].trim());
-    CACHE.ventas=null;
+    DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
+    DATA.tn  = parseCSV(tT);
+    DATA.compuestos = parseCSV(cT.split('\n').slice(2).join('\n')).filter(r=>r['Código Compuesto']);
+    DATA.ventas  = parseCSV(vT).filter(r=>r['periodo']&&r['periodo'].trim());
+    DATA.ordenes = parseCSV(oT).filter(r=>r['periodo']&&r['periodo'].trim());
+    bomCache = null;
     const now=new Date();
-    const label=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
-    document.getElementById('last-update-label').textContent=label;
-    document.getElementById('last-update-sidebar').textContent=label;
+    const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
+    document.getElementById('last-update-label').textContent=lbl;
+    document.getElementById('last-update-sidebar').textContent=lbl;
     document.getElementById('loading').style.display='none';
     renderCurrentModule();
   } catch(e) {
-    document.getElementById('loading').innerHTML=`
-      <div style="color:var(--accent3);text-align:center;">
-        <div style="font-size:20px;margin-bottom:8px;">✕</div>
-        <div>Error al cargar datos.</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Verificá que el Google Sheets esté publicado.</div>
-        <button onclick="loadData()" style="margin-top:16px;background:transparent;border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;">Reintentar</button>
-      </div>`;
+    document.getElementById('loading').innerHTML=`<div style="color:var(--accent3);text-align:center;">
+      <div style="font-size:20px;margin-bottom:8px;">✕</div><div>Error al cargar datos.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">Verificá que el Google Sheets esté publicado.</div>
+      <button onclick="loadData()" style="margin-top:16px;background:transparent;border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;">Reintentar</button>
+    </div>`;
   }
 }
 
-// ── NAVEGACIÓN ──────────────────────────────────────────────────
+// ── NAV ─────────────────────────────────────────────────────────
 function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
-  const navEl=document.getElementById('nav-'+mod);
-  if(navEl) navEl.classList.add('active');
+  const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
   document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':'Ventas';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
-  // Hide sticky KPIs when not in ventas
-  const sbar=document.getElementById('v-sticky-kpis');
-  if(sbar) sbar.classList.toggle('visible', mod==='ventas');
+  const sb=document.getElementById('sbar-stock');
+  const vb=document.getElementById('sbar-ventas');
+  if(sb) sb.classList.toggle('vis', mod==='stock');
+  if(vb) vb.classList.toggle('vis', mod==='ventas');
   renderCurrentModule();
 }
-function renderCurrentModule() {
-  if(currentModule==='stock') renderStock();
+function renderCurrentModule(){
+  if(currentModule==='stock')  renderStock();
   if(currentModule==='ventas') renderVentasModule();
 }
 
-// ── STOCK KPIs ──────────────────────────────────────────────────
-function calcKPIs() {
-  // Mapa precio TN por SKU (promo si existe, sino normal)
-  const precioVenta={};
-  const precioCosto={};
+// ── SHARED HELPERS ───────────────────────────────────────────────
+function buildTNProducts() {
+  const priceMap={};
   DATA.tn.forEach(r=>{
-    const sku=(r['SKU']||'').trim();
-    if(!sku) return;
-    const promo=num(r['Precio promocional']);
-    const normal=num(r['Precio']);
-    precioVenta[sku]=promo>0?promo:normal;
-    // también por SKU mapeado
-    Object.entries(SKU_MAP).forEach(([tnSku,duxSku])=>{
-      if(sku===tnSku) precioVenta[duxSku]=promo>0?promo:normal;
-    });
+    const sku=(r['SKU']||'').trim(); if(!sku) return;
+    const pr=num(r['Precio promocional']), no=num(r['Precio']);
+    priceMap[sku]=pr>0?pr:no;
   });
-
-  // Costo DUX por código
-  const costoDux={};
-  DATA.dux.forEach(r=>{
-    costoDux[(r['Código Producto']||'').trim()]=num(r['Costo']);
+  const products=[];
+  let cur=null;
+  DATA.tn.forEach(r=>{
+    if(r['Nombre']&&r['Nombre'].trim()){
+      if(cur) products.push(cur);
+      cur={nombre:r['Nombre'].trim(),sku:(r['SKU']||'').trim(),cats:(r['Categorías']||'').trim(),variantes:[]};
+      if(r['SKU']||r['Stock']){
+        const sku=(r['SKU']||'').trim();
+        cur.variantes.push({sku,stock:num(r['Stock']),precio:priceMap[sku]||0});
+      }
+    } else if(cur&&r['SKU']){
+      const sku=r['SKU'].trim();
+      cur.variantes.push({sku,stock:num(r['Stock']),precio:priceMap[sku]||0});
+    }
   });
+  if(cur) products.push(cur);
+  return products;
+}
+function isKit(p){ return /kit/i.test(p.nombre)||p.variantes.some(v=>/kit/i.test(v.sku)); }
+function isNegra(p){ return /negra|adaptógeno|adaptogeno/i.test(p.cats)||p.variantes.some(v=>/^(FUN-|TIN-)/i.test(v.sku)); }
+function getTnSkus(){
+  const s=new Set();
+  DATA.tn.forEach(r=>{
+    if(r['SKU']){ s.add(r['SKU'].trim()); Object.entries(SKU_MAP).forEach(([tn,dx])=>{ if(r['SKU'].trim()===tn) s.add(dx); }); }
+  });
+  return s;
+}
+function valorizar(prods){ return prods.reduce((s,p)=>s+p.variantes.reduce((sv,v)=>sv+v.stock*v.precio,0),0); }
+function countUds(prods){ return prods.reduce((s,p)=>s+p.variantes.reduce((sv,v)=>sv+v.stock,0),0); }
 
-  // A la venta: productos TN con stock (no kits)
+// ── STOCK KPIs ───────────────────────────────────────────────────
+function calcKPIs() {
+  const precioV={}, costoD={};
+  DATA.tn.forEach(r=>{
+    const sku=(r['SKU']||'').trim(); if(!sku) return;
+    const pr=num(r['Precio promocional']), no=num(r['Precio']);
+    precioV[sku]=pr>0?pr:no;
+    Object.entries(SKU_MAP).forEach(([tn,dx])=>{ if(sku===tn) precioV[dx]=pr>0?pr:no; });
+  });
+  DATA.dux.forEach(r=>{ costoD[(r['Código Producto']||'').trim()]=num(r['Costo']); });
+
   const products=buildTNProducts();
-  let ventaVenta=0, ventaCosto=0;
+  let ventaV=0, ventaC=0;
+  // SOLO productos no-kit para evitar doble cómputo
   products.filter(p=>!isKit(p)).forEach(p=>{
     p.variantes.forEach(v=>{
-      const pv=precioVenta[v.sku]||0;
-      const duxSku=SKU_MAP[v.sku]||v.sku;
-      const pc=costoDux[duxSku]||0;
-      ventaVenta+=v.stock*pv;
-      ventaCosto+=v.stock*pc;
+      ventaV += v.stock*(precioV[v.sku]||0);
+      ventaC += v.stock*(costoD[SKU_MAP[v.sku]||v.sku]||0);
     });
   });
 
-  // Insumos costo
   const tnSkus=getTnSkus();
-  const RUBROS_INSUMO=['ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','PRODUCTO LIQUIDO'];
-  let insumosCosto=0;
-  DATA.dux.filter(r=>{
-    const rubro=(r['Rubro']||'').trim().toUpperCase();
-    return RUBROS_INSUMO.includes(rubro)&&!tnSkus.has(r['Código Producto']);
-  }).forEach(r=>{
-    insumosCosto+=num(r['Stock Disponible'])*num(r['Costo']);
-  });
+  const RUBROS_INS=['ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','PRODUCTO LIQUIDO'];
+  let insCosto=0;
+  DATA.dux.filter(r=>{ const rb=(r['Rubro']||'').trim().toUpperCase(); return RUBROS_INS.includes(rb)&&!tnSkus.has(r['Código Producto']); })
+    .forEach(r=>{ insCosto+=num(r['Stock Disponible'])*num(r['Costo']); });
 
-  // Por armar: valor a precio de venta
   const cards=buildArmarCards();
-  let armarVenta=0;
-  cards.forEach(c=>{
-    const sku=c.sku;
-    const pv=precioVenta[sku]||0;
-    armarVenta+=c.unidades*pv;
-  });
+  let armarV=0;
+  cards.forEach(c=>{ armarV+=c.unidades*(precioV[c.sku]||0); });
 
-  return {ventaVenta,ventaCosto,insumosCosto,armarVenta};
+  return {ventaV,ventaC,insCosto,armarV};
 }
 
-function renderKPIs() {
-  const k=calcKPIs();
-  return `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
-        <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Valor a precio de venta</div>
-        <div style="display:flex;gap:24px;flex-wrap:wrap;">
-          <div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">A la venta</div>
-            <div style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(k.ventaVenta)}</div>
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Por armar</div>
-            <div style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(k.armarVenta)}</div>
-          </div>
-          <div style="border-left:1px solid var(--border);padding-left:24px;">
-            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total potencial</div>
-            <div style="font-size:18px;font-weight:500;color:var(--white);font-variant-numeric:tabular-nums;">${pesos(k.ventaVenta+k.armarVenta)}</div>
-          </div>
-        </div>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
-        <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Valor a costo</div>
-        <div style="display:flex;gap:24px;flex-wrap:wrap;">
-          <div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">A la venta</div>
-            <div style="font-size:18px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(k.ventaCosto)}</div>
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Insumos</div>
-            <div style="font-size:18px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(k.insumosCosto)}</div>
-          </div>
-          <div style="border-left:1px solid var(--border);padding-left:24px;">
-            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total inventario</div>
-            <div style="font-size:18px;font-weight:500;color:var(--white);font-variant-numeric:tabular-nums;">${pesos(k.ventaCosto+k.insumosCosto)}</div>
-          </div>
-        </div>
+function renderKPIsInline(k){
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
+      <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Valor a precio de venta</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">A la venta</div><div style="font-size:17px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(k.ventaV)}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Por armar</div><div style="font-size:17px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(k.armarV)}</div></div>
+        <div style="border-left:1px solid var(--border);padding-left:20px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total potencial</div><div style="font-size:17px;font-weight:500;color:var(--white);font-variant-numeric:tabular-nums;">${pesos(k.ventaV+k.armarV)}</div></div>
       </div>
     </div>
-  `;
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
+      <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Valor a costo</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Stock venta</div><div style="font-size:17px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(k.ventaC)}</div></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Insumos</div><div style="font-size:17px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(k.insCosto)}</div></div>
+        <div style="border-left:1px solid var(--border);padding-left:20px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total inventario</div><div style="font-size:17px;font-weight:500;color:var(--white);font-variant-numeric:tabular-nums;">${pesos(k.ventaC+k.insCosto)}</div></div>
+      </div>
+    </div>
+  </div>`;
 }
 
-// ── STOCK MODULE ────────────────────────────────────────────────
-function renderStock() {
+function updateStockStickyBar(k){
+  const b=document.getElementById('sbar-stock'); if(!b) return;
+  document.getElementById('sk-vs').textContent=pesos(k.ventaV);
+  document.getElementById('sk-va').textContent=pesos(k.armarV);
+  document.getElementById('sk-vt').textContent=pesos(k.ventaV+k.armarV);
+  document.getElementById('sk-cs').textContent=pesos(k.ventaC);
+  document.getElementById('sk-ci').textContent=pesos(k.insCosto);
+  document.getElementById('sk-ct').textContent=pesos(k.ventaC+k.insCosto);
+  b.classList.add('vis');
+}
+
+// ── STOCK MODULE ─────────────────────────────────────────────────
+function renderStock(){
   const el=document.getElementById('module-stock');
   el.style.display='block';
+  const k=calcKPIs();
+  updateStockStickyBar(k);
   el.innerHTML=`
-    ${renderKPIs()}
+    ${renderKPIsInline(k)}
     <div class="tabs">
       <div class="tab ${currentTab==='venta'?'active':''}" onclick="switchTab('venta')">A la venta</div>
       <div class="tab ${currentTab==='insumos'?'active':''}" onclick="switchTab('insumos')">Insumos</div>
@@ -853,501 +883,324 @@ function renderStock() {
     </div>
     <div id="tab-content"></div>
     <div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;" onclick="closeModal(event)">
-      <div id="modal-box" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;position:relative;">
+      <div id="modal-box" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;">
         <div id="modal-content"></div>
       </div>
-    </div>
-  `;
+    </div>`;
   renderTab();
 }
-
-function switchTab(tab) {
+function switchTab(tab){
   currentTab=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   event.target.classList.add('active');
   renderTab();
 }
-function renderTab() {
-  const el=document.getElementById('tab-content');
-  if(!el) return;
+function renderTab(){
+  const el=document.getElementById('tab-content'); if(!el) return;
   if(currentTab==='venta')   el.innerHTML=renderVenta();
   if(currentTab==='insumos') el.innerHTML=renderInsumos();
   if(currentTab==='armar')   el.innerHTML=renderArmar();
 }
 
-// ── HELPERS COMPARTIDOS ─────────────────────────────────────────
-function buildTNProducts() {
-  const products=[];
-  let current=null;
-
-  // Mapa precio TN por SKU
-  const precioMap={};
-  DATA.tn.forEach(r=>{
-    const sku=(r['SKU']||'').trim();
-    if(!sku) return;
-    const promo=num(r['Precio promocional']);
-    const normal=num(r['Precio']);
-    precioMap[sku]=promo>0?promo:normal;
-  });
-
-  DATA.tn.forEach(r=>{
-    if(r['Nombre']&&r['Nombre'].trim()){
-      if(current) products.push(current);
-      current={
-        nombre:r['Nombre'].trim(),
-        sku:(r['SKU']||'').trim(),
-        cats:(r['Categorías']||'').trim(),
-        variantes:[],
-      };
-      if(r['SKU']||r['Stock']){
-        const sku=(r['SKU']||'').trim();
-        current.variantes.push({sku,stock:num(r['Stock']),precio:precioMap[sku]||0});
-      }
-    } else if(current&&r['SKU']){
-      const sku=r['SKU'].trim();
-      current.variantes.push({sku,stock:num(r['Stock']),precio:precioMap[sku]||0});
-    }
-  });
-  if(current) products.push(current);
-  return products;
-}
-
-function isKit(p){return /kit/i.test(p.nombre)||p.variantes.some(v=>/kit/i.test(v.sku));}
-function isNegra(p){return /negra|adaptógeno|adaptogeno/i.test(p.cats)||p.variantes.some(v=>/^(FUN-|TIN-)/i.test(v.sku));}
-function getTnSkus(){
-  const tnSkus=new Set();
-  DATA.tn.forEach(r=>{
-    if(r['SKU']){
-      tnSkus.add(r['SKU'].trim());
-      Object.entries(SKU_MAP).forEach(([tn,dux])=>{if(r['SKU'].trim()===tn) tnSkus.add(dux);});
-    }
-  });
-  return tnSkus;
-}
-
-// ── A LA VENTA ──────────────────────────────────────────────────
-const ventaTreeState = {}; // key → bool open
-function ventaTreeToggle(key) {
-  ventaTreeState[key] = !ventaTreeState[key];
-  const childEl = document.getElementById('vtree-'+key);
-  const iconEl  = document.getElementById('vtree-icon-'+key);
-  if (!childEl) return;
-  childEl.classList.toggle('collapsed', !ventaTreeState[key]);
-  if (iconEl) { iconEl.textContent = ventaTreeState[key] ? '−' : '+'; iconEl.classList.toggle('open', ventaTreeState[key]); }
-}
-function ventaTreeOpen(key) { if (ventaTreeState[key] === undefined) ventaTreeState[key] = true; }
-
-function renderVenta() {
+// ── A LA VENTA ───────────────────────────────────────────────────
+function renderVenta(){
+  const NS='vnt';
   const products=buildTNProducts();
-  const costoDux={};
-  DATA.dux.forEach(r=>{costoDux[(r['Código Producto']||'').trim()]=num(r['Costo']);});
+  const costoD={};
+  DATA.dux.forEach(r=>{ costoD[(r['Código Producto']||'').trim()]=num(r['Costo']); });
 
-  const kits=products.filter(isKit);
-  const negra=products.filter(p=>!isKit(p)&&isNegra(p));
-  const blanca=products.filter(p=>!isKit(p)&&!isNegra(p));
+  const kits  = products.filter(p=>isKit(p));
+  const negra = products.filter(p=>!isKit(p)&&isNegra(p));
+  const blanca= products.filter(p=>!isKit(p)&&!isNegra(p));
 
-  // Línea Negra: separar 50ml y 100ml por SKU
+  // split negra by ml
   const negra50=[], negra100=[];
   negra.forEach(p=>{
-    const v50=p.variantes.filter(v=>v.sku.endsWith('50')||(!v.sku.endsWith('100')&&!v.sku.endsWith('125')&&!v.sku.endsWith('30')&&!v.sku.endsWith('60')&&!v.sku.match(/100$/)&&!v.sku.match(/XL$/)));
-    const v100=p.variantes.filter(v=>v.sku.endsWith('100')||v.sku.match(/100$/));
-    // Si tiene variantes 100ml explícitas, separar
-    if(v100.length>0){
-      if(v50.length>0||p.variantes.filter(v=>!v.sku.endsWith('100')).length>0){
-        negra50.push({...p,variantes:p.variantes.filter(v=>!v.sku.match(/100$/))});
-      }
-      negra100.push({...p,variantes:v100});
-    } else {
-      negra50.push(p);
-    }
+    const v100=p.variantes.filter(v=>v.sku.match(/100$/));
+    const v50 =p.variantes.filter(v=>!v.sku.match(/100$/));
+    if(v100.length) negra100.push({...p,variantes:v100});
+    if(v50.length||!v100.length) negra50.push({...p,variantes:v50.length?v50:p.variantes.filter(v=>!v.sku.match(/100$/))});
   });
-
-  // Línea Blanca: jojoba vs resto
   const isJojoba=p=>/jojoba/i.test(p.nombre)||p.variantes.some(v=>/^JOJ/i.test(v.sku));
-  const blancaJojoba=blanca.filter(isJojoba);
-  const blancaResto=blanca.filter(p=>!isJojoba(p));
+  const blancaJoj  = blanca.filter(isJojoba);
+  const blancaResto= blanca.filter(p=>!isJojoba(p));
 
-  function valorizar(prods){
-    return prods.reduce((s,p)=>s+p.variantes.reduce((sv,v)=>sv+v.stock*v.precio,0),0);
-  }
-  function costoProds(prods){
-    return prods.reduce((s,p)=>s+p.variantes.reduce((sv,v)=>{
-      const duxSku=SKU_MAP[v.sku]||v.sku;
-      return sv+v.stock*(costoDux[duxSku]||0);
-    },0),0);
-  }
+  const vN50 =valorizar(negra50),  vN100=valorizar(negra100);
+  const vBJ  =valorizar(blancaJoj),vBR  =valorizar(blancaResto);
+  const totalSinKits=vN50+vN100+vBJ+vBR;
+  // KITS: solo mostramos stock, NO sumamos al valor (evita doble conteo)
 
-  const vNegra50=valorizar(negra50);
-  const vNegra100=valorizar(negra100);
-  const vBlancaJoj=valorizar(blancaJojoba);
-  const vBlancaResto=valorizar(blancaResto);
-  const totalSinKits=vNegra50+vNegra100+vBlancaJoj+vBlancaResto;
-  const vKits=valorizar(kits);
-
-  // helper: tree section header (level 0)
-  function treeL0(key, label, valor, defaultOpen=false) {
-    if(ventaTreeState[key]===undefined) ventaTreeState[key]=defaultOpen;
-    const open=ventaTreeState[key];
-    return `<div class="tree-row level-0" onclick="ventaTreeToggle('${key}')">
-      <span class="tree-toggle ${open?'open':''}" id="vtree-icon-${key}">${open?'−':'+'}</span>
-      <span class="tree-label">${label}</span>
-      <span class="tree-valor" style="color:var(--accent);">${pesos(valor)}</span>
-    </div><div class="tree-children ${open?'':'collapsed'}" id="vtree-${key}" style="max-height:${open?'2000px':'0'};">`;
+  function leaves(prods){
+    let h='';
+    prods.forEach(p=>p.variantes.filter(v=>v.stock>0).forEach(v=>{
+      const sc=v.stock===0?'stock-zero':v.stock<20?'stock-low':'stock-ok';
+      h+=TR(NS,'leaf-'+v.sku,2,
+        `${p.nombre} <span class="sku-badge" style="margin-left:6px;">${v.sku}</span>`,
+        `<span class="stock-num ${sc}">${v.stock}</span>`,
+        v.precio>0?`<span style="color:var(--muted);font-size:11px;">${pesos(v.precio)}</span>`:'—',
+        false,false);
+    }));
+    return h;
   }
-  function treeL1(key, label, valor, unidades, defaultOpen=false) {
-    if(ventaTreeState[key]===undefined) ventaTreeState[key]=defaultOpen;
-    const open=ventaTreeState[key];
-    return `<div class="tree-row level-1" onclick="ventaTreeToggle('${key}');event.stopPropagation()">
-      <span class="tree-toggle ${open?'open':''}" id="vtree-icon-${key}">${open?'−':'+'}</span>
-      <span class="tree-label">${label}</span>
-      <span class="tree-units">${Math.round(unidades)} uds</span>
-      <span class="tree-valor">${pesos(valor)}</span>
-    </div><div class="tree-children ${open?'':'collapsed'}" id="vtree-${key}" style="max-height:${open?'2000px':'0'};">`;
-  }
-  function treeClose() { return '</div>'; }
-
-  function productRows(prods) {
-    let html='';
-    prods.forEach(p=>{
-      p.variantes.filter(v=>v.stock>0).forEach(v=>{
-        const val=v.stock*v.precio;
-        const sc=v.stock===0?'stock-zero':v.stock<20?'stock-low':'stock-ok';
-        html+=`<div class="tree-row level-2" style="cursor:default;">
-          <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-          <span class="tree-label">${p.nombre} <span class="sku-badge" style="margin-left:6px;">${v.sku}</span></span>
-          <span class="tree-units"><span class="stock-num ${sc}">${v.stock}</span></span>
-          <span class="tree-valor" style="font-size:11px;color:var(--muted);">${v.precio>0?pesos(v.precio):'—'}</span>
-        </div>`;
-      });
-    });
-    return html;
+  function kitLeaves(prods){
+    let h='';
+    prods.forEach(p=>p.variantes.filter(v=>v.stock>0).forEach(v=>{
+      const sc=v.stock<20?'stock-low':'stock-ok';
+      h+=TR(NS,'kleaf-'+v.sku,2,
+        `${p.nombre} <span class="sku-badge" style="margin-left:6px;">${v.sku}</span>`,
+        `<span class="stock-num ${sc}">${v.stock}</span>`,
+        '—',false,false);
+    }));
+    return h;
   }
 
-  function unidades(prods){return prods.reduce((s,p)=>s+p.variantes.reduce((sv,v)=>sv+v.stock,0),0);}
-
-  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;">`;
-  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
-    <span style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Producto</span>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:60px;text-align:right;">Uds</span>
-      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:110px;text-align:right;">Valor venta</span>
-    </div></div>`;
-
-  // LÍNEA NEGRA
-  html += treeL0('negra','Línea Negra',vNegra50+vNegra100,true);
-    html += treeL1('negra50','50 ml',vNegra50,unidades(negra50),true);
-      html += productRows(negra50);
-    html += treeClose();
-    html += treeL1('negra100','100 ml',vNegra100,unidades(negra100),true);
-      html += productRows(negra100);
-    html += treeClose();
-  html += treeClose();
-
-  // LÍNEA BLANCA
-  html += treeL0('blanca','Línea Blanca',vBlancaJoj+vBlancaResto,true);
-    html += treeL1('blancaJoj','Aceite de Jojoba',vBlancaJoj,unidades(blancaJojoba),true);
-      html += productRows(blancaJojoba);
-    html += treeClose();
-    html += treeL1('blancaResto','Resto',vBlancaResto,unidades(blancaResto),true);
-      html += productRows(blancaResto);
-    html += treeClose();
-  html += treeClose();
-
-  // KITS
-  html += treeL0('kits','Kits',vKits,false);
-    html += productRows(kits);
-  html += treeClose();
-
-  html += `</div>`;
-
-  // TOTAL
-  html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;margin-bottom:8px;">
-    <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL A LA VENTA</span>
-    <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalSinKits+vKits)}</span>
+  let h=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;">`;
+  h+=`<div class="tr nc" style="border-top:none;padding:8px 12px;background:var(--surface);">
+    <span style="width:16px;margin-right:8px;"></span><span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Producto</span>
+    <span class="tu" style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Stock</span>
+    <span class="tv" style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Valor venta</span>
   </div>`;
-  return html;
+
+  // Línea Negra
+  h+=TR(NS,'negra',0,'Línea Negra','',pesos(vN50+vN100),true,true);
+  h+=TC(NS,'negra',
+    TR(NS,'n50',1,'50 ml',countUds(negra50)+' uds',pesos(vN50),true,true)+
+    TC(NS,'n50',leaves(negra50),true)+
+    TR(NS,'n100',1,'100 ml',countUds(negra100)+' uds',pesos(vN100),true,true)+
+    TC(NS,'n100',leaves(negra100),true)
+  ,true);
+
+  // Línea Blanca
+  h+=TR(NS,'blanca',0,'Línea Blanca','',pesos(vBJ+vBR),true,true);
+  h+=TC(NS,'blanca',
+    TR(NS,'bjoj',1,'Aceite de Jojoba',countUds(blancaJoj)+' uds',pesos(vBJ),true,true)+
+    TC(NS,'bjoj',leaves(blancaJoj),true)+
+    TR(NS,'bresto',1,'Resto',countUds(blancaResto)+' uds',pesos(vBR),true,true)+
+    TC(NS,'bresto',leaves(blancaResto),true)
+  ,true);
+
+  // Kits (sin valorizar — evita doble conteo)
+  h+=TR(NS,'kits',0,`Kits <span style="color:var(--muted);font-size:10px;font-weight:400;">(sin valorizar)</span>`,countUds(kits)+' uds','—',true,false);
+  h+=TC(NS,'kits',kitLeaves(kits),false);
+
+  h+=`</div>`;
+  h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;">
+    <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">TOTAL A LA VENTA <span style="color:var(--muted);font-size:9px;">(excl. kits)</span></span>
+    <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalSinKits)}</span>
+  </div>`;
+  return h;
 }
 
-// ── INSUMOS ─────────────────────────────────────────────────────
-const insumosTreeState = {};
-function insumosTreeToggle(key) {
-  insumosTreeState[key] = !insumosTreeState[key];
-  const childEl = document.getElementById('itree-'+key);
-  const iconEl  = document.getElementById('itree-icon-'+key);
-  if (!childEl) return;
-  childEl.classList.toggle('collapsed', !insumosTreeState[key]);
-  if (iconEl) { iconEl.textContent = insumosTreeState[key] ? '−' : '+'; iconEl.classList.toggle('open', insumosTreeState[key]); }
-}
-
-function renderInsumos() {
+// ── INSUMOS ──────────────────────────────────────────────────────
+function renderInsumos(){
+  const NS='ins';
   const tnSkus=getTnSkus();
-  const RUBROS_INSUMO=['ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','PRODUCTO LIQUIDO'];
-  const insumos=DATA.dux.filter(r=>{
-    const rubro=(r['Rubro']||'').trim().toUpperCase();
-    return RUBROS_INSUMO.includes(rubro)&&!tnSkus.has(r['Código Producto']);
-  });
+  const RUBROS=['ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','PRODUCTO LIQUIDO'];
+  const ORDER=['PRODUCTO LIQUIDO','ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','OTRO'];
   const byRubro={};
-  insumos.forEach(r=>{
-    const rubro=(r['Rubro']||'OTRO').trim().toUpperCase();
-    if(!byRubro[rubro]) byRubro[rubro]=[];
-    byRubro[rubro].push(r);
+  DATA.dux.filter(r=>{
+    const rb=(r['Rubro']||'').trim().toUpperCase();
+    return RUBROS.includes(rb)&&!tnSkus.has(r['Código Producto']);
+  }).forEach(r=>{
+    const rb=(r['Rubro']||'OTRO').trim().toUpperCase();
+    if(!byRubro[rb]) byRubro[rb]=[];
+    byRubro[rb].push(r);
   });
-  const rubroOrder=['PRODUCTO LIQUIDO','ENVASES','CAJAS','PARTE CAJAS','ETIQUETAS','FOLLETOS','STICKERS','ACCESORIOS','OTRO'];
-  let totalCosto=0;
 
-  let html=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;">`;
-  html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
-    <span style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Rubro / Producto</span>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:70px;text-align:right;">Stock</span>
-      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:90px;text-align:right;">Costo unit.</span>
-      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:110px;text-align:right;">Total costo</span>
-    </div></div>`;
-
-  rubroOrder.filter(r=>byRubro[r]?.length).forEach(rubro=>{
-    const items=byRubro[rubro];
-    const rubroCosto=items.reduce((s,r)=>s+num(r['Stock Disponible'])*num(r['Costo']),0);
-    totalCosto+=rubroCosto;
-    const key='ins-'+rubro.replace(/\s/g,'-');
-    if(insumosTreeState[key]===undefined) insumosTreeState[key]=false;
-    const open=insumosTreeState[key];
-    html+=`<div class="tree-row level-0" onclick="insumosTreeToggle('${key}')">
-      <span class="tree-toggle ${open?'open':''}" id="itree-icon-${key}">${open?'−':'+'}</span>
-      <span class="tree-label">${rubro} <span style="color:var(--muted);font-size:10px;font-weight:400;">· ${items.length} ítems</span></span>
-      <span class="tree-valor" style="color:var(--accent2);">${pesos(rubroCosto)}</span>
-    </div>
-    <div class="tree-children ${open?'':'collapsed'}" id="itree-${key}" style="max-height:${open?'2000px':'0'};">`;
-    items.forEach(r=>{
-      const stock=num(r['Stock Disponible']);
-      const costo=num(r['Costo']);
-      const total=stock*costo;
-      const unidad=(r['Unidad']||'').toUpperCase();
-      const sc=stock===0?'stock-zero':stock<20&&unidad==='LITROS'?'stock-low':stock<100?'stock-low':'stock-ok';
-      html+=`<div class="tree-row level-1" style="cursor:default;gap:8px;">
-        <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-        <span class="tree-label">${r['Producto']} <span class="sku-badge" style="margin-left:4px;">${r['Código Producto']}</span></span>
-        <span style="min-width:70px;text-align:right;font-size:11px;"><span class="stock-num ${sc}">${stock.toLocaleString('es-AR')}</span> <span style="color:var(--muted);font-size:9px;">${unidad}</span></span>
-        <span style="min-width:90px;text-align:right;font-size:11px;color:var(--muted);">${costo>0?pesos(costo):'—'}</span>
-        <span style="min-width:110px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;">${total>0?pesos(total):'—'}</span>
-      </div>`;
-    });
-    html+=`</div>`;
-  });
-  html+=`</div>`;
-  html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent2);border-radius:6px;margin-top:8px;">
-    <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL INSUMOS A COSTO</span>
-    <span style="font-size:18px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(totalCosto)}</span>
+  let total=0;
+  let h=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;">`;
+  h+=`<div class="tr nc" style="border-top:none;padding:8px 12px;background:var(--surface);">
+    <span style="width:16px;margin-right:8px;"></span><span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Rubro / Producto</span>
+    <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:80px;text-align:right;margin-right:8px;">Stock</span>
+    <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:90px;text-align:right;margin-right:4px;">Costo u.</span>
+    <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:110px;text-align:right;">Total</span>
   </div>`;
-  return html;
+
+  ORDER.filter(rb=>byRubro[rb]?.length).forEach(rb=>{
+    const items=byRubro[rb];
+    const rbCost=items.reduce((s,r)=>s+num(r['Stock Disponible'])*num(r['Costo']),0);
+    total+=rbCost;
+    const key=rb.replace(/\s+/g,'-');
+    const leaveH=items.map(r=>{
+      const st=num(r['Stock Disponible']), co=num(r['Costo']), tot=st*co;
+      const un=(r['Unidad']||'').toUpperCase();
+      const sc=st===0?'stock-zero':st<20&&un==='LITROS'?'stock-low':st<100?'stock-low':'stock-ok';
+      return `<div class="tr l1 nc" style="gap:4px;">
+        <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+        <span class="tl">${r['Producto']} <span class="sku-badge" style="margin-left:4px;">${r['Código Producto']}</span></span>
+        <span style="min-width:80px;text-align:right;font-size:11px;margin-right:8px;"><span class="stock-num ${sc}">${st.toLocaleString('es-AR')}</span> <span style="color:var(--muted);font-size:9px;">${un}</span></span>
+        <span style="min-width:90px;text-align:right;font-size:11px;color:var(--muted);margin-right:4px;">${co>0?pesos(co):'—'}</span>
+        <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;">${tot>0?pesos(tot):'—'}</span>
+      </div>`;
+    }).join('');
+    h+=TR(NS,key,0,
+      `${rb} <span style="color:var(--muted);font-size:10px;font-weight:400;">· ${items.length} ítems</span>`,
+      '',`<span style="color:var(--accent2);">${pesos(rbCost)}</span>`,true,false);
+    h+=TC(NS,key,leaveH,false);
+  });
+  h+=`</div>`;
+  h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent2);border-radius:6px;">
+    <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">TOTAL INSUMOS A COSTO</span>
+    <span style="font-size:18px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(total)}</span>
+  </div>`;
+  return h;
 }
 
-// ── POR ARMAR ───────────────────────────────────────────────────
-function buildArmarCards() {
-  const stockDux={};
-  DATA.dux.forEach(r=>{stockDux[(r['Código Producto']||'').trim()]=num(r['Stock Disponible']);});
+// ── BUILD ARMAR CARDS ────────────────────────────────────────────
+function buildArmarCards(){
+  const stockD={};
+  DATA.dux.forEach(r=>{ stockD[(r['Código Producto']||'').trim()]=num(r['Stock Disponible']); });
   const recetas={};
   DATA.compuestos.forEach(r=>{
     const cod=(r['Código Compuesto']||'').trim();
     if(!cod||/^KIT/i.test(cod)) return;
     if(!recetas[cod]) recetas[cod]=[];
-    recetas[cod].push({
-      componente:(r['Código Componente']||'').trim(),
-      nombre:(r['Producto Componente']||'').trim(),
-      cantidad:num(r['Cantidad']),
-    });
+    recetas[cod].push({comp:(r['Código Componente']||'').trim(),nombre:(r['Producto Componente']||'').trim(),qty:num(r['Cantidad'])});
   });
-
-  function calcArmar(sku,litrosGranel,codigoGranel) {
-    const receta=recetas[sku];
-    if(!receta) return {unidades:0,limitante:{nombre:'Receta no encontrada',stock:0},detalle:[]};
-    let minUnidades=Infinity,limitante=null;
-    const detalle=receta.map(comp=>{
-      let stockDisp=comp.componente===codigoGranel?litrosGranel:(stockDux[comp.componente]!==undefined?stockDux[comp.componente]:0);
-      const posibles=comp.cantidad>0?Math.floor(stockDisp/comp.cantidad):Infinity;
-      if(posibles<minUnidades){minUnidades=posibles;limitante={nombre:comp.nombre,codigo:comp.componente,stock:stockDisp,cantidad:comp.cantidad};}
-      return {...comp,stockDisp,posibles:posibles===Infinity?9999:posibles};
+  function calc(sku,litros,granel){
+    const rec=recetas[sku];
+    if(!rec) return {unidades:0,limitante:{nombre:'Sin receta',stock:0},detalle:[]};
+    let mn=Infinity, lim=null;
+    const det=rec.map(c=>{
+      const st=c.comp===granel?litros:(stockD[c.comp]??0);
+      const pos=c.qty>0?Math.floor(st/c.qty):Infinity;
+      if(pos<mn){mn=pos;lim={nombre:c.nombre,codigo:c.comp,stock:st,qty:c.qty};}
+      return {...c,st,pos:pos===Infinity?9999:pos};
     });
-    return {unidades:minUnidades===Infinity?0:minUnidades,limitante,detalle};
+    return {unidades:mn===Infinity?0:mn,limitante:lim,detalle:det};
   }
-
   const cards=[];
   DATA.dux.filter(r=>ADAPTOGENOS.includes((r['Código Producto']||'').trim())).forEach(r=>{
     const cod=r['Código Producto'].trim();
-    const totalLitros=num(r['Stock Disponible']);
-    const skuMap=ADAPTO_SKU_MAP[cod];
-    if(!skuMap) return;
+    const litros=num(r['Stock Disponible']);
+    const sm=ADAPTO_SKU_MAP[cod]; if(!sm) return;
     DIST_ADAPTO.forEach(d=>{
-      const litrosAsignados=totalLitros*d.pct;
-      const sku=skuMap[d.ml];
-      const result=calcArmar(sku,litrosAsignados,cod);
-      cards.push({nombre:`${r['Producto'].trim()} ${d.ml}ml`,sku,unidades:result.unidades,limitante:result.limitante,detalle:result.detalle,litrosAsignados,pct:d.pct,grupo:'negra'});
+      const res=calc(sm[d.ml],litros*d.pct,cod);
+      cards.push({nombre:`${r['Producto'].trim()} ${d.ml}ml`,sku:sm[d.ml],grupo:'negra',adapto:cod,...res,litros:litros*d.pct,pct:d.pct});
     });
   });
-  const jojobaRow=DATA.dux.find(r=>(r['Código Producto']||'').trim()==='JOJOBA');
-  if(jojobaRow){
-    const totalLitros=num(jojobaRow['Stock Disponible']);
-    DIST_JOJOBA.forEach(d=>{
-      const litrosAsignados=totalLitros*d.pct;
-      const sku=JOJOBA_SKU_MAP[d.ml];
-      const result=calcArmar(sku,litrosAsignados,'JOJOBA');
-      cards.push({nombre:`Aceite de Jojoba ${d.ml}ml`,sku,unidades:result.unidades,limitante:result.limitante,detalle:result.detalle,litrosAsignados,pct:d.pct,grupo:'blanca'});
-    });
-  }
-  const mosquetaRow=DATA.dux.find(r=>(r['Código Producto']||'').trim()==='MOSQUETA');
-  if(mosquetaRow){
-    const totalLitros=num(mosquetaRow['Stock Disponible']);
-    const result=calcArmar(MOSQUETA_SKU,totalLitros,'MOSQUETA');
-    cards.push({nombre:'Aceite de Rosa Mosqueta 30ml',sku:MOSQUETA_SKU,unidades:result.unidades,limitante:result.limitante,detalle:result.detalle,litrosAsignados:totalLitros,pct:1,grupo:'blanca'});
-  }
+  const jRow=DATA.dux.find(r=>(r['Código Producto']||'').trim()==='JOJOBA');
+  if(jRow){ const lt=num(jRow['Stock Disponible']); DIST_JOJOBA.forEach(d=>{ const sk=JOJOBA_SKU_MAP[d.ml]; const res=calc(sk,lt*d.pct,'JOJOBA'); cards.push({nombre:`Aceite de Jojoba ${d.ml}ml`,sku:sk,grupo:'blanca',...res,litros:lt*d.pct,pct:d.pct}); }); }
+  const mRow=DATA.dux.find(r=>(r['Código Producto']||'').trim()==='MOSQUETA');
+  if(mRow){ const lt=num(mRow['Stock Disponible']); const res=calc(MOSQUETA_SKU,lt,'MOSQUETA'); cards.push({nombre:'Aceite de Rosa Mosqueta 30ml',sku:MOSQUETA_SKU,grupo:'blanca',...res,litros:lt,pct:1}); }
   return cards;
 }
 
-// ── POR ARMAR ───────────────────────────────────────────────────
-let armarExpanded = false;
-function toggleArmarExpand() {
-  armarExpanded = !armarExpanded;
-  renderTab();
-}
+// ── POR ARMAR ────────────────────────────────────────────────────
+function toggleArmarMode(){ armarCardMode=!armarCardMode; renderTab(); }
 
-function renderArmar() {
-  const precioVenta={};
+function renderArmar(){
+  const NS='arm';
+  const pV={};
   DATA.tn.forEach(r=>{
-    const sku=(r['SKU']||'').trim();
-    if(!sku) return;
-    const promo=num(r['Precio promocional']);
-    const normal=num(r['Precio']);
-    precioVenta[sku]=promo>0?promo:normal;
-    Object.entries(SKU_MAP).forEach(([tnSku,duxSku])=>{if(sku===tnSku) precioVenta[duxSku]=promo>0?promo:normal;});
+    const sku=(r['SKU']||'').trim(); if(!sku) return;
+    const pr=num(r['Precio promocional']), no=num(r['Precio']);
+    pV[sku]=pr>0?pr:no;
+    Object.entries(SKU_MAP).forEach(([tn,dx])=>{ if(sku===tn) pV[dx]=pr>0?pr:no; });
   });
-
   const cards=buildArmarCards();
   if(!cards.length) return '<div class="empty">Sin datos disponibles</div>';
 
   const negra=cards.filter(c=>c.grupo==='negra');
   const blanca=cards.filter(c=>c.grupo==='blanca');
+  let totalAll=0; cards.forEach(c=>{totalAll+=c.unidades*(pV[c.sku]||0);});
+  const tN=negra.reduce((s,c)=>s+c.unidades*(pV[c.sku]||0),0);
+  const tB=blanca.reduce((s,c)=>s+c.unidades*(pV[c.sku]||0),0);
 
-  let totalArmar=0;
-  cards.forEach(c=>{totalArmar+=c.unidades*(precioVenta[c.sku]||0);});
-  const totalNegra=negra.reduce((s,c)=>s+c.unidades*(precioVenta[c.sku]||0),0);
-  const totalBlanca=blanca.reduce((s,c)=>s+c.unidades*(precioVenta[c.sku]||0),0);
+  let h=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <div style="flex:1;display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;">
+      <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">TOTAL POTENCIAL POR ARMAR</span>
+      <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalAll)}</span>
+    </div>
+    <button onclick="toggleArmarMode()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:10px 16px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.08em;white-space:nowrap;"
+      onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
+      onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">
+      ${armarCardMode?'↑ Vista resumen':'↓ Vista cards'}
+    </button>
+  </div>`;
 
-  function renderSummaryRow(c, idx) {
-    const pv=precioVenta[c.sku]||0;
-    const sc=c.unidades===0?'stock-zero':c.unidades<20?'stock-low':'stock-ok';
-    const limText=c.limitante?c.limitante.nombre:'OK';
-    return `<div class="tree-row level-1" style="cursor:pointer;" onclick="openModal(${idx})">
-      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-      <span class="tree-label">${c.nombre} <span class="sku-badge" style="margin-left:6px;">${c.sku}</span></span>
-      <span style="font-size:10px;color:${c.limitante?'var(--accent3)':'var(--muted)'};min-width:130px;text-align:right;margin-right:16px;" title="Insumo limitante">⚠ ${limText}</span>
-      <span class="tree-units"><span class="stock-num ${sc}">${c.unidades}</span> uds</span>
-      <span class="tree-valor">${pv>0?pesos(c.unidades*pv):'—'}</span>
-    </div>`;
-  }
-
-  function renderCards(group) {
-    return `<div class="armar-grid" style="padding:16px;">
-      ${group.map((c,i)=>{
-        const globalIdx=cards.indexOf(c);
-        const pv=precioVenta[c.sku]||0;
-        const valorPotencial=c.unidades*pv;
+  if(armarCardMode){
+    // CARD GRID view grouped by línea
+    function cardGrid(group, label, total){
+      return `<div style="margin-bottom:8px;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--border);">${label} · ${pesos(total)}</div>
+      <div class="armar-grid" style="margin-bottom:24px;">${group.map(c=>{
+        const idx=cards.indexOf(c);
+        const pv=pV[c.sku]||0;
         const sc=c.unidades===0?'stock-zero':c.unidades<20?'stock-low':'stock-ok';
-        const limitanteHtml=c.limitante
-          ?`<div class="armar-limitante"><div class="armar-limitante-label">⚠ Insumo limitante</div>
-             <div class="armar-limitante-item"><span>${c.limitante.nombre}</span>
-             <span class="armar-limitante-stock">${c.limitante.stock.toLocaleString('es-AR')} uds</span></div></div>`
+        const limH=c.limitante
+          ?`<div class="armar-limitante"><div class="armar-limitante-label">⚠ Insumo limitante</div><div class="armar-limitante-item"><span>${c.limitante.nombre}</span><span class="armar-limitante-stock">${c.limitante.stock.toLocaleString('es-AR')}</span></div></div>`
           :`<div class="armar-ok">✓ Sin limitantes</div>`;
-        return `<div class="armar-card" onclick="openModal(${globalIdx})" style="cursor:pointer;">
-          <div class="armar-card-header">
-            <div class="armar-product-name">${c.nombre}</div>
-            <div>
-              <div class="armar-units ${sc}">${c.unidades.toLocaleString('es-AR')}</div>
-              <div class="armar-units-label">unidades</div>
-            </div>
+        return `<div class="armar-card" onclick="openModal(${idx})" style="cursor:pointer;">
+          <div class="armar-card-header"><div class="armar-product-name">${c.nombre}</div>
+            <div><div class="armar-units ${sc}">${c.unidades}</div><div class="armar-units-label">unidades</div></div>
           </div>
-          <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">
-            ${c.litrosAsignados.toFixed(2)} L · ${Math.round(c.pct*100)}% del granel
-          </div>
-          <div style="font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums;margin-bottom:4px;">
-            ${pv>0?pesos(valorPotencial)+' potencial':'—'}
-          </div>
-          ${limitanteHtml}
+          <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">${c.litros.toFixed(2)} L · ${Math.round(c.pct*100)}% del granel</div>
+          <div style="font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums;margin-bottom:4px;">${pv>0?pesos(c.unidades*pv)+' potencial':'—'}</div>
+          ${limH}
           <div style="font-size:10px;color:var(--muted);margin-top:8px;letter-spacing:0.06em;">Clic para ver receta →</div>
         </div>`;
-      }).join('')}
-    </div>`;
-  }
-
-  // Build the two-group tree
-  let html=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;flex:1;margin-right:12px;">
-        <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);">TOTAL POTENCIAL POR ARMAR</span>
-        <span style="font-size:18px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(totalArmar)}</span>
-      </div>
-      <button onclick="toggleArmarExpand()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 14px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.08em;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
-        ${armarExpanded?'↑ Vista resumen':'↓ Vista detalle'}
-      </button>
-    </div>`;
-
-  if(armarExpanded) {
-    // Card grid view grouped
-    html+=`<div style="margin-bottom:12px;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--border);">Línea Negra · ${pesos(totalNegra)}</div>`;
-    html+=renderCards(negra);
-    html+=`<div style="margin-bottom:12px;margin-top:8px;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--border);">Línea Blanca · ${pesos(totalBlanca)}</div>`;
-    html+=renderCards(blanca);
+      }).join('')}</div>`;
+    }
+    h+=cardGrid(negra,'Línea Negra',tN);
+    h+=cardGrid(blanca,'Línea Blanca',tB);
   } else {
-    // Compact tree view
-    html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
-    // Negra group header
-    html+=`<div class="tree-row level-0" style="cursor:default;">
-      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-      <span class="tree-label">Línea Negra · ${negra.length} productos</span>
-      <span style="font-size:10px;color:var(--muted);min-width:130px;text-align:right;margin-right:16px;">insumo limitante</span>
-      <span class="tree-units" style="min-width:60px;">uds</span>
-      <span class="tree-valor">valor</span>
+    // COMPACT TREE view
+    function compactRow(c){
+      const idx=cards.indexOf(c);
+      const pv=pV[c.sku]||0;
+      const sc=c.unidades===0?'stock-zero':c.unidades<20?'stock-low':'stock-ok';
+      return `<div class="tr l1" onclick="openModal(${idx})" style="cursor:pointer;">
+        <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+        <span class="tl">${c.nombre} <span class="sku-badge" style="margin-left:6px;">${c.sku}</span></span>
+        <span style="font-size:10px;color:${c.limitante?'var(--accent3)':'var(--muted)'};min-width:130px;text-align:right;margin-right:12px;">⚠ ${c.limitante?c.limitante.nombre:'OK'}</span>
+        <span class="tu"><span class="stock-num ${sc}">${c.unidades}</span> uds</span>
+        <span class="tv">${pv>0?pesos(c.unidades*pv):'—'}</span>
+      </div>`;
+    }
+    h+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
+    // Header negra
+    h+=`<div class="tr l0 nc"><span style="width:16px;margin-right:8px;"></span>
+      <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Línea Negra · ${negra.length} productos</span>
+      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:130px;text-align:right;margin-right:12px;">insumo limitante</span>
+      <span class="tu" style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">uds</span>
+      <span class="tv" style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">${pesos(tN)}</span>
     </div>`;
-    negra.forEach((c,i)=>{ html+=renderSummaryRow(c,cards.indexOf(c)); });
-
-    html+=`<div style="height:1px;background:var(--border);"></div>`;
-    html+=`<div class="tree-row level-0" style="cursor:default;">
-      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-      <span class="tree-label">Línea Blanca · ${blanca.length} productos</span>
-      <span class="tree-valor" style="color:var(--muted);font-size:11px;"></span>
+    negra.forEach(c=>{ h+=compactRow(c); });
+    // Divider + header blanca
+    h+=`<div class="tr l0 nc" style="border-top:2px solid var(--border);"><span style="width:16px;margin-right:8px;"></span>
+      <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Línea Blanca · ${blanca.length} productos</span>
+      <span style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);min-width:130px;text-align:right;margin-right:12px;"></span>
+      <span class="tu"></span>
+      <span class="tv" style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">${pesos(tB)}</span>
     </div>`;
-    blanca.forEach((c,i)=>{ html+=renderSummaryRow(c,cards.indexOf(c)); });
-    html+=`</div>`;
-    html+=`<div style="font-size:10px;color:var(--muted);margin-top:10px;text-align:center;letter-spacing:0.06em;">Clic en cualquier fila para ver receta completa</div>`;
+    blanca.forEach(c=>{ h+=compactRow(c); });
+    h+=`</div>`;
+    h+=`<div style="font-size:10px;color:var(--muted);margin-top:10px;text-align:center;letter-spacing:0.06em;">Clic en cualquier fila para ver receta completa</div>`;
   }
-
-  return html;
+  return h;
 }
 
-// ── MODAL RECETA ────────────────────────────────────────────────
-function openModal(idx) {
+// ── MODAL RECETA ─────────────────────────────────────────────────
+function openModal(idx){
   const cards=buildArmarCards();
-  const c=cards[idx];
-  if(!c) return;
+  const c=cards[idx]; if(!c) return;
   const overlay=document.getElementById('modal-overlay');
   const content=document.getElementById('modal-content');
-
   const rows=c.detalle.map(comp=>{
-    const esLimitante=c.limitante&&comp.componente===c.limitante.codigo;
-    const color=esLimitante?'var(--accent3)':'var(--text)';
-    const badge=esLimitante?'<span style="font-size:9px;background:var(--accent3);color:#fff;padding:1px 6px;border-radius:3px;margin-left:6px;">LIMITANTE</span>':'';
-    return `<tr style="color:${color}">
+    const isLim=c.limitante&&comp.comp===c.limitante.codigo;
+    const col=isLim?'var(--accent3)':'var(--text)';
+    const badge=isLim?'<span style="font-size:9px;background:var(--accent3);color:#fff;padding:1px 6px;border-radius:3px;margin-left:6px;">LIMITANTE</span>':'';
+    return `<tr style="color:${col}">
       <td style="padding:8px 0;border-top:1px solid var(--border);font-size:12px;">${comp.nombre}${badge}</td>
-      <td style="padding:8px 0;border-top:1px solid var(--border);text-align:right;font-size:11px;">${comp.cantidad} / unidad</td>
-      <td style="padding:8px 0;border-top:1px solid var(--border);text-align:right;font-size:11px;">${comp.stockDisp.toLocaleString('es-AR')}</td>
-      <td style="padding:8px 0;border-top:1px solid var(--border);text-align:right;font-size:12px;font-weight:500;">${comp.posibles>=9999?'∞':comp.posibles.toLocaleString('es-AR')}</td>
+      <td style="padding:8px 0;border-top:1px solid var(--border);text-align:right;font-size:11px;">${comp.qty} / unidad</td>
+      <td style="padding:8px 0;border-top:1px solid var(--border);text-align:right;font-size:11px;">${comp.st.toLocaleString('es-AR')}</td>
+      <td style="padding:8px 0;border-top:1px solid var(--border);text-align:right;font-size:12px;font-weight:500;">${comp.pos>=9999?'∞':comp.pos.toLocaleString('es-AR')}</td>
     </tr>`;
   }).join('');
-
   content.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
-      <div>
-        <div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:4px;">${c.nombre}</div>
-        <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;">SKU: ${c.sku} · ${c.unidades} unidades posibles</div>
-      </div>
+      <div><div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:4px;">${c.nombre}</div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;">SKU: ${c.sku} · ${c.unidades} unidades posibles</div></div>
       <button onclick="closeModal()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px;">✕</button>
     </div>
     <table style="width:100%;border-collapse:collapse;">
@@ -1356,75 +1209,56 @@ function openModal(idx) {
         <th style="text-align:right;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;">Necesita</th>
         <th style="text-align:right;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;">Stock</th>
         <th style="text-align:right;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding-bottom:8px;">Rinde para</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
+      </tr></thead><tbody>${rows}</tbody>
     </table>
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;">
       <span style="font-size:10px;color:var(--muted);">Máximo armable</span>
       <span style="font-size:16px;font-weight:500;color:var(--accent);">${c.unidades.toLocaleString('es-AR')} unidades</span>
-    </div>
-  `;
+    </div>`;
   overlay.style.display='flex';
 }
-
-function closeModal(e) {
+function closeModal(e){
   if(e&&e.target!==document.getElementById('modal-overlay')) return;
   document.getElementById('modal-overlay').style.display='none';
 }
 
+// ═══════════════════════════════════════════════════════════════
+// VENTAS MODULE
+// ═══════════════════════════════════════════════════════════════
+let vMetrica='ars', vTab='general', vPeriodo1='', vPeriodo2='';
 
-// ── VENTAS MODULE ───────────────────────────────────────────────
-let vMetrica = 'ars';
-let vTab = 'general';
-let vLinea = 'TODAS';
-let vPeriodo1 = '';
-let vPeriodo2 = '';
-let bomCache = null;
-
-function getSku(r){return (r['sku']||r['SKU']||r['SKU_1']||r['SKU.1']||'').trim();}
-function metricaLabel(m){return m==='ars'?'ARS':m==='usd'?'USD':'AXI';}
-function metricaCol(m){return m==='ars'?'importe_neto':m==='usd'?'importe_usd':'importe_axi';}
-function metricaFormat(m,v){
+function metricaLabel(m){ return m==='ars'?'ARS':m==='usd'?'USD':'AXI'; }
+function metricaCol(m){ return m==='ars'?'importe_neto':m==='usd'?'importe_usd':'importe_axi'; }
+function metricaFmt(m,v){
   if(m==='ars') return '$'+Math.round(v).toLocaleString('es-AR');
   if(m==='usd') return 'U$D '+v.toFixed(0);
   return '$'+Math.round(v).toLocaleString('es-AR')+' (axi)';
 }
-function getPeriodosOrdenados(){
-  const ps=[...new Set(DATA.ventas.map(r=>r['periodo']))].filter(Boolean);
-  return ps.sort((a,b)=>{const[ya,ma]=a.split('-').map(Number);const[yb,mb]=b.split('-').map(Number);return ya!==yb?ya-yb:ma-mb;});
+function getPeriodos(){
+  return [...new Set(DATA.ventas.map(r=>r['periodo']))].filter(Boolean)
+    .sort((a,b)=>{ const[ya,ma]=a.split('-').map(Number),[yb,mb]=b.split('-').map(Number); return ya!==yb?ya-yb:ma-mb; });
 }
+function vRows(p){ return DATA.ventas.filter(r=>r['periodo']===p); }
+function sumV(rows,m){ const col=metricaCol(m); return rows.reduce((s,r)=>s+num(r[col]),0); }
+function sumU(rows){ return rows.reduce((s,r)=>s+num(r['qty']),0); }
 
-// Fix: normalize LINEA and RUBRO — trim and uppercase
-function getLinea(r){return (r['LINEA']||r['linea']||'').trim().toUpperCase();}
-function getRubro(r){return (r['RUBRO']||r['rubro']||'').trim().toUpperCase()||'OTRO';}
-
-function updateStickyKPIs() {
-  const sbar = document.getElementById('v-sticky-kpis');
-  if(!sbar) return;
-  const rows1=ventasPeriodo(vPeriodo1);
-  const v1=sumMetrica(rows1,vMetrica);
-  const u1=sumUnidades(rows1);
-  const ord1=DATA.ordenes.find(r=>r['periodo']===vPeriodo1);
-  const orders1=ord1?num(ord1['ordenes']):new Set(rows1.map(r=>r['Número de orden'])).size||1;
-  const tck1=orders1>0?v1/orders1:0;
-  const sk=document.getElementById('sk-venta');
-  const so=document.getElementById('sk-ordenes');
-  const su=document.getElementById('sk-unidades');
-  const st=document.getElementById('sk-ticket');
-  if(sk) sk.textContent=metricaFormat(vMetrica,v1);
-  if(so) so.textContent=orders1.toLocaleString('es-AR');
-  if(su) su.textContent=Math.round(u1).toLocaleString('es-AR');
-  if(st) st.textContent=metricaFormat(vMetrica,tck1);
-  sbar.classList.toggle('visible', true);
+function updateVentasStickyBar(){
+  const rows=vRows(vPeriodo1);
+  const v=sumV(rows,vMetrica), u=sumU(rows);
+  const ord=DATA.ordenes.find(r=>r['periodo']===vPeriodo1);
+  const o=ord?num(ord['ordenes']):(new Set(rows.map(r=>r['Número de orden'])).size||1);
+  const sv=document.getElementById('sv-venta');   if(sv) sv.textContent=metricaFmt(vMetrica,v);
+  const so=document.getElementById('sv-ordenes'); if(so) so.textContent=o.toLocaleString('es-AR');
+  const su=document.getElementById('sv-unidades');if(su) su.textContent=Math.round(u).toLocaleString('es-AR');
+  const st=document.getElementById('sv-ticket');  if(st) st.textContent=metricaFmt(vMetrica,o>0?v/o:0);
+  const b=document.getElementById('sbar-ventas'); if(b) b.classList.add('vis');
 }
 
 function renderVentasModule(){
   const el=document.getElementById('module-ventas');
   el.style.display='block';
-  if(!DATA.ventas||!DATA.ventas.length){
-    el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos de ventas cargados.</div>';return;
-  }
-  const periodos=getPeriodosOrdenados();
+  if(!DATA.ventas||!DATA.ventas.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos de ventas.</div>'; return; }
+  const periodos=getPeriodos();
   if(!vPeriodo1) vPeriodo1=periodos[periodos.length-1];
   if(!vPeriodo2) vPeriodo2=periodos.length>1?periodos[periodos.length-2]:'';
   el.innerHTML=`
@@ -1436,11 +1270,11 @@ function renderVentasModule(){
         <button class="v-metric-btn ${vMetrica==='axi'?'active':''}" onclick="setMetrica('axi')">AXI</button>
       </div>
       <span class="v-filter-label" style="margin-left:12px;">Período</span>
-      <select class="v-select" onchange="setPeriodo1(this.value)">
+      <select class="v-select" onchange="setP1(this.value)">
         ${periodos.map(p=>`<option value="${p}" ${p===vPeriodo1?'selected':''}>${p}</option>`).join('')}
       </select>
       <span class="v-filter-label">vs</span>
-      <select class="v-select" onchange="setPeriodo2(this.value)">
+      <select class="v-select" onchange="setP2(this.value)">
         <option value="">— ninguno —</option>
         ${periodos.map(p=>`<option value="${p}" ${p===vPeriodo2?'selected':''}>${p}</option>`).join('')}
       </select>
@@ -1448,145 +1282,107 @@ function renderVentasModule(){
     <div class="v-tabs">
       <div class="v-tab ${vTab==='general'?'active':''}" onclick="setVTab('general')">General</div>
       <div class="v-tab ${vTab==='linea'?'active':''}" onclick="setVTab('linea')">Por Línea</div>
-      <div class="v-tab ${vTab==='consumo_prod'?'active':''}" onclick="setVTab('consumo_prod')">Consumo Productos</div>
-      <div class="v-tab ${vTab==='consumo_ins'?'active':''}" onclick="setVTab('consumo_ins')">Consumo Insumos</div>
+      <div class="v-tab ${vTab==='cprod'?'active':''}" onclick="setVTab('cprod')">Consumo Productos</div>
+      <div class="v-tab ${vTab==='cins'?'active':''}" onclick="setVTab('cins')">Consumo Insumos</div>
     </div>
-    <div id="v-tab-content"></div>
-    <div id="modal-overlay" onclick="closeModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
-      <div id="modal-box" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;">
-        <div id="modal-content"></div>
-      </div>
-    </div>`;
-  updateStickyKPIs();
+    <div id="v-tab-content"></div>`;
+  updateVentasStickyBar();
   renderVTab();
 }
-function setMetrica(m){vMetrica=m;renderVentasModule();}
-function setPeriodo1(p){vPeriodo1=p;bomCache=null;updateStickyKPIs();renderVTab();}
-function setPeriodo2(p){vPeriodo2=p;renderVTab();}
-function setVTab(t){vTab=t;document.querySelectorAll('.v-tab').forEach(x=>x.classList.remove('active'));event.target.classList.add('active');renderVTab();}
-function setVLinea(l){vLinea=l;renderVTab();}
+function setMetrica(m){ vMetrica=m; renderVentasModule(); }
+function setP1(p){ vPeriodo1=p; bomCache=null; updateVentasStickyBar(); renderVTab(); }
+function setP2(p){ vPeriodo2=p; renderVTab(); }
+function setVTab(t){ vTab=t; document.querySelectorAll('.v-tab').forEach(x=>x.classList.remove('active')); event.target.classList.add('active'); renderVTab(); }
 function renderVTab(){
-  const el=document.getElementById('v-tab-content');
-  if(!el) return;
-  if(vTab==='general') el.innerHTML=renderVentasGeneral();
-  if(vTab==='linea')   el.innerHTML=renderVentasLinea();
-  if(vTab==='consumo_prod'){el.innerHTML='<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando...</div></div>';setTimeout(()=>{el.innerHTML=renderConsumoProductos();},50);}
-  if(vTab==='consumo_ins'){el.innerHTML='<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando...</div></div>';setTimeout(()=>{el.innerHTML=renderConsumoInsumos();},50);}
+  const el=document.getElementById('v-tab-content'); if(!el) return;
+  if(vTab==='general') el.innerHTML=renderGeneral();
+  if(vTab==='linea')   el.innerHTML=renderPorLinea();
+  if(vTab==='cprod'){ el.innerHTML=loadingSpinner(); setTimeout(()=>{ el.innerHTML=renderConsumoProductos(); },50); }
+  if(vTab==='cins'){  el.innerHTML=loadingSpinner(); setTimeout(()=>{ el.innerHTML=renderConsumoInsumos();   },50); }
 }
-function ventasPeriodo(p){return DATA.ventas.filter(r=>r['periodo']===p);}
-function sumMetrica(rows,m){
-  const col=metricaCol(m);
-  return rows.reduce((s,r)=>s+num(r[col]),0);
-}
-function sumUnidades(rows){return rows.reduce((s,r)=>s+num(r['qty']),0);}
+function loadingSpinner(){ return '<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando…</div></div>'; }
 
-function renderVentasGeneral(){
-  const periodos=getPeriodosOrdenados();
+// ── GENERAL ──────────────────────────────────────────────────────
+function renderGeneral(){
+  const periodos=getPeriodos();
   const col=metricaCol(vMetrica);
-  const rows1=ventasPeriodo(vPeriodo1);
-  const rows2=vPeriodo2?ventasPeriodo(vPeriodo2):[];
-  const v1=sumMetrica(rows1,vMetrica),v2=sumMetrica(rows2,vMetrica);
-  const u1=sumUnidades(rows1),u2=sumUnidades(rows2);
-  const ord1=DATA.ordenes.find(r=>r['periodo']===vPeriodo1);
-  const ord2=DATA.ordenes.find(r=>r['periodo']===vPeriodo2);
-  const orders1=ord1?num(ord1['ordenes']):new Set(rows1.map(r=>r['Número de orden'])).size||1;
-  const orders2=ord2?num(ord2['ordenes']):new Set(rows2.map(r=>r['Número de orden'])).size||1;
-  const tck1=orders1>0?v1/orders1:0,tck2=orders2>0?v2/orders2:0;
-  function delta(a,b){if(!b||b===0)return '';const p=((a-b)/b*100).toFixed(1);return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p)}%</span>`;}
+  const r1=vRows(vPeriodo1), r2=vPeriodo2?vRows(vPeriodo2):[];
+  const v1=sumV(r1,vMetrica), v2=sumV(r2,vMetrica);
+  const u1=sumU(r1), u2=sumU(r2);
+  const o1d=DATA.ordenes.find(r=>r['periodo']===vPeriodo1), o2d=DATA.ordenes.find(r=>r['periodo']===vPeriodo2);
+  const o1=o1d?num(o1d['ordenes']):(new Set(r1.map(r=>r['Número de orden'])).size||1);
+  const o2=o2d?num(o2d['ordenes']):(new Set(r2.map(r=>r['Número de orden'])).size||1);
+  const t1=o1>0?v1/o1:0, t2=o2>0?v2/o2:0;
+  function delta(a,b){ if(!b) return ''; const p=((a-b)/b*100).toFixed(1); return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p)}%</span>`; }
 
-  // ── LINE CHART: one line per year, x-axis = month ──
-  // Group all periods by year
+  // ── LINE CHART ──
   const byYear={};
-  periodos.forEach(p=>{
-    const[y,m]=p.split('-').map(Number);
-    if(!byYear[y]) byYear[y]=Array(12).fill(null);
-    byYear[y][m-1]=sumMetrica(ventasPeriodo(p),vMetrica);
-  });
+  periodos.forEach(p=>{ const[y,m]=p.split('-').map(Number); if(!byYear[y]) byYear[y]=Array(12).fill(null); byYear[y][m-1]=sumV(vRows(p),vMetrica); });
   const years=Object.keys(byYear).map(Number).sort();
-  const months=['E','F','M','A','M','J','J','A','S','O','N','D'];
-  const chartW=700, chartH=160, padL=50, padR=10, padT=10, padB=30;
-  const plotW=chartW-padL-padR, plotH=chartH-padT-padB;
-  const allVals=Object.values(byYear).flatMap(arr=>arr.filter(v=>v!==null));
+  const months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const W=700,H=160,PL=55,PR=10,PT=14,PB=28,PW=W-PL-PR,PH=H-PT-PB;
+  const allVals=Object.values(byYear).flatMap(a=>a.filter(v=>v!==null));
   const maxV=Math.max(...allVals,1);
-  const yearColors=['#c8f05a','#f0c85a','#f05a7a','#5af0c8','#c85af0'];
-  const selectedYear1=vPeriodo1?Number(vPeriodo1.split('-')[0]):null;
-  const selectedYear2=vPeriodo2?Number(vPeriodo2.split('-')[0]):null;
-
-  function xOf(monthIdx){ return padL + (monthIdx/(11))*plotW; }
-  function yOf(val){ return padT + plotH - (val/maxV)*plotH; }
-
-  let svgLines='', svgDots='', svgLabels='', svgLegend='';
-
-  // Y axis gridlines
-  const gridVals=[0,0.25,0.5,0.75,1].map(f=>f*maxV);
-  gridVals.forEach(gv=>{
-    const y=yOf(gv);
-    svgLines+=`<line x1="${padL}" y1="${y}" x2="${chartW-padR}" y2="${y}" stroke="#2a2a2a" stroke-width="1"/>`;
-    const label=gv>=1e6?`${(gv/1e6).toFixed(1)}M`:gv>=1e3?`${Math.round(gv/1e3)}k`:`${Math.round(gv)}`;
-    svgLabels+=`<text x="${padL-4}" y="${y+4}" text-anchor="end" fill="#7a7570" font-size="9" font-family="DM Mono,monospace">${label}</text>`;
-  });
-  // X axis months
-  months.forEach((m,i)=>{
-    const x=xOf(i);
-    svgLabels+=`<text x="${x}" y="${chartH-padB+16}" text-anchor="middle" fill="#7a7570" font-size="9" font-family="DM Mono,monospace">${m}</text>`;
-  });
-
+  const COLORS=['#c8f05a','#f0c85a','#f05a7a','#5af0c8','#c85af0'];
+  const selY1=vPeriodo1?Number(vPeriodo1.split('-')[0]):null;
+  const selY2=vPeriodo2?Number(vPeriodo2.split('-')[0]):null;
+  function xOf(i){ return PL+(i/11)*PW; }
+  function yOf(v){ return PT+PH-(v/maxV)*PH; }
+  let svgG='', svgD='', svgL='', svgLeg='';
+  // Grid
+  [0,0.25,0.5,0.75,1].forEach(f=>{ const y=yOf(f*maxV); const lbl=f*maxV>=1e6?`${(f*maxV/1e6).toFixed(1)}M`:f*maxV>=1e3?`${Math.round(f*maxV/1e3)}k`:`${Math.round(f*maxV)}`; svgG+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="#2a2a2a" stroke-width="1"/><text x="${PL-5}" y="${y+4}" text-anchor="end" fill="#7a7570" font-size="9" font-family="DM Mono,monospace">${lbl}</text>`; });
+  months.forEach((m,i)=>{ svgG+=`<text x="${xOf(i)}" y="${H-PB+16}" text-anchor="middle" fill="#7a7570" font-size="8" font-family="DM Mono,monospace">${m}</text>`; });
   years.forEach((yr,yi)=>{
-    const color=yearColors[yi%yearColors.length];
-    const opacity=(yr===selectedYear1||yr===selectedYear2)?1:0.35;
-    const strokeW=(yr===selectedYear1)?2.5:(yr===selectedYear2)?2:1.5;
-    const data=byYear[yr];
-    // build path
-    const pts=data.map((v,i)=>v!==null?{x:xOf(i),y:yOf(v),v,i}:null).filter(Boolean);
-    if(pts.length<1) return;
+    const color=COLORS[yi%COLORS.length];
+    const isSel=yr===selY1||yr===selY2;
+    const op=isSel?1:0.28;
+    const sw=yr===selY1?2.5:yr===selY2?2:1.2;
+    const pts=byYear[yr].map((v,i)=>v!==null?{x:xOf(i),y:yOf(v),v,i}:null).filter(Boolean);
+    if(!pts.length) return;
     let d=`M ${pts[0].x} ${pts[0].y}`;
-    for(let k=1;k<pts.length;k++){
-      const p0=pts[k-1],p1=pts[k];
-      const cpx=(p0.x+p1.x)/2;
-      d+=` C ${cpx} ${p0.y} ${cpx} ${p1.y} ${p1.x} ${p1.y}`;
-    }
-    svgLines+=`<path d="${d}" fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${opacity}" stroke-linejoin="round"/>`;
-    // dots + labels for selected years
+    for(let k=1;k<pts.length;k++){ const p0=pts[k-1],p1=pts[k],cx=(p0.x+p1.x)/2; d+=` C ${cx} ${p0.y} ${cx} ${p1.y} ${p1.x} ${p1.y}`; }
+    svgD+=`<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" opacity="${op}"/>`;
     pts.forEach(pt=>{
-      svgDots+=`<circle cx="${pt.x}" cy="${pt.y}" r="${yr===selectedYear1||yr===selectedYear2?4:2.5}" fill="${color}" opacity="${opacity}"/>`;
-      if(yr===selectedYear1||yr===selectedYear2){
-        const label=pt.v>=1e6?`${(pt.v/1e6).toFixed(1)}M`:pt.v>=1e3?`${Math.round(pt.v/1e3)}k`:`${Math.round(pt.v)}`;
-        const above=pt.y>padT+20;
-        svgLabels+=`<text x="${pt.x}" y="${pt.y+(above?-8:14)}" text-anchor="middle" fill="${color}" font-size="8" font-family="DM Mono,monospace" opacity="${opacity}">${label}</text>`;
+      svgD+=`<circle cx="${pt.x}" cy="${pt.y}" r="${isSel?4:2}" fill="${color}" opacity="${op}"/>`;
+      // Labels for ALL points of selected years
+      if(isSel){
+        const lbl=pt.v>=1e6?`${(pt.v/1e6).toFixed(1)}M`:pt.v>=1e3?`${Math.round(pt.v/1e3)}k`:`${Math.round(pt.v)}`;
+        const above=pt.y>PT+22;
+        svgL+=`<text x="${pt.x}" y="${pt.y+(above?-7:13)}" text-anchor="middle" fill="${color}" font-size="8" font-family="DM Mono,monospace">${lbl}</text>`;
       }
     });
-    // legend
-    svgLegend+=`<rect x="${10+yi*90}" y="2" width="10" height="10" fill="${color}" opacity="${opacity}" rx="2"/>`;
-    svgLegend+=`<text x="${24+yi*90}" y="11" fill="${opacity===1?'#f0ece4':'#7a7570'}" font-size="9" font-family="DM Mono,monospace">${yr}</text>`;
+    svgLeg+=`<rect x="${10+yi*80}" y="3" width="10" height="8" fill="${color}" opacity="${op}" rx="2"/>`;
+    svgLeg+=`<text x="${24+yi*80}" y="11" fill="${isSel?'#f0ece4':'#7a7570'}" font-size="9" font-family="DM Mono,monospace" font-weight="${isSel?'500':'400'}">${yr}</text>`;
   });
 
-  const lineChart=`<div class="linechart-wrap">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div class="v-chart-title" style="margin-bottom:0;">Evolución mensual · ${metricaLabel(vMetrica)} · comparativa por año</div>
-    </div>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${chartW} ${chartH+20}" class="linechart-svg" style="max-height:200px;">
-      <svg y="0" x="0" width="${chartW}" height="20">${svgLegend}</svg>
-      <g transform="translate(0,20)">${svgLines}${svgDots}${svgLabels}</g>
-    </svg>
-  </div>`;
-
-  // Por rubro with RUBRO fix
+  // Por rubro — fixed order: KITS first, then NEGRA, then BLANCA, then rest
   const byRubro={};
-  rows1.forEach(r=>{const k=getRubro(r);if(!byRubro[k])byRubro[k]={v:0,u:0};byRubro[k].v+=num(r[col]);byRubro[k].u+=num(r['qty']);});
+  r1.forEach(r=>{ const k=getRubro(r); if(!byRubro[k])byRubro[k]={v:0,u:0}; byRubro[k].v+=num(r[col]); byRubro[k].u+=num(r['qty']); });
+  const RORDEN=['KITS','LINEA NEGRA','NEGRA','LINEA BLANCA','BLANCA'];
+  const sorted=Object.entries(byRubro).sort((a,b)=>{
+    const ia=RORDEN.indexOf(a[0]), ib=RORDEN.indexOf(b[0]);
+    if(ia>=0&&ib>=0) return ia-ib; if(ia>=0) return -1; if(ib>=0) return 1; return b[1].v-a[1].v;
+  });
   const maxR=Math.max(...Object.values(byRubro).map(x=>x.v),1);
-  const rubroRows=Object.entries(byRubro).sort((a,b)=>b[1].v-a[1].v).map(([rub,d])=>{
-    const pct=(d.v/v1*100).toFixed(1),bw=Math.round(d.v/maxR*100);
-    return `<tr><td>${rub}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFormat(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
+  const rubroRows=sorted.map(([rb,d])=>{
+    const pct=(d.v/v1*100).toFixed(1), bw=Math.round(d.v/maxR*100);
+    return `<tr><td>${rb}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
   }).join('');
 
   return `
     <div class="v-kpi-grid">
-      <div class="v-kpi"><div class="v-kpi-label">Venta ${metricaLabel(vMetrica)}</div><div class="v-kpi-val" style="color:var(--accent);">${metricaFormat(vMetrica,v1)}</div><div class="v-kpi-sub">${delta(v1,v2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Órdenes</div><div class="v-kpi-val">${orders1.toLocaleString('es-AR')}</div><div class="v-kpi-sub">${delta(orders1,orders2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Venta ${metricaLabel(vMetrica)}</div><div class="v-kpi-val" style="color:var(--accent);">${metricaFmt(vMetrica,v1)}</div><div class="v-kpi-sub">${delta(v1,v2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Órdenes</div><div class="v-kpi-val">${o1.toLocaleString('es-AR')}</div><div class="v-kpi-sub">${delta(o1,o2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Unidades</div><div class="v-kpi-val">${Math.round(u1).toLocaleString('es-AR')}</div><div class="v-kpi-sub">${delta(u1,u2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Ticket promedio</div><div class="v-kpi-val">${metricaFormat(vMetrica,tck1)}</div><div class="v-kpi-sub">${delta(tck1,tck2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Ticket promedio</div><div class="v-kpi-val">${metricaFmt(vMetrica,t1)}</div><div class="v-kpi-sub">${delta(t1,t2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
     </div>
-    ${lineChart}
+    <div class="linechart-wrap">
+      <div class="v-chart-title" style="margin-bottom:12px;">Evolución mensual · ${metricaLabel(vMetrica)} · comparativa por año</div>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H+20}" style="width:100%;max-height:210px;overflow:visible;">
+        <g>${svgLeg}</g>
+        <g transform="translate(0,20)">${svgG}${svgD}${svgL}</g>
+      </svg>
+    </div>
     <div class="v-chart-wrap">
       <div class="v-chart-title">Por rubro · ${vPeriodo1}</div>
       <table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">Venta</th><th style="text-align:right">%</th><th style="text-align:right">Uds</th><th></th></tr></thead>
@@ -1594,141 +1390,151 @@ function renderVentasGeneral(){
     </div>`;
 }
 
-function renderVentasLinea(){
+// ── POR LÍNEA (tree expandible) ──────────────────────────────────
+function renderPorLinea(){
+  const NS='vln';
   const col=metricaCol(vMetrica);
-  const lineas=['TODAS','BLANCA','NEGRA','KITS'];
-  const rows1=ventasPeriodo(vPeriodo1).filter(r=>vLinea==='TODAS'||getLinea(r)===vLinea);
-  const rows2=vPeriodo2?ventasPeriodo(vPeriodo2).filter(r=>vLinea==='TODAS'||getLinea(r)===vLinea):[];
-  const byRubro1={},byRubro2={};
-  rows1.forEach(r=>{const k=getRubro(r);if(!byRubro1[k])byRubro1[k]={v:0,u:0};byRubro1[k].v+=num(r[col]);byRubro1[k].u+=num(r['qty']);});
-  rows2.forEach(r=>{const k=getRubro(r);if(!byRubro2[k])byRubro2[k]={v:0,u:0};byRubro2[k].v+=num(r[col]);byRubro2[k].u+=num(r['qty']);});
-  const allRubros=[...new Set([...Object.keys(byRubro1),...Object.keys(byRubro2)])].sort((a,b)=>(byRubro1[b]?.v||0)-(byRubro1[a]?.v||0));
-  const maxV=Math.max(...allRubros.map(r=>byRubro1[r]?.v||0),1);
-  const rowsAll1=ventasPeriodo(vPeriodo1);
-  const byLinea={};
-  rowsAll1.forEach(r=>{const k=getLinea(r)||'OTRO';if(!byLinea[k])byLinea[k]={v:0,u:0};byLinea[k].v+=num(r[col]);byLinea[k].u+=num(r['qty']);});
-  const totalV=sumMetrica(rowsAll1,vMetrica);
-  const lineaCards=['BLANCA','NEGRA','KITS'].map(l=>{
-    const d=byLinea[l]||{v:0,u:0};const pct=totalV>0?(d.v/totalV*100).toFixed(1):0;
-    return `<div class="v-kpi"><div class="v-kpi-label">${l}</div><div class="v-kpi-val" style="font-size:16px;">${metricaFormat(vMetrica,d.v)}</div><div class="v-kpi-sub">${pct}% · ${Math.round(d.u)} uds</div></div>`;
-  }).join('');
-  const rubroRows=allRubros.map(rub=>{
-    const d1=byRubro1[rub]||{v:0,u:0},d2=byRubro2[rub]||{v:0,u:0};
-    const bw=Math.round((d1.v/maxV)*100);
-    const chg=d2.v>0?((d1.v-d2.v)/d2.v*100).toFixed(1):null;
-    const chgHtml=chg!==null?`<span class="${Number(chg)>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${Number(chg)>=0?'▲':'▼'} ${Math.abs(chg)}%</span>`:'—';
-    return `<tr><td>${rub}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFormat(vMetrica,d1.v)}</td><td style="text-align:right;color:var(--muted);font-size:11px;">${d2.v>0?metricaFormat(vMetrica,d2.v):'—'}</td><td style="text-align:right;">${chgHtml}</td><td style="text-align:right;color:var(--muted);">${Math.round(d1.u)}</td><td style="width:100px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
-  }).join('');
-  return `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">${lineaCards}</div>
-    <div class="v-filters"><span class="v-filter-label">Filtrar línea</span><div class="v-metric-toggle">${lineas.map(l=>`<button class="v-metric-btn ${vLinea===l?'active':''}" onclick="setVLinea('${l}')">${l}</button>`).join('')}</div></div>
-    <div class="v-chart-wrap">
-      <div class="v-chart-title">Por rubro · ${vPeriodo1}${vPeriodo2?' vs '+vPeriodo2:''} · ${vLinea}</div>
-      <table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">${vPeriodo1}</th><th style="text-align:right">${vPeriodo2||'—'}</th><th style="text-align:right">Δ</th><th style="text-align:right">Uds</th><th></th></tr></thead>
-      <tbody>${rubroRows}</tbody></table>
-    </div>`;
+  const r1=vRows(vPeriodo1), r2=vPeriodo2?vRows(vPeriodo2):[];
+
+  // Cards summary at top
+  const byL={};
+  r1.forEach(r=>{ const k=getLinea(r)||'OTRO'; if(!byL[k])byL[k]={v:0,u:0}; byL[k].v+=num(r[col]); byL[k].u+=num(r['qty']); });
+  const totV=sumV(r1,vMetrica);
+  const lineaCards=['BLANCA','NEGRA','KITS'].map(l=>{ const d=byL[l]||{v:0,u:0}; const pct=totV>0?(d.v/totV*100).toFixed(1):0; return `<div class="v-kpi"><div class="v-kpi-label">${l}</div><div class="v-kpi-val" style="font-size:16px;">${metricaFmt(vMetrica,d.v)}</div><div class="v-kpi-sub">${pct}% · ${Math.round(d.u)} uds</div></div>`; }).join('');
+
+  // Build tree: LINEA → RUBRO → producto
+  const tree={};
+  r1.forEach(r=>{
+    const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim();
+    if(!tree[li]) tree[li]={v:0,u:0,rubros:{}};
+    tree[li].v+=num(r[col]); tree[li].u+=num(r['qty']);
+    if(!tree[li].rubros[rb]) tree[li].rubros[rb]={v:0,u:0,prods:{}};
+    tree[li].rubros[rb].v+=num(r[col]); tree[li].rubros[rb].u+=num(r['qty']);
+    if(!tree[li].rubros[rb].prods[sk]) tree[li].rubros[rb].prods[sk]={nombre:nm,sku:sk,v:0,u:0};
+    tree[li].rubros[rb].prods[sk].v+=num(r[col]); tree[li].rubros[rb].prods[sk].u+=num(r['qty']);
+  });
+  const tree2={};
+  r2.forEach(r=>{ const li=getLinea(r)||'OTRO', rb=getRubro(r); if(!tree2[li])tree2[li]={}; if(!tree2[li][rb])tree2[li][rb]={v:0}; tree2[li][rb].v+=num(r[col]); });
+  function dSpan(a,b){ if(!b) return ''; const p=((a-b)/b*100).toFixed(1); return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}" style="font-size:10px;">${p>=0?'▲':'▼'}${Math.abs(p)}%</span>`; }
+
+  let h=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">${lineaCards}</div>`;
+  h+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;">`;
+  h+=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
+    <span style="width:16px;margin-right:8px;"></span>
+    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Línea / Rubro / Producto</span>
+    <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">${vPeriodo1}</span>
+    ${vPeriodo2?`<span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">${vPeriodo2}</span><span style="min-width:55px;text-align:right;font-size:9px;color:var(--muted);">Δ</span>`:''}
+    <span style="min-width:50px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Uds</span>
+  </div>`;
+
+  const LORDEN=['NEGRA','BLANCA','KITS'];
+  const lkeys=[...LORDEN,...Object.keys(tree).filter(k=>!LORDEN.includes(k))].filter(k=>tree[k]);
+  lkeys.forEach(li=>{
+    const ld=tree[li];
+    const right=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,ld.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-left:8px;">—</span><span style="min-width:55px;text-align:right;display:inline-block;margin-left:8px;"></span>`:''}`;
+    h+=TR(NS,'l-'+li,0,li,'',right,true,false);
+    let rubroH='';
+    Object.entries(ld.rubros).sort((a,b)=>b[1].v-a[1].v).forEach(([rb,rd])=>{
+      const rd2=(tree2[li]&&tree2[li][rb])||{v:0};
+      const rRight=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,rd.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-left:8px;">${metricaFmt(vMetrica,rd2.v)}</span><span style="min-width:55px;text-align:right;display:inline-block;margin-left:8px;">${dSpan(rd.v,rd2.v)}</span>`:''}`;
+      rubroH+=TR(NS,'r-'+li+'-'+rb,1,rb,`${Math.round(rd.u)} uds`,rRight,true,false);
+      let prodH='';
+      Object.values(rd.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
+        const pRight=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,pd.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;"></span><span style="min-width:55px;text-align:right;display:inline-block;"></span>`:''}`;
+        prodH+=TR(NS,'p-'+pd.sku,2,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,`${Math.round(pd.u)} uds`,pRight,false,false);
+      });
+      rubroH+=TC(NS,'r-'+li+'-'+rb,prodH,false);
+    });
+    h+=TC(NS,'l-'+li,rubroH,false);
+  });
+  h+=`</div>`;
+  return h;
 }
 
-function buildBOMData() {
+// ── BOM DATA ─────────────────────────────────────────────────────
+function buildBOM(){
   if(bomCache&&bomCache.periodo===vPeriodo1) return bomCache.data;
-
   const recetas={};
-  DATA.compuestos.forEach(r=>{
-    const cod=(r['Código Compuesto']||'').trim();
-    if(!cod) return;
-    if(!recetas[cod]) recetas[cod]=[];
-    recetas[cod].push({componente:(r['Código Componente']||'').trim(),cantidad:num(r['Cantidad']),nombre:(r['Producto Componente']||'').trim()});
+  DATA.compuestos.forEach(r=>{ const cod=(r['Código Compuesto']||'').trim(); if(!cod) return; if(!recetas[cod]) recetas[cod]=[]; recetas[cod].push({comp:(r['Código Componente']||'').trim(),qty:num(r['Cantidad']),nombre:(r['Producto Componente']||'').trim()}); });
+  const nomD={}, unD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
+  const bySkuVta={};
+  vRows(vPeriodo1).forEach(r=>{ const sk=getSku(r), q=num(r['qty']); if(!sk) return; if(!bySkuVta[sk])bySkuVta[sk]={sku:sk,qty:0,nombre:r['nombre']||'',linea:getLinea(r)}; bySkuVta[sk].qty+=q; });
+  const cProd={};
+  Object.values(bySkuVta).forEach(it=>{
+    const esKit=/^KIT/i.test(it.sku), rec=recetas[it.sku];
+    if(esKit&&rec&&rec.length){ rec.forEach(c=>{ if(!cProd[c.comp])cProd[c.comp]={sku:c.comp,qty:0,nombre:c.nombre||nomD[c.comp]||c.comp}; cProd[c.comp].qty+=it.qty*c.qty; }); }
+    else { if(!cProd[it.sku])cProd[it.sku]={sku:it.sku,qty:0,nombre:it.nombre||nomD[it.sku]||it.sku}; cProd[it.sku].qty+=it.qty; }
   });
-
-  const nombreDux={},unidadDux={};
-  DATA.dux.forEach(r=>{
-    const c=(r['Código Producto']||'').trim();
-    nombreDux[c]=r['Producto']||'';
-    unidadDux[c]=(r['Unidad']||'UNIDAD').toUpperCase();
+  const cIns={};
+  Object.values(cProd).forEach(it=>{
+    const rec=recetas[it.sku];
+    if(rec&&rec.length){ rec.forEach(c=>{ if(!cIns[c.comp])cIns[c.comp]={sku:c.comp,qty:0,nombre:c.nombre||nomD[c.comp]||c.comp}; cIns[c.comp].qty+=it.qty*c.qty; }); }
+    else { if(!cIns[it.sku])cIns[it.sku]={sku:it.sku,qty:0,nombre:it.nombre||nomD[it.sku]||it.sku}; cIns[it.sku].qty+=it.qty; }
   });
-
-  const rows=ventasPeriodo(vPeriodo1);
-  const ventasPorSku={};
-  rows.forEach(r=>{
-    const sku=getSku(r);const qty=num(r['qty']);
-    if(!sku) return;
-    if(!ventasPorSku[sku]) ventasPorSku[sku]={sku,qty:0,nombre:r['nombre']||'',linea:getLinea(r)};
-    ventasPorSku[sku].qty+=qty;
-  });
-
-  const consumoProductos={};
-  Object.values(ventasPorSku).forEach(item=>{
-    const esKit=/^KIT/i.test(item.sku);
-    const receta=recetas[item.sku];
-    if(esKit&&receta&&receta.length){
-      receta.forEach(comp=>{
-        if(!consumoProductos[comp.componente]) consumoProductos[comp.componente]={sku:comp.componente,qty:0,nombre:comp.nombre||nombreDux[comp.componente]||comp.componente};
-        consumoProductos[comp.componente].qty+=item.qty*comp.cantidad;
-      });
-    } else {
-      if(!consumoProductos[item.sku]) consumoProductos[item.sku]={sku:item.sku,qty:0,nombre:item.nombre||nombreDux[item.sku]||item.sku};
-      consumoProductos[item.sku].qty+=item.qty;
-    }
-  });
-
-  const consumoInsumos={};
-  Object.values(consumoProductos).forEach(item=>{
-    const receta=recetas[item.sku];
-    if(receta&&receta.length){
-      receta.forEach(comp=>{
-        if(!consumoInsumos[comp.componente]) consumoInsumos[comp.componente]={sku:comp.componente,qty:0,nombre:comp.nombre||nombreDux[comp.componente]||comp.componente};
-        consumoInsumos[comp.componente].qty+=item.qty*comp.cantidad;
-      });
-    } else {
-      if(!consumoInsumos[item.sku]) consumoInsumos[item.sku]={sku:item.sku,qty:0,nombre:item.nombre||nombreDux[item.sku]||item.sku};
-      consumoInsumos[item.sku].qty+=item.qty;
-    }
-  });
-
-  const data={consumoProductos,consumoInsumos,unidadDux};
+  const data={cProd,cIns,nomD,unD};
   bomCache={periodo:vPeriodo1,data};
   return data;
 }
 
-function renderConsumoTabla(items, unidadDux) {
-  const sorted=Object.values(items).filter(x=>x.qty>0.001).sort((a,b)=>b.qty-a.qty);
-  if(!sorted.length) return '<div class="empty">Sin datos para este período</div>';
-  return `<table class="v-bom-table"><thead><tr>
-    <th>Nombre</th><th>SKU</th>
-    <th style="text-align:right">Cantidad</th>
-    <th style="text-align:right">Unidad</th>
-  </tr></thead><tbody>
-  ${sorted.map(item=>{
-    const unidad=unidadDux[item.sku]||'UNIDAD';
-    const qf=item.qty>=1?item.qty.toLocaleString('es-AR',{maximumFractionDigits:2}):item.qty.toFixed(3);
-    return `<tr><td>${item.nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;
-  }).join('')}
-  </tbody></table>`;
+// ── CONSUMO TREE ─────────────────────────────────────────────────
+function renderConsumoTree(items, unD, NS, groupFn){
+  const list=Object.values(items).filter(x=>x.qty>0.001).sort((a,b)=>b.qty-a.qty);
+  if(!list.length) return '<div class="empty">Sin datos para este período</div>';
+  const groups={};
+  list.forEach(it=>{ const g=groupFn?groupFn(it):'General'; if(!groups[g])groups[g]={total:0,items:[]}; groups[g].total+=it.qty; groups[g].items.push(it); });
+  const gkeys=Object.keys(groups).sort((a,b)=>groups[b].total-groups[a].total);
+  let h=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
+  h+=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
+    <span style="width:16px;margin-right:8px;"></span>
+    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Grupo / Ítem</span>
+    <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Cantidad</span>
+    <span style="min-width:70px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Unidad</span>
+  </div>`;
+  gkeys.forEach(gk=>{
+    const g=groups[gk];
+    const key=NS+'-'+gk.replace(/\W+/g,'-');
+    const totFmt=g.total>=1?g.total.toLocaleString('es-AR',{maximumFractionDigits:2}):g.total.toFixed(3);
+    h+=TR(NS,key,0,`${gk} <span style="color:var(--muted);font-size:10px;font-weight:400;">· ${g.items.length} ítems</span>`,
+      `<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);">${totFmt}</span>`,
+      '',true,false);
+    const leaveH=g.items.map(it=>{
+      const un=unD[it.sku]||'UNIDAD';
+      const qf=it.qty>=1?it.qty.toLocaleString('es-AR',{maximumFractionDigits:2}):it.qty.toFixed(3);
+      return `<div class="tr l1 nc">
+        <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+        <span class="tl">${it.nombre} <span class="sku-badge" style="margin-left:4px;">${it.sku}</span></span>
+        <span style="min-width:100px;text-align:right;font-variant-numeric:tabular-nums;font-weight:500;margin-right:8px;">${qf}</span>
+        <span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>
+      </div>`;
+    }).join('');
+    h+=TC(NS,key,leaveH,false);
+  });
+  h+=`</div>`;
+  return h;
 }
 
-function renderConsumoProductos() {
-  const {consumoProductos,unidadDux}=buildBOMData();
-  return `
-    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong> · Kits desagregados a productos</div>
-    <div class="v-chart-wrap">
-      <div class="v-chart-title">Consumo de productos · ${Object.values(consumoProductos).filter(x=>x.qty>0.001).length} ítems</div>
-      ${renderConsumoTabla(consumoProductos,unidadDux)}
-    </div>`;
+function renderConsumoProductos(){
+  const {cProd,unD}=buildBOM();
+  const NS='cp';
+  const skuLinea={};
+  vRows(vPeriodo1).forEach(r=>{ skuLinea[getSku(r)]=getLinea(r)||'OTRO'; });
+  return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong> · Kits abiertos a productos</div>
+    ${renderConsumoTree(cProd,unD,NS,it=>skuLinea[it.sku]||'OTRO')}`;
 }
 
-function renderConsumoInsumos() {
-  const {consumoInsumos,unidadDux}=buildBOMData();
-  return `
-    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong> · Productos desagregados a insumos</div>
-    <div class="v-chart-wrap">
-      <div class="v-chart-title">Consumo de insumos · ${Object.values(consumoInsumos).filter(x=>x.qty>0.001).length} ítems</div>
-      ${renderConsumoTabla(consumoInsumos,unidadDux)}
-    </div>`;
+function renderConsumoInsumos(){
+  const {cIns,unD}=buildBOM();
+  const NS='ci';
+  const skuRub={};
+  DATA.dux.forEach(r=>{ skuRub[(r['Código Producto']||'').trim()]=(r['Rubro']||'OTRO').trim().toUpperCase(); });
+  return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${vPeriodo1}</strong> · Productos abiertos a insumos</div>
+    ${renderConsumoTree(cIns,unD,NS,it=>skuRub[it.sku]||'OTRO')}`;
 }
 
-
-// ── INIT ────────────────────────────────────────────────────────
+// ── INIT ─────────────────────────────────────────────────────────
 loadData();
+
 </script>
 </body>
 </html>
