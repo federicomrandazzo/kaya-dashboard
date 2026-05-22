@@ -564,7 +564,8 @@ const URLS = {
   dux:       `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2130058495&single=true&output=csv`,
   tn:        `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=611485435&single=true&output=csv`,
   compuestos:`https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1843338909&single=true&output=csv`,
-  ventas:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2087055810&single=true&output=csv`,
+  ventas_resumen: `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1630061936&single=true&output=csv`,
+  ordenes_resumen:`https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
 };
 
 const SKU_MAP = {
@@ -586,7 +587,7 @@ const ADAPTO_SKU_MAP = {
 const JOJOBA_SKU_MAP = {30:'JOJ-30G',60:'JOJ-60',125:'JOJ-125'};
 const MOSQUETA_SKU = 'ROS-MOS';
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[]};
 let CACHE = {ventas:null};
 let currentModule = 'stock';
 let currentTab = 'venta';
@@ -634,11 +635,12 @@ async function loadData() {
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('welcome').style.display='none';
   try {
-    const [duxText,tnText,compText,ventasText]=await Promise.all([
+    const [duxText,tnText,compText,ventasText,ordenesText]=await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
-      fetch(URLS.ventas).then(r=>r.text()),
+      fetch(URLS.ventas_resumen).then(r=>r.text()),
+      fetch(URLS.ordenes_resumen).then(r=>r.text()),
     ]);
     const duxLines=duxText.split('\n');
     const duxClean=duxLines.slice(2).join('\n');
@@ -647,19 +649,8 @@ async function loadData() {
     const compLines=compText.split('\n');
     const compClean=compLines.slice(2).join('\n');
     DATA.compuestos=parseCSV(compClean).filter(r=>r['Código Compuesto']);
-    const ventasParsed=parseCSV(ventasText);
-    console.log('Ventas total rows:', ventasParsed.length);
-    console.log('Ventas first row keys:', ventasParsed.length>0?Object.keys(ventasParsed[0]).slice(0,10):[]);
-    console.log('Ventas sample periodo:', ventasParsed.length>0?ventasParsed[0]['periodo']:'none');
-    console.log('Ventas sample SKU.1:', ventasParsed.length>0?ventasParsed[0]['SKU.1']:'none');
-    // detect actual SKU column name
-    if(ventasParsed.length>0) {
-      const keys=Object.keys(ventasParsed[0]);
-      const skuKey=keys.find(k=>k.includes('SKU'));
-      console.log('SKU keys found:', keys.filter(k=>k.toLowerCase().includes('sku')));
-    }
-    DATA.ventas=ventasParsed.filter(r=>r['periodo']&&r['periodo'].trim());
-    console.log('Ventas after filter:', DATA.ventas.length);
+    DATA.ventas=parseCSV(ventasText).filter(r=>r['periodo']&&r['periodo'].trim());
+    DATA.ordenes=parseCSV(ordenesText).filter(r=>r['periodo']&&r['periodo'].trim());
     CACHE.ventas=null;
     const now=new Date();
     const label=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -1244,7 +1235,7 @@ let bomCache = null;
 
 function getSku(r){return getSku(r)||r['SKU_1']||r['SKU.1 ']||'';}
 function metricaLabel(m){return m==='ars'?'ARS':m==='usd'?'USD':'AXI';}
-function metricaCol(m){return m==='ars'?'importe neto':m==='usd'?'importe usd':'importe axi';}
+function metricaCol(m){return m==='ars'?'importe_neto':m==='usd'?'importe_usd':'importe_axi';}
 function metricaFormat(m,v){
   if(m==='ars') return '$'+Math.round(v).toLocaleString('es-AR');
   if(m==='usd') return 'U$D '+v.toFixed(0);
@@ -1307,8 +1298,11 @@ function renderVTab(){
   if(vTab==='bom'){el.innerHTML='<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando BOM...</div></div>';setTimeout(()=>{el.innerHTML=renderVentasBOM();},50);}
 }
 function ventasPeriodo(p){return DATA.ventas.filter(r=>r['periodo']===p);}
-function sumMetrica(rows,m){const col=metricaCol(m);return rows.reduce((s,r)=>s+num(r[col]),0);}
-function sumUnidades(rows){return rows.reduce((s,r)=>s+num(r['Cantidad del producto']),0);}
+function sumMetrica(rows,m){
+  const col=metricaCol(m);
+  return rows.reduce((s,r)=>s+num(r[col]),0);
+}
+function sumUnidades(rows){return rows.reduce((s,r)=>s+num(r['qty']),0);}
 
 function renderVentasGeneral(){
   const periodos=getPeriodosOrdenados();
@@ -1317,8 +1311,10 @@ function renderVentasGeneral(){
   const rows2=vPeriodo2?ventasPeriodo(vPeriodo2):[];
   const v1=sumMetrica(rows1,vMetrica),v2=sumMetrica(rows2,vMetrica);
   const u1=sumUnidades(rows1),u2=sumUnidades(rows2);
-  const orders1=new Set(rows1.map(r=>r['Número de orden'])).size;
-  const orders2=new Set(rows2.map(r=>r['Número de orden'])).size;
+  const ord1=DATA.ordenes.find(r=>r['periodo']===vPeriodo1);
+  const ord2=DATA.ordenes.find(r=>r['periodo']===vPeriodo2);
+  const orders1=ord1?num(ord1['ordenes']):new Set(rows1.map(r=>r['Número de orden'])).size;
+  const orders2=ord2?num(ord2['ordenes']):new Set(rows2.map(r=>r['Número de orden'])).size;
   const tck1=orders1>0?v1/orders1:0,tck2=orders2>0?v2/orders2:0;
   function delta(a,b){if(!b||b===0)return '';const p=((a-b)/b*100).toFixed(1);return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p)}%</span>`;}
   const ultimos=periodos.slice(-12);
@@ -1331,7 +1327,7 @@ function renderVentasGeneral(){
     return `<div class="v-bar-wrap" title="${p}: ${metricaFormat(vMetrica,v)}"><div class="v-bar" style="height:${h}px;background:${color};"></div><div class="v-bar-label">${short}</div></div>`;
   }).join('');
   const byRubro={};
-  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro[k])byRubro[k]={v:0,u:0};byRubro[k].v+=num(r[col]);byRubro[k].u+=num(r['Cantidad del producto']);});
+  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro[k])byRubro[k]={v:0,u:0};byRubro[k].v+=num(r[col]);byRubro[k].u+=num(r['qty']);});
   const maxR=Math.max(...Object.values(byRubro).map(x=>x.v),1);
   const rubroRows=Object.entries(byRubro).sort((a,b)=>b[1].v-a[1].v).map(([rub,d])=>{
     const pct=(d.v/v1*100).toFixed(1),bw=Math.round(d.v/maxR*100);
@@ -1367,13 +1363,13 @@ function renderVentasLinea(){
   const rows1=ventasPeriodo(vPeriodo1).filter(r=>vLinea==='TODAS'||r['LINEA']===vLinea);
   const rows2=vPeriodo2?ventasPeriodo(vPeriodo2).filter(r=>vLinea==='TODAS'||r['LINEA']===vLinea):[];
   const byRubro1={},byRubro2={};
-  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro1[k])byRubro1[k]={v:0,u:0};byRubro1[k].v+=num(r[col]);byRubro1[k].u+=num(r['Cantidad del producto']);});
-  rows2.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro2[k])byRubro2[k]={v:0,u:0};byRubro2[k].v+=num(r[col]);byRubro2[k].u+=num(r['Cantidad del producto']);});
+  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro1[k])byRubro1[k]={v:0,u:0};byRubro1[k].v+=num(r[col]);byRubro1[k].u+=num(r['qty']);});
+  rows2.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro2[k])byRubro2[k]={v:0,u:0};byRubro2[k].v+=num(r[col]);byRubro2[k].u+=num(r['qty']);});
   const allRubros=[...new Set([...Object.keys(byRubro1),...Object.keys(byRubro2)])].sort((a,b)=>(byRubro1[b]?.v||0)-(byRubro1[a]?.v||0));
   const maxV=Math.max(...allRubros.map(r=>byRubro1[r]?.v||0),1);
   const rowsAll1=ventasPeriodo(vPeriodo1);
   const byLinea={};
-  rowsAll1.forEach(r=>{const k=r['LINEA']||'OTRO';if(!byLinea[k])byLinea[k]={v:0,u:0};byLinea[k].v+=num(r[col]);byLinea[k].u+=num(r['Cantidad del producto']);});
+  rowsAll1.forEach(r=>{const k=r['LINEA']||'OTRO';if(!byLinea[k])byLinea[k]={v:0,u:0};byLinea[k].v+=num(r[col]);byLinea[k].u+=num(r['qty']);});
   const totalV=sumMetrica(rowsAll1,vMetrica);
   const lineaCards=['BLANCA','NEGRA','KITS'].map(l=>{
     const d=byLinea[l]||{v:0,u:0};const pct=totalV>0?(d.v/totalV*100).toFixed(1):0;
@@ -1414,7 +1410,7 @@ function renderVentasBOM(){
   }
   const rows=ventasPeriodo(vPeriodo1);
   const nivel0={};
-  rows.forEach(r=>{const sku=(getSku(r)||'').trim();const qty=num(r['Cantidad del producto']);if(!sku) return;if(!nivel0[sku])nivel0[sku]={sku,qty:0,linea:r['LINEA']||'',rubro:r['RUBRO']||''};nivel0[sku].qty+=qty;});
+  rows.forEach(r=>{const sku=(getSku(r)||'').trim();const qty=num(r['Cantidad del producto']);if(!sku) return;if(!nivel0[sku])nivel0[sku]={sku,qty:0,nombre:r['nombre']||'',linea:r['LINEA']||'',rubro:r['RUBRO']||''};nivel0[sku].qty+=qty;});
   const nivel1={};
   Object.values(nivel0).forEach(item=>{
     const receta=recetas[item.sku];
@@ -1433,7 +1429,7 @@ function renderVentasBOM(){
     if(!sorted.length) return '';
     return `<div class="v-chart-wrap"><div class="v-chart-title">${titulo}</div>
       <table class="v-bom-table"><thead><tr><th>Producto / Insumo</th><th>SKU</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Unidad</th></tr></thead>
-      <tbody>${sorted.map(item=>{const nombre=item.nombre||nombreDux[item.sku]||item.sku;const unidad=unidadDux[item.sku]||'UNIDAD';const qf=item.qty%1===0?item.qty.toLocaleString('es-AR'):item.qty.toFixed(3);return `<tr><td>${nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;}).join('')}
+      <tbody>${sorted.map(item=>{const nombre=item.nombre||item.nombreTN||nombreDux[item.sku]||item.sku;const unidad=unidadDux[item.sku]||'UNIDAD';const qf=item.qty%1===0?item.qty.toLocaleString('es-AR'):item.qty.toFixed(3);return `<tr><td>${nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;}).join('')}
       </tbody></table></div>`;
   }
   const html=`
