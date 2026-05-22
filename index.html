@@ -1221,6 +1221,218 @@ function closeModal(e) {
   document.getElementById('modal-overlay').style.display='none';
 }
 
+
+// ── VENTAS MODULE ───────────────────────────────────────────────
+let vMetrica = 'ars';
+let vTab = 'general';
+let vLinea = 'TODAS';
+let vPeriodo1 = '';
+let vPeriodo2 = '';
+let bomCache = null;
+
+function metricaLabel(m){return m==='ars'?'ARS':m==='usd'?'USD':'AXI';}
+function metricaCol(m){return m==='ars'?'importe neto':m==='usd'?'importe usd':'importe axi';}
+function metricaFormat(m,v){
+  if(m==='ars') return '$'+Math.round(v).toLocaleString('es-AR');
+  if(m==='usd') return 'U$D '+v.toFixed(0);
+  return '$'+Math.round(v).toLocaleString('es-AR')+' (axi)';
+}
+function getPeriodosOrdenados(){
+  const ps=[...new Set(DATA.ventas.map(r=>r['periodo']))].filter(Boolean);
+  return ps.sort((a,b)=>{const[ya,ma]=a.split('-').map(Number);const[yb,mb]=b.split('-').map(Number);return ya!==yb?ya-yb:ma-mb;});
+}
+function renderVentasModule(){
+  const el=document.getElementById('module-ventas');
+  el.style.display='block';
+  if(!DATA.ventas||!DATA.ventas.length){
+    el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos de ventas cargados.</div>';return;
+  }
+  const periodos=getPeriodosOrdenados();
+  if(!vPeriodo1) vPeriodo1=periodos[periodos.length-1];
+  if(!vPeriodo2) vPeriodo2=periodos.length>1?periodos[periodos.length-2]:'';
+  el.innerHTML=`
+    <div class="v-filters">
+      <span class="v-filter-label">Métrica</span>
+      <div class="v-metric-toggle">
+        <button class="v-metric-btn ${vMetrica==='ars'?'active':''}" onclick="setMetrica('ars')">ARS</button>
+        <button class="v-metric-btn ${vMetrica==='usd'?'active':''}" onclick="setMetrica('usd')">USD</button>
+        <button class="v-metric-btn ${vMetrica==='axi'?'active':''}" onclick="setMetrica('axi')">AXI</button>
+      </div>
+      <span class="v-filter-label" style="margin-left:12px;">Período</span>
+      <select class="v-select" onchange="setPeriodo1(this.value)">
+        ${periodos.map(p=>`<option value="${p}" ${p===vPeriodo1?'selected':''}>${p}</option>`).join('')}
+      </select>
+      <span class="v-filter-label">vs</span>
+      <select class="v-select" onchange="setPeriodo2(this.value)">
+        <option value="">— ninguno —</option>
+        ${periodos.map(p=>`<option value="${p}" ${p===vPeriodo2?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+    <div class="v-tabs">
+      <div class="v-tab ${vTab==='general'?'active':''}" onclick="setVTab('general')">General</div>
+      <div class="v-tab ${vTab==='linea'?'active':''}" onclick="setVTab('linea')">Por Línea</div>
+      <div class="v-tab ${vTab==='bom'?'active':''}" onclick="setVTab('bom')">Consumo BOM</div>
+    </div>
+    <div id="v-tab-content"></div>
+    <div id="modal-overlay" onclick="closeModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+      <div id="modal-box" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;">
+        <div id="modal-content"></div>
+      </div>
+    </div>`;
+  renderVTab();
+}
+function setMetrica(m){vMetrica=m;renderVentasModule();}
+function setPeriodo1(p){vPeriodo1=p;bomCache=null;renderVTab();}
+function setPeriodo2(p){vPeriodo2=p;renderVTab();}
+function setVTab(t){vTab=t;document.querySelectorAll('.v-tab').forEach(x=>x.classList.remove('active'));event.target.classList.add('active');renderVTab();}
+function setVLinea(l){vLinea=l;renderVTab();}
+function renderVTab(){
+  const el=document.getElementById('v-tab-content');
+  if(!el) return;
+  if(vTab==='general') el.innerHTML=renderVentasGeneral();
+  if(vTab==='linea')   el.innerHTML=renderVentasLinea();
+  if(vTab==='bom'){el.innerHTML='<div class="empty" style="padding:40px 0;"><div class="spinner" style="margin:0 auto 16px;"></div><div>Procesando BOM...</div></div>';setTimeout(()=>{el.innerHTML=renderVentasBOM();},50);}
+}
+function ventasPeriodo(p){return DATA.ventas.filter(r=>r['periodo']===p);}
+function sumMetrica(rows,m){const col=metricaCol(m);return rows.reduce((s,r)=>s+num(r[col]),0);}
+function sumUnidades(rows){return rows.reduce((s,r)=>s+num(r['Cantidad del producto']),0);}
+
+function renderVentasGeneral(){
+  const periodos=getPeriodosOrdenados();
+  const col=metricaCol(vMetrica);
+  const rows1=ventasPeriodo(vPeriodo1);
+  const rows2=vPeriodo2?ventasPeriodo(vPeriodo2):[];
+  const v1=sumMetrica(rows1,vMetrica),v2=sumMetrica(rows2,vMetrica);
+  const u1=sumUnidades(rows1),u2=sumUnidades(rows2);
+  const orders1=new Set(rows1.map(r=>r['Número de orden'])).size;
+  const orders2=new Set(rows2.map(r=>r['Número de orden'])).size;
+  const tck1=orders1>0?v1/orders1:0,tck2=orders2>0?v2/orders2:0;
+  function delta(a,b){if(!b||b===0)return '';const p=((a-b)/b*100).toFixed(1);return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p)}%</span>`;}
+  const ultimos=periodos.slice(-12);
+  const vals=ultimos.map(p=>sumMetrica(ventasPeriodo(p),vMetrica));
+  const maxVal=Math.max(...vals,1);
+  const barras=ultimos.map((p,i)=>{
+    const v=vals[i],h=Math.max(4,Math.round((v/maxVal)*130));
+    const color=p===vPeriodo1?'var(--accent)':p===vPeriodo2?'var(--accent2)':'var(--border)';
+    const short=p.replace('20','').replace('-','/');
+    return `<div class="v-bar-wrap" title="${p}: ${metricaFormat(vMetrica,v)}"><div class="v-bar" style="height:${h}px;background:${color};"></div><div class="v-bar-label">${short}</div></div>`;
+  }).join('');
+  const byRubro={};
+  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro[k])byRubro[k]={v:0,u:0};byRubro[k].v+=num(r[col]);byRubro[k].u+=num(r['Cantidad del producto']);});
+  const maxR=Math.max(...Object.values(byRubro).map(x=>x.v),1);
+  const rubroRows=Object.entries(byRubro).sort((a,b)=>b[1].v-a[1].v).map(([rub,d])=>{
+    const pct=(d.v/v1*100).toFixed(1),bw=Math.round(d.v/maxR*100);
+    return `<tr><td>${rub}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFormat(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
+  }).join('');
+  return `
+    <div class="v-kpi-grid">
+      <div class="v-kpi"><div class="v-kpi-label">Venta ${metricaLabel(vMetrica)}</div><div class="v-kpi-val" style="color:var(--accent);">${metricaFormat(vMetrica,v1)}</div><div class="v-kpi-sub">${delta(v1,v2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Órdenes</div><div class="v-kpi-val">${orders1.toLocaleString('es-AR')}</div><div class="v-kpi-sub">${delta(orders1,orders2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Unidades</div><div class="v-kpi-val">${Math.round(u1).toLocaleString('es-AR')}</div><div class="v-kpi-sub">${delta(u1,u2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Ticket promedio</div><div class="v-kpi-val">${metricaFormat(vMetrica,tck1)}</div><div class="v-kpi-sub">${delta(tck1,tck2)} ${vPeriodo2?'vs '+vPeriodo2:''}</div></div>
+    </div>
+    <div class="v-chart-wrap">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="v-chart-title">Evolución mensual · ${metricaLabel(vMetrica)} · últimos 12 períodos</div>
+        <div style="display:flex;gap:12px;font-size:10px;color:var(--muted);">
+          <span style="display:flex;gap:4px;align-items:center;"><span style="width:8px;height:8px;background:var(--accent);display:inline-block;border-radius:2px;"></span>${vPeriodo1}</span>
+          ${vPeriodo2?`<span style="display:flex;gap:4px;align-items:center;"><span style="width:8px;height:8px;background:var(--accent2);display:inline-block;border-radius:2px;"></span>${vPeriodo2}</span>`:''}
+        </div>
+      </div>
+      <div class="v-bar-chart">${barras}</div>
+    </div>
+    <div class="v-chart-wrap">
+      <div class="v-chart-title">Por rubro · ${vPeriodo1}</div>
+      <table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">Venta</th><th style="text-align:right">%</th><th style="text-align:right">Uds</th><th></th></tr></thead>
+      <tbody>${rubroRows}</tbody></table>
+    </div>`;
+}
+
+function renderVentasLinea(){
+  const col=metricaCol(vMetrica);
+  const lineas=['TODAS','BLANCA','NEGRA','KITS'];
+  const rows1=ventasPeriodo(vPeriodo1).filter(r=>vLinea==='TODAS'||r['LINEA']===vLinea);
+  const rows2=vPeriodo2?ventasPeriodo(vPeriodo2).filter(r=>vLinea==='TODAS'||r['LINEA']===vLinea):[];
+  const byRubro1={},byRubro2={};
+  rows1.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro1[k])byRubro1[k]={v:0,u:0};byRubro1[k].v+=num(r[col]);byRubro1[k].u+=num(r['Cantidad del producto']);});
+  rows2.forEach(r=>{const k=r['RUBRO']||'OTRO';if(!byRubro2[k])byRubro2[k]={v:0,u:0};byRubro2[k].v+=num(r[col]);byRubro2[k].u+=num(r['Cantidad del producto']);});
+  const allRubros=[...new Set([...Object.keys(byRubro1),...Object.keys(byRubro2)])].sort((a,b)=>(byRubro1[b]?.v||0)-(byRubro1[a]?.v||0));
+  const maxV=Math.max(...allRubros.map(r=>byRubro1[r]?.v||0),1);
+  const rowsAll1=ventasPeriodo(vPeriodo1);
+  const byLinea={};
+  rowsAll1.forEach(r=>{const k=r['LINEA']||'OTRO';if(!byLinea[k])byLinea[k]={v:0,u:0};byLinea[k].v+=num(r[col]);byLinea[k].u+=num(r['Cantidad del producto']);});
+  const totalV=sumMetrica(rowsAll1,vMetrica);
+  const lineaCards=['BLANCA','NEGRA','KITS'].map(l=>{
+    const d=byLinea[l]||{v:0,u:0};const pct=totalV>0?(d.v/totalV*100).toFixed(1):0;
+    return `<div class="v-kpi"><div class="v-kpi-label">${l}</div><div class="v-kpi-val" style="font-size:16px;">${metricaFormat(vMetrica,d.v)}</div><div class="v-kpi-sub">${pct}% · ${Math.round(d.u)} uds</div></div>`;
+  }).join('');
+  const rubroRows=allRubros.map(rub=>{
+    const d1=byRubro1[rub]||{v:0,u:0},d2=byRubro2[rub]||{v:0,u:0};
+    const bw=Math.round((d1.v/maxV)*100);
+    const chg=d2.v>0?((d1.v-d2.v)/d2.v*100).toFixed(1):null;
+    const chgHtml=chg!==null?`<span class="${Number(chg)>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${Number(chg)>=0?'▲':'▼'} ${Math.abs(chg)}%</span>`:'—';
+    return `<tr><td>${rub}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFormat(vMetrica,d1.v)}</td><td style="text-align:right;color:var(--muted);font-size:11px;">${d2.v>0?metricaFormat(vMetrica,d2.v):'—'}</td><td style="text-align:right;">${chgHtml}</td><td style="text-align:right;color:var(--muted);">${Math.round(d1.u)}</td><td style="width:100px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
+  }).join('');
+  return `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">${lineaCards}</div>
+    <div class="v-filters"><span class="v-filter-label">Filtrar línea</span><div class="v-metric-toggle">${lineas.map(l=>`<button class="v-metric-btn ${vLinea===l?'active':''}" onclick="setVLinea('${l}')">${l}</button>`).join('')}</div></div>
+    <div class="v-chart-wrap">
+      <div class="v-chart-title">Por rubro · ${vPeriodo1}${vPeriodo2?' vs '+vPeriodo2:''} · ${vLinea}</div>
+      <table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">${vPeriodo1}</th><th style="text-align:right">${vPeriodo2||'—'}</th><th style="text-align:right">Δ</th><th style="text-align:right">Uds</th><th></th></tr></thead>
+      <tbody>${rubroRows}</tbody></table>
+    </div>`;
+}
+
+function renderVentasBOM(){
+  if(bomCache&&bomCache.periodo===vPeriodo1) return bomCache.html;
+  const recetas={};
+  DATA.compuestos.forEach(r=>{
+    const cod=(r['Código Compuesto']||'').trim();if(!cod) return;
+    if(!recetas[cod]) recetas[cod]=[];
+    recetas[cod].push({componente:(r['Código Componente']||'').trim(),cantidad:num(r['Cantidad']),nombre:(r['Producto Componente']||'').trim()});
+  });
+  function explotar(sku,qty,nivel){
+    if(nivel>5) return [{sku,qty}];
+    const receta=recetas[sku];
+    if(!receta||!receta.length) return [{sku,qty}];
+    const result=[];
+    receta.forEach(comp=>{explotar(comp.componente,qty*comp.cantidad,nivel+1).forEach(s=>result.push(s));});
+    return result;
+  }
+  const rows=ventasPeriodo(vPeriodo1);
+  const nivel0={};
+  rows.forEach(r=>{const sku=(r['SKU.1']||'').trim();const qty=num(r['Cantidad del producto']);if(!sku) return;if(!nivel0[sku])nivel0[sku]={sku,qty:0,linea:r['LINEA']||'',rubro:r['RUBRO']||''};nivel0[sku].qty+=qty;});
+  const nivel1={};
+  Object.values(nivel0).forEach(item=>{
+    const receta=recetas[item.sku];
+    if(receta&&receta.length&&/^KIT/i.test(item.sku)){
+      receta.forEach(comp=>{if(!nivel1[comp.componente])nivel1[comp.componente]={sku:comp.componente,qty:0,nombre:comp.nombre};nivel1[comp.componente].qty+=item.qty*comp.cantidad;});
+    }
+    if(!nivel1[item.sku])nivel1[item.sku]={sku:item.sku,qty:0,nombre:item.sku};
+    nivel1[item.sku].qty+=item.qty;
+  });
+  const nivel2={};
+  Object.values(nivel1).forEach(item=>{explotar(item.sku,item.qty,0).forEach(ins=>{if(!nivel2[ins.sku])nivel2[ins.sku]={sku:ins.sku,qty:0};nivel2[ins.sku].qty+=ins.qty;});});
+  const nombreDux={},unidadDux={};
+  DATA.dux.forEach(r=>{const c=(r['Código Producto']||'').trim();nombreDux[c]=r['Producto']||'';unidadDux[c]=(r['Unidad']||'UNIDAD').toUpperCase();});
+  function renderNivel(items,titulo){
+    const sorted=Object.values(items).filter(x=>x.qty>0.001).sort((a,b)=>b.qty-a.qty);
+    if(!sorted.length) return '';
+    return `<div class="v-chart-wrap"><div class="v-chart-title">${titulo}</div>
+      <table class="v-bom-table"><thead><tr><th>Producto / Insumo</th><th>SKU</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Unidad</th></tr></thead>
+      <tbody>${sorted.map(item=>{const nombre=item.nombre||nombreDux[item.sku]||item.sku;const unidad=unidadDux[item.sku]||'UNIDAD';const qf=item.qty%1===0?item.qty.toLocaleString('es-AR'):item.qty.toFixed(3);return `<tr><td>${nombre}</td><td><span class="sku-badge">${item.sku}</span></td><td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</td><td style="text-align:right;color:var(--muted);font-size:10px;">${unidad}</td></tr>`;}).join('')}
+      </tbody></table></div>`;
+  }
+  const html=`
+    <div style="font-size:11px;color:var(--muted);margin-bottom:20px;">Consumo real para <strong style="color:var(--text);">${vPeriodo1}</strong> — explosión BOM en cascada.</div>
+    ${renderNivel(nivel0,'Nivel 0 · Lo que se vendió (SKUs directos)')}
+    ${renderNivel(nivel1,'Nivel 1 · Productos individuales (kits explosionados)')}
+    ${renderNivel(nivel2,'Nivel 2 · Insumos al último nivel')}`;
+  bomCache={periodo:vPeriodo1,html};
+  return html;
+}
+
+
 // ── INIT ────────────────────────────────────────────────────────
 loadData();
 </script>
