@@ -1272,10 +1272,6 @@ function closeModal(e){
 // ═══════════════════════════════════════════════════════════════
 let vMetrica='ars', vTab='general';
 let vPeriodo1='', vPeriodo2='';
-// Multi-period selection: array of YYYY-MM strings
-let vSelectedPeriodos=[]; // main selection
-let vSelectedPeriodos2=[]; // compare selection (empty = none)
-let vMultiMode=false; // false = single month picker, true = multi/preset selector
 
 function metricaLabel(m){ return m==='ars'?'ARS':m==='usd'?'USD':'AXI'; }
 function metricaCol(m){ return m==='ars'?'importe_neto':m==='usd'?'importe_usd':'importe_axi'; }
@@ -1288,43 +1284,15 @@ function getPeriodos(){
   return [...new Set(DATA.ventas.map(r=>r['periodo']))].filter(Boolean)
     .sort((a,b)=>{ const[ya,ma]=a.split('-').map(Number),[yb,mb]=b.split('-').map(Number); return ya!==yb?ya-yb:ma-mb; });
 }
-function fmtPeriodo(p){ const[y,m]=p.split('-'); const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']; return `${meses[parseInt(m)-1]} ${y}`; }
 
-// Get rows for current period selection — always works on periodos
-function getMainRows(){
-  if(vMultiMode&&vSelectedPeriodos.length>0)
-    return DATA.ventas.filter(r=>vSelectedPeriodos.includes(r['periodo']));
-  return DATA.ventas.filter(r=>r['periodo']===vPeriodo1);
+function getMainRows(){ return DATA.ventas.filter(r=>r['periodo']===vPeriodo1); }
+function getCompareRows(){ return vPeriodo2?DATA.ventas.filter(r=>r['periodo']===vPeriodo2):[]; }
+function getMainLabel(){ return vPeriodo1; }
+
+function getOrdenes(periodo){
+  const r=DATA.ordenes.find(o=>o['periodo']===periodo);
+  return r?num(r['ordenes']):0;
 }
-function getCompareRows(){
-  if(vMultiMode&&vSelectedPeriodos2.length>0)
-    return DATA.ventas.filter(r=>vSelectedPeriodos2.includes(r['periodo']));
-  return vPeriodo2?DATA.ventas.filter(r=>r['periodo']===vPeriodo2):[];
-}
-function getMainLabel(){
-  if(vMultiMode&&vSelectedPeriodos.length>0){
-    if(vSelectedPeriodos.length===1) return fmtPeriodo(vSelectedPeriodos[0]);
-    const sorted=[...vSelectedPeriodos].sort();
-    return `${fmtPeriodo(sorted[0])} → ${fmtPeriodo(sorted[sorted.length-1])}`;
-  }
-  return vPeriodo1;
-}
-// Ordenes: sum from DATA.ordenes for the active periods
-function getOrdenes(rows, periodos_list){
-  // Try to sum from DATA.ordenes table first (has real order counts per period)
-  if(periodos_list&&periodos_list.length>0){
-    const total=periodos_list.reduce((s,p)=>{
-      const r=DATA.ordenes.find(o=>o['periodo']===p);
-      return s+(r?num(r['ordenes']):0);
-    },0);
-    if(total>0) return total;
-  }
-  // Fallback: count distinct order numbers in rows
-  const ids=new Set(rows.filter(r=>r['Número de orden']).map(r=>r['Número de orden']));
-  return ids.size||rows.length;
-}
-function getActivePeriodos(){ return vMultiMode&&vSelectedPeriodos.length>0?vSelectedPeriodos:[vPeriodo1]; }
-function getComparePeriodos(){ return vMultiMode&&vSelectedPeriodos2.length>0?vSelectedPeriodos2:(vPeriodo2?[vPeriodo2]:[]); }
 
 function sumV(rows,m){ const col=metricaCol(m); return rows.reduce((s,r)=>s+num(r[col]),0); }
 function sumU(rows){ return rows.reduce((s,r)=>s+num(r['qty']),0); }
@@ -1332,7 +1300,7 @@ function sumU(rows){ return rows.reduce((s,r)=>s+num(r['qty']),0); }
 function updateVentasStickyBar(){
   const rows=getMainRows();
   const v=sumV(rows,vMetrica), u=sumU(rows);
-  const o=getOrdenes(rows,getActivePeriodos());
+  const o=getOrdenes(vPeriodo1)||new Set(rows.filter(r=>r['Número de orden']).map(r=>r['Número de orden'])).size||1;
   const sv=document.getElementById('sv-venta');   if(sv) sv.textContent=metricaFmt(vMetrica,v);
   const so=document.getElementById('sv-ordenes'); if(so) so.textContent=o.toLocaleString('es-AR');
   const su=document.getElementById('sv-unidades');if(su) su.textContent=Math.round(u).toLocaleString('es-AR');
@@ -1340,145 +1308,33 @@ function updateVentasStickyBar(){
   const b=document.getElementById('sbar-ventas'); if(b) b.classList.add('vis');
 }
 
-// ── PERIOD SELECTOR PANEL ────────────────────────────────────────
-function buildPeriodSelector(periodos){
-  // Preset buttons
-  const presets=[
-    {label:'3 meses',val:'3m'},{label:'6 meses',val:'6m'},{label:'1 año',val:'1y'},{label:'Todo',val:'all'}
-  ];
-  const presetBtns=presets.map(p=>`<button onclick="applyPreset('${p.val}')" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.06em;transition:all 0.15s;"
-    onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
-    onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">${p.label}</button>`).join('');
-
-  // Group periods by year for the grid
-  const byYear={};
-  periodos.forEach(p=>{ const y=p.split('-')[0]; if(!byYear[y]) byYear[y]=[]; byYear[y].push(p); });
-  const years=Object.keys(byYear).sort();
-  const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-
-  const grid=years.map(y=>{
-    const cells=Array(12).fill('').map((_,mi)=>{
-      const p=`${y}-${String(mi+1).padStart(2,'0')}`;
-      const exists=byYear[y].includes(p);
-      if(!exists) return `<div></div>`;
-      const isSel=vSelectedPeriodos.includes(p);
-      const isCmp=vSelectedPeriodos2.includes(p);
-      const bg=isSel?'background:var(--accent);color:#0e0e0e;':isCmp?'background:var(--accent2);color:#0e0e0e;':'background:var(--surface2);color:var(--muted);';
-      return `<div onclick="togglePeriodoSel('${p}')" style="${bg}padding:4px 2px;border-radius:3px;cursor:pointer;font-size:10px;text-align:center;letter-spacing:0.04em;transition:all 0.1s;" title="${p}">${MESES[mi]}</div>`;
-    }).join('');
-    return `<div style="display:flex;align-items:center;gap:6px;">
-      <span style="font-size:10px;color:var(--muted);width:36px;flex-shrink:0;">${y}</span>
-      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:3px;flex:1;">${cells}</div>
-    </div>`;
-  }).join('');
-
-  const selLabel=vSelectedPeriodos.length===0?'Ningún período':getMainLabel();
-  const cmpLabel=vSelectedPeriodos2.length===0?'—':(()=>{
-    const s=[...vSelectedPeriodos2].sort();
-    return s.length===1?fmtPeriodo(s[0]):`${fmtPeriodo(s[0])} → ${fmtPeriodo(s[s.length-1])}`;
-  })();
-
-  return `<div id="period-panel" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <span style="font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);">Presets:</span>
-        ${presetBtns}
-        <button onclick="clearPeriodoSel()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;"
-          onmouseover="this.style.color='var(--accent3)';this.style.borderColor='var(--accent3)'"
-          onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">Limpiar</button>
-      </div>
-      <div style="font-size:10px;color:var(--muted);">
-        <span style="color:var(--accent);">█</span> Período principal &nbsp;
-        <span style="color:var(--accent2);">█</span> Comparar &nbsp;
-        <span style="font-size:9px;">Alt+clic para comparar</span>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:5px;">${grid}</div>
-    <div style="display:flex;gap:24px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;">
-      <div>Principal: <strong style="color:var(--accent);">${selLabel}</strong></div>
-      <div>Comparar: <strong style="color:var(--accent2);">${cmpLabel}</strong></div>
-    </div>
-  </div>`;
-}
-
-function togglePeriodoSel(p){
-  const isAlt=window._altDown||false;
-  if(isAlt){
-    // toggle in compare set
-    const i=vSelectedPeriodos2.indexOf(p);
-    if(i>=0) vSelectedPeriodos2.splice(i,1); else vSelectedPeriodos2.push(p);
-    vPeriodo2=vSelectedPeriodos2.length===1?vSelectedPeriodos2[0]:'';
-  } else {
-    // toggle in main set
-    const i=vSelectedPeriodos.indexOf(p);
-    if(i>=0) vSelectedPeriodos.splice(i,1); else vSelectedPeriodos.push(p);
-    vPeriodo1=vSelectedPeriodos.length===1?vSelectedPeriodos[0]:vSelectedPeriodos.sort()[vSelectedPeriodos.length-1];
-  }
-  bomCache=null;
-  // Re-render the panel and update tab + sticky
-  const panel=document.getElementById('period-panel');
-  if(panel){ const periodos=getPeriodos(); panel.outerHTML=buildPeriodSelector(periodos); }
-  // Re-render after replacing panel
-  setTimeout(()=>{ updateVentasStickyBar(); renderVTab(); },10);
-}
-
-function applyPreset(val){
-  const periodos=getPeriodos();
-  const now=periodos[periodos.length-1]; // most recent period
-  const [ny,nm]=now.split('-').map(Number);
-  vSelectedPeriodos2=[];
-  if(val==='all'){
-    vSelectedPeriodos=[...periodos];
-  } else {
-    const n=val==='3m'?3:val==='6m'?6:12;
-    vSelectedPeriodos=periodos.slice(-n);
-  }
-  vPeriodo1=vSelectedPeriodos[vSelectedPeriodos.length-1];
-  vPeriodo2='';
-  bomCache=null;
-  rerenderPeriodPanel();
-}
-
-function clearPeriodoSel(){
-  vSelectedPeriodos=[]; vSelectedPeriodos2=[];
-  const periodos=getPeriodos();
-  vPeriodo1=periodos[periodos.length-1]; vPeriodo2='';
-  bomCache=null;
-  rerenderPeriodPanel();
-}
-
-function rerenderPeriodPanel(){
-  const periodos=getPeriodos();
-  const panel=document.getElementById('period-panel');
-  if(panel){ panel.outerHTML=buildPeriodSelector(periodos); }
-  setTimeout(()=>{ updateVentasStickyBar(); renderVTab(); },10);
-}
-
-// Track Alt key for compare selection
-document.addEventListener('keydown',e=>{ if(e.key==='Alt') window._altDown=true; });
-document.addEventListener('keyup',e=>{ if(e.key==='Alt') window._altDown=false; });
-
 function renderVentasModule(){
   const el=document.getElementById('module-ventas');
   el.style.display='block';
   if(!DATA.ventas||!DATA.ventas.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos de ventas.</div>'; return; }
   const periodos=getPeriodos();
-  // Init: default to last period selected
   if(!vPeriodo1) vPeriodo1=periodos[periodos.length-1];
-  if(!vPeriodo2&&periodos.length>1) vPeriodo2=periodos[periodos.length-2];
-  if(vSelectedPeriodos.length===0) vSelectedPeriodos=[vPeriodo1];
+  if(!vPeriodo2) vPeriodo2=periodos.length>1?periodos[periodos.length-2]:'';
 
   el.innerHTML=`
     <div id="kpi-anchor-ventas" style="height:1px;margin-top:-1px;"></div>
-    <div class="v-filters" style="flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+    <div class="v-filters" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
       <span class="v-filter-label">Métrica</span>
       <div class="v-metric-toggle">
         <button class="v-metric-btn ${vMetrica==='ars'?'active':''}" onclick="setMetrica('ars')">ARS</button>
         <button class="v-metric-btn ${vMetrica==='usd'?'active':''}" onclick="setMetrica('usd')">USD</button>
         <button class="v-metric-btn ${vMetrica==='axi'?'active':''}" onclick="setMetrica('axi')">AXI</button>
       </div>
+      <span class="v-filter-label" style="margin-left:8px;">Período</span>
+      <select class="v-select" onchange="setP1(this.value)">
+        ${periodos.map(p=>`<option value="${p}" ${p===vPeriodo1?'selected':''}>${p}</option>`).join('')}
+      </select>
+      <span class="v-filter-label">vs</span>
+      <select class="v-select" onchange="setP2(this.value)">
+        <option value="">— ninguno —</option>
+        ${periodos.map(p=>`<option value="${p}" ${p===vPeriodo2?'selected':''}>${p}</option>`).join('')}
+      </select>
     </div>
-    ${buildPeriodSelector(periodos)}
     <div class="v-tabs">
       <div class="v-tab ${vTab==='general'?'active':''}" onclick="setVTab('general')">General</div>
       <div class="v-tab ${vTab==='linea'?'active':''}" onclick="setVTab('linea')">Por Línea</div>
@@ -1492,8 +1348,8 @@ function renderVentasModule(){
 }
 
 function setMetrica(m){ vMetrica=m; renderVentasModule(); }
-function setP1(p){ vPeriodo1=p; vSelectedPeriodos=[p]; bomCache=null; updateVentasStickyBar(); renderVTab(); }
-function setP2(p){ vPeriodo2=p; vSelectedPeriodos2=p?[p]:[]; renderVTab(); }
+function setP1(p){ vPeriodo1=p; bomCache=null; updateVentasStickyBar(); renderVTab(); }
+function setP2(p){ vPeriodo2=p; renderVTab(); }
 function setVTab(t){ vTab=t; document.querySelectorAll('.v-tab').forEach(x=>x.classList.remove('active')); event.target.classList.add('active'); renderVTab(); }
 function renderVTab(){
   const el=document.getElementById('v-tab-content'); if(!el) return;
@@ -1511,7 +1367,8 @@ function renderGeneral(){
   const r1=getMainRows(), r2=getCompareRows();
   const v1=sumV(r1,vMetrica), v2=sumV(r2,vMetrica);
   const u1=sumU(r1), u2=sumU(r2);
-  const o1=getOrdenes(r1,getActivePeriodos()), o2=getOrdenes(r2,getComparePeriodos());
+  const o1=getOrdenes(vPeriodo1)||new Set(r1.filter(r=>r['Número de orden']).map(r=>r['Número de orden'])).size||1;
+  const o2=getOrdenes(vPeriodo2)||new Set(r2.filter(r=>r['Número de orden']).map(r=>r['Número de orden'])).size||1;
   const t1=o1>0?v1/o1:0, t2=o2>0?v2/o2:0;
   function delta(a,b){ if(!b) return ''; const p=((a-b)/b*100).toFixed(1); return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p)}%</span>`; }
 
@@ -1630,7 +1487,7 @@ function renderPorLinea(){
 
 // ── BOM DATA ─────────────────────────────────────────────────────
 function buildBOM(){
-  const cacheKey=getActivePeriodos().sort().join(',');
+  const cacheKey=vPeriodo1;
   if(bomCache&&bomCache.key===cacheKey) return bomCache.data;
   const recetas={};
   DATA.compuestos.forEach(r=>{ const cod=(r['Código Compuesto']||'').trim(); if(!cod) return; if(!recetas[cod]) recetas[cod]=[]; recetas[cod].push({comp:(r['Código Componente']||'').trim(),qty:num(r['Cantidad']),nombre:(r['Producto Componente']||'').trim()}); });
