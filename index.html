@@ -1846,7 +1846,9 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
     const faltante = disp - it.qty;
     const costo    = costoDUX[it.sku] || costoDUX[skM] || 0;
     const totalCompraIt = Math.max(0, -faltante) * costo;
-    const rb = rubroMap[it.sku] || rubroMap[skM] || 'OTRO';
+    const rb = rubroMap[it.sku] || rubroMap[skM] ||
+      (/^(FUN-|TIN-)/i.test(it.sku) ? 'LÍNEA NEGRA' :
+       /^(JOJ-|ROS-|KIT)/i.test(it.sku) ? 'LÍNEA BLANCA' : 'OTRO');
     if (!grupos[rb]) grupos[rb] = [];
     grupos[rb].push({ ...it, disp, faltante, skM, costo, totalCompraIt });
   });
