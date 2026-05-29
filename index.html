@@ -758,8 +758,8 @@ function showModule(mod) {
   // Show/hide sticky bars: only show when below inline KPIs (via IntersectionObserver)
   const sb=document.getElementById('sbar-stock');
   const vb=document.getElementById('sbar-ventas');
-  if(sb) sb.classList.toggle('vis', false); // always start hidden; observer will show
-  if(vb) vb.classList.toggle('vis', false);
+  if(sb) sb.classList.remove('vis');
+  if(vb) vb.classList.remove('vis');
   renderCurrentModule();
   // Set up intersection observer after render (not needed for proyeccion)
   if(mod !== 'proyeccion') setTimeout(()=>setupStickyObs(mod), 100);
