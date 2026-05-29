@@ -1732,8 +1732,13 @@ function calcProyeccion(silent) {
     const rec = recetas[sk];
     if (esKit && rec && rec.length) {
       rec.forEach(c => {
-        if (!cProd[c.comp]) cProd[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
-        cProd[c.comp].qty += qty * c.qty;
+        if (/^FOLLETO/i.test(c.comp)) {
+          if (!cIns[c.comp]) cIns[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
+          cIns[c.comp].qty += qty * c.qty;
+        } else {
+          if (!cProd[c.comp]) cProd[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
+          cProd[c.comp].qty += qty * c.qty;
+        }
       });
     } else if (esInsumoDirecto) {
       if (!cIns[sk]) cIns[sk] = { sku: sk, qty: 0, nombre: nomD[sk] || sk };
