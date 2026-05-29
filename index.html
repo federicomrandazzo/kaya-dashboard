@@ -1724,22 +1724,26 @@ function calcProyeccion(silent) {
   const nomD = {}, unD = {};
   DATA.dux.forEach(r => { const c = (r['Código Producto'] || '').trim(); nomD[c] = r['Producto'] || ''; unD[c] = (r['Unidad'] || 'UNIDAD').toUpperCase(); });
 
+  const cIns = {};
   const cProd = {};
   Object.entries(unidadesProy).forEach(([sk, qty]) => {
     const esKit = /^KIT/i.test(sk);
+    const esInsumoDirecto = /^FOLLETO/i.test(sk);
     const rec = recetas[sk];
     if (esKit && rec && rec.length) {
       rec.forEach(c => {
         if (!cProd[c.comp]) cProd[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
         cProd[c.comp].qty += qty * c.qty;
       });
+    } else if (esInsumoDirecto) {
+      if (!cIns[sk]) cIns[sk] = { sku: sk, qty: 0, nombre: nomD[sk] || sk };
+      cIns[sk].qty += qty;
     } else {
       if (!cProd[sk]) cProd[sk] = { sku: sk, qty: 0, nombre: nomD[sk] || sk };
       cProd[sk].qty += qty;
     }
   });
 
-  const cIns = {};
   Object.values(cProd).forEach(it => {
     const rec = recetas[it.sku];
     if (rec && rec.length) {
@@ -1847,8 +1851,9 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
     const costo    = costoDUX[it.sku] || costoDUX[skM] || 0;
     const totalCompraIt = Math.max(0, -faltante) * costo;
     const rb = rubroMap[it.sku] || rubroMap[skM] ||
-      (/^(FUN-|TIN-)/i.test(it.sku) ? 'LÍNEA NEGRA' :
-       /^(JOJ-|ROS-|KIT)/i.test(it.sku) ? 'LÍNEA BLANCA' : 'OTRO');
+      (/^(FUN[\s-]|TIN-)/i.test(it.sku) ? 'LÍNEA NEGRA' :
+       /^(JOJ-|ROS-|KIT)/i.test(it.sku) ? 'LÍNEA BLANCA' :
+       /^FOLLETO/i.test(it.sku) ? 'FOLLETOS' : 'OTRO');
     if (!grupos[rb]) grupos[rb] = [];
     grupos[rb].push({ ...it, disp, faltante, skM, costo, totalCompraIt });
   });
