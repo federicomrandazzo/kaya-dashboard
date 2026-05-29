@@ -1750,6 +1750,7 @@ function calcProyeccion(silent) {
   });
 
   Object.values(cProd).forEach(it => {
+    if (/^FOLLETO/i.test(it.sku)) return; // ya están en cIns desde nivel 1
     const rec = recetas[it.sku];
     if (rec && rec.length) {
       rec.forEach(c => {
