@@ -1765,10 +1765,17 @@ function calcProyeccion(silent) {
   });
 
   // Rubro TN: propagar categoría del padre a variantes via buildTNProducts
+  // Indexar por SKU de TN Y por SKU de DUX (via SKU_MAP inverso)
   const rubroTN = {};
+  const SKU_MAP_INV = {};
+  Object.entries(SKU_MAP).forEach(([dux, tn]) => { SKU_MAP_INV[tn] = dux; });
   buildTNProducts().forEach(p => {
     const rb = isKit(p) ? 'KITS' : isNegra(p) ? 'LÍNEA NEGRA' : 'LÍNEA BLANCA';
-    p.variantes.forEach(v => { rubroTN[v.sku] = rb; });
+    p.variantes.forEach(v => {
+      rubroTN[v.sku] = rb;
+      const duxSku = SKU_MAP_INV[v.sku];
+      if (duxSku) rubroTN[duxSku] = rb;
+    });
   });
 
   // Total a comprar en $ (faltante × costo)
