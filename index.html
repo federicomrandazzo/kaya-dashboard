@@ -1681,7 +1681,7 @@ function calcProyeccion(silent) {
     return;
   }
 
-  const totalRef = filasRef.reduce((s, r) => s + num(r['axi']), 0);
+  const totalRef = filasRef.reduce((s, r) => s + num(r['importe_axi']), 0);
   if (!totalRef) {
     el.innerHTML = `<div class="empty">El mes de referencia no tiene ventas en $.</div>`;
     return;
@@ -1697,7 +1697,7 @@ function calcProyeccion(silent) {
   const unidadesProy = {};
   filasRef.forEach(r => {
     const sk = (r['sku'] || '').trim(); if (!sk) return;
-    const vRef = num(r['axi']);
+    const vRef = num(r['importe_axi']);
     const pct = vRef / totalRef;
     const dollarSk = pct * montoTotal;
     const pp = precioProm[sk] || 0;
