@@ -560,8 +560,11 @@
     <div class="nav-item" onclick="showModule('ventas')" id="nav-ventas">
       <span class="nav-icon">◉</span> Ventas
     </div>
+    <div class="nav-item" onclick="showModule('proyeccion')" id="nav-proyeccion">
+      <span class="nav-icon">◎</span> Proyección
+    </div>
     <div class="nav-item" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">
-      <span class="nav-icon">◎</span> Finanzas
+      <span class="nav-icon">◈</span> Finanzas
     </div>
   </div>
   <div class="sidebar-footer">
@@ -601,6 +604,7 @@
     </div>
     <div id="module-stock" style="display:none;"></div>
     <div id="module-ventas" style="display:none;"></div>
+    <div id="module-proyeccion" style="display:none;"></div>
     <div id="welcome" style="display:none;">
       <h3>Seleccioná un módulo</h3>
       <span>Usá el panel izquierdo para navegar.</span>
@@ -712,6 +716,7 @@ async function loadData() {
   document.getElementById('loading').style.display='flex';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
+  document.getElementById('module-proyeccion').style.display='none';
   try {
     const [dT,tT,cT,vT,oT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
@@ -746,9 +751,10 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':'Ventas';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
+  document.getElementById('module-proyeccion').style.display='none';
   // Show/hide sticky bars: only show when below inline KPIs (via IntersectionObserver)
   const sb=document.getElementById('sbar-stock');
   const vb=document.getElementById('sbar-ventas');
@@ -759,8 +765,9 @@ function showModule(mod) {
   setTimeout(()=>setupStickyObs(mod), 100);
 }
 function renderCurrentModule(){
-  if(currentModule==='stock')  renderStock();
-  if(currentModule==='ventas') renderVentasModule();
+  if(currentModule==='stock')      renderStock();
+  if(currentModule==='ventas')     renderVentasModule();
+  if(currentModule==='proyeccion') renderProyeccion();
 }
 
 // ── STICKY BAR: show ONLY when inline KPIs scroll out of view ───
@@ -1612,6 +1619,186 @@ function renderConsumoInsumos(){
   DATA.dux.forEach(r=>{ skuRub[(r['Código Producto']||'').trim()]=(r['Rubro']||'OTRO').trim().toUpperCase(); });
   return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${getMainLabel()}</strong> · Productos abiertos a insumos</div>
     ${renderConsumoTree(cIns,unD,NS,it=>skuRub[it.sku]||'OTRO',null)}`;
+}
+
+// ── PROYECCIÓN ───────────────────────────────────────────────────
+let proyState = { monto: '', mesRef: '', calculado: false };
+
+function renderProyeccion() {
+  const el = document.getElementById('module-proyeccion');
+  el.style.display = 'block';
+  const periodos = [...new Set(DATA.ventas.map(r => (r['periodo'] || '').trim()).filter(Boolean))].sort();
+  const selOpts = periodos.map(p =>
+    `<option value="${p}" ${proyState.mesRef === p ? 'selected' : ''}>${p}</option>`
+  ).join('');
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:28px;">
+      <div style="font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;">Parámetros de proyección</div>
+      <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Venta proyectada $</div>
+          <input id="proy-monto" type="text" class="v-select" placeholder="Ej: 1500000"
+            value="${proyState.monto}" style="width:180px;" oninput="proyState.monto=this.value" />
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Mes de referencia</div>
+          <select id="proy-mes" class="v-select" style="width:160px;" onchange="proyState.mesRef=this.value">
+            <option value="">— elegir —</option>
+            ${selOpts}
+          </select>
+        </div>
+        <button onclick="calcProyeccion()"
+          style="background:var(--accent);color:#0e0e0e;border:none;padding:8px 20px;border-radius:4px;
+          font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.08em;cursor:pointer;font-weight:500;">
+          Calcular
+        </button>
+      </div>
+    </div>
+    <div id="proy-resultado"></div>
+  `;
+  if (proyState.calculado) calcProyeccion(true);
+}
+
+function calcProyeccion(silent) {
+  if (!silent) {
+    proyState.monto  = document.getElementById('proy-monto').value;
+    proyState.mesRef = document.getElementById('proy-mes').value;
+    proyState.calculado = true;
+  }
+  const montoTotal = num(proyState.monto.replace(/\./g,'').replace(',','.'));
+  const mesRef = proyState.mesRef;
+  const el = document.getElementById('proy-resultado');
+  if (!el) return;
+
+  if (!montoTotal || !mesRef) {
+    el.innerHTML = `<div class="empty">Completá el monto y el mes de referencia para calcular.</div>`;
+    return;
+  }
+
+  const filasRef = DATA.ventas.filter(r => (r['periodo'] || '').trim() === mesRef);
+  if (!filasRef.length) {
+    el.innerHTML = `<div class="empty">Sin datos para el período ${mesRef}.</div>`;
+    return;
+  }
+
+  const totalRef = filasRef.reduce((s, r) => s + num(r['axi']), 0);
+  if (!totalRef) {
+    el.innerHTML = `<div class="empty">El mes de referencia no tiene ventas en $.</div>`;
+    return;
+  }
+
+  const precioProm = {};
+  filasRef.forEach(r => {
+    const sk = (r['sku'] || '').trim(); if (!sk) return;
+    const pp = num(r['precio_prom_axi']);
+    if (pp > 0) precioProm[sk] = pp;
+  });
+
+  const unidadesProy = {};
+  filasRef.forEach(r => {
+    const sk = (r['sku'] || '').trim(); if (!sk) return;
+    const vRef = num(r['axi']);
+    const pct = vRef / totalRef;
+    const dollarSk = pct * montoTotal;
+    const pp = precioProm[sk] || 0;
+    if (!pp) return;
+    unidadesProy[sk] = (unidadesProy[sk] || 0) + (dollarSk / pp);
+  });
+
+  const recetas = {};
+  DATA.compuestos.forEach(r => {
+    const cod = (r['Código Compuesto'] || '').trim(); if (!cod) return;
+    if (!recetas[cod]) recetas[cod] = [];
+    recetas[cod].push({ comp: (r['Código Componente'] || '').trim(), qty: num(r['Cantidad']), nombre: (r['Producto Componente'] || '').trim() });
+  });
+  const nomD = {}, unD = {};
+  DATA.dux.forEach(r => { const c = (r['Código Producto'] || '').trim(); nomD[c] = r['Producto'] || ''; unD[c] = (r['Unidad'] || 'UNIDAD').toUpperCase(); });
+
+  const cProd = {};
+  Object.entries(unidadesProy).forEach(([sk, qty]) => {
+    const esKit = /^KIT/i.test(sk);
+    const rec = recetas[sk];
+    if (esKit && rec && rec.length) {
+      rec.forEach(c => {
+        if (!cProd[c.comp]) cProd[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
+        cProd[c.comp].qty += qty * c.qty;
+      });
+    } else {
+      if (!cProd[sk]) cProd[sk] = { sku: sk, qty: 0, nombre: nomD[sk] || sk };
+      cProd[sk].qty += qty;
+    }
+  });
+
+  const cIns = {};
+  Object.values(cProd).forEach(it => {
+    const rec = recetas[it.sku];
+    if (rec && rec.length) {
+      rec.forEach(c => {
+        if (!cIns[c.comp]) cIns[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
+        cIns[c.comp].qty += it.qty * c.qty;
+      });
+    } else {
+      if (!cIns[it.sku]) cIns[it.sku] = { sku: it.sku, qty: 0, nombre: it.nombre || nomD[it.sku] || it.sku };
+      cIns[it.sku].qty += it.qty;
+    }
+  });
+
+  const stockTN = {};
+  DATA.tn.forEach(r => { const sk = (r['SKU'] || '').trim(); if (sk) stockTN[sk] = num(r['Stock']); });
+
+  const stockDUX = {};
+  DATA.dux.forEach(r => { const c = (r['Código Producto'] || '').trim(); if (c) stockDUX[c] = num(r['Stock Disponible']); });
+
+  el.innerHTML = renderProyTabla('Qué armar', cProd, stockTN, unD, 'pra') +
+                 renderProyTabla('Qué comprar', cIns, stockDUX, unD, 'pri');
+}
+
+function renderProyTabla(titulo, items, stockMap, unD, NS) {
+  const lista = Object.values(items).filter(x => x.qty > 0.001).sort((a, b) => b.qty - a.qty);
+  if (!lista.length) return `<div class="empty">Sin datos para "${titulo}".</div>`;
+
+  function semaforo(necesario, disponible) {
+    const ratio = disponible / necesario;
+    if (ratio >= 1)   return { color: 'var(--accent)',  simbolo: '●', label: 'OK' };
+    if (ratio >= 0.5) return { color: 'var(--accent2)', simbolo: '●', label: 'PARCIAL' };
+    return                   { color: 'var(--accent3)', simbolo: '●', label: 'FALTA' };
+  }
+
+  function fmt(n) { return n >= 1 ? n.toLocaleString('es-AR', { maximumFractionDigits: 1 }) : n.toFixed(3); }
+
+  let h = `<div style="margin-bottom:32px;">`;
+  h += `<div class="v-section-title" style="margin-bottom:16px;">${titulo}</div>`;
+  h += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
+  h += `<div class="tr nc" style="border-top:none;padding:8px 12px;">
+    <span style="width:16px;margin-right:8px;"></span>
+    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Producto / Insumo</span>
+    <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Necesario</span>
+    <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Stock</span>
+    <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Diferencia</span>
+    <span style="min-width:60px;text-align:center;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Estado</span>
+  </div>`;
+
+  lista.forEach(it => {
+    const necesario  = it.qty;
+    const skMapped   = SKU_MAP[it.sku] || it.sku;
+    const disponible = stockMap[it.sku] !== undefined ? stockMap[it.sku] : (stockMap[skMapped] || 0);
+    const diferencia = disponible - necesario;
+    const sem        = semaforo(necesario, disponible);
+    const un         = unD[it.sku] || '';
+    const difColor   = diferencia >= 0 ? 'var(--accent)' : 'var(--accent3)';
+    const difPrefix  = diferencia >= 0 ? '+' : '';
+    h += `<div class="tr l0 nc">
+      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+      <span class="tl">${it.nombre} <span class="sku-badge" style="margin-left:4px;">${it.sku}</span></span>
+      <span style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums;margin-right:8px;">${fmt(necesario)} <span style="font-size:9px;color:var(--muted);">${un}</span></span>
+      <span style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums;margin-right:8px;">${fmt(disponible)} <span style="font-size:9px;color:var(--muted);">${un}</span></span>
+      <span style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums;color:${difColor};margin-right:8px;">${difPrefix}${fmt(diferencia)}</span>
+      <span style="min-width:60px;text-align:center;font-size:11px;color:${sem.color};">${sem.simbolo} <span style="font-size:9px;letter-spacing:0.08em;">${sem.label}</span></span>
+    </div>`;
+  });
+
+  h += `</div></div>`;
+  return h;
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
