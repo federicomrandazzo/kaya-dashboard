@@ -756,6 +756,7 @@ function showModule(mod) {
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   // Show/hide sticky bars: only show when below inline KPIs (via IntersectionObserver)
+  if(window._stickyObs){ window._stickyObs.disconnect(); window._stickyObs=null; }
   const sb=document.getElementById('sbar-stock');
   const vb=document.getElementById('sbar-ventas');
   if(sb) sb.classList.remove('vis');
