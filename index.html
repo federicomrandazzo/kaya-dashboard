@@ -761,8 +761,8 @@ function showModule(mod) {
   if(sb) sb.classList.toggle('vis', false); // always start hidden; observer will show
   if(vb) vb.classList.toggle('vis', false);
   renderCurrentModule();
-  // Set up intersection observer after render
-  setTimeout(()=>setupStickyObs(mod), 100);
+  // Set up intersection observer after render (not needed for proyeccion)
+  if(mod !== 'proyeccion') setTimeout(()=>setupStickyObs(mod), 100);
 }
 function renderCurrentModule(){
   if(currentModule==='stock')      renderStock();
@@ -1756,12 +1756,11 @@ function calcProyeccion(silent) {
     rubroDUX[c] = (r['Rubro'] || 'OTRO').trim().toUpperCase();
   });
 
-  // Rubro para productos terminados: usar linea desde DATA.tn categorías
+  // Rubro para productos terminados: propagar categoría del padre a variantes
   const rubroTN = {};
-  DATA.tn.forEach(r => {
-    const sk = (r['SKU'] || '').trim(); if (!sk) return;
-    const cats = (r['Categorías'] || '').toUpperCase();
-    rubroTN[sk] = /negra|adaptógeno|adaptogeno/i.test(cats) ? 'LÍNEA NEGRA' : 'LÍNEA BLANCA';
+  buildTNProducts().forEach(p => {
+    const rb = isKit(p) ? 'KITS' : isNegra(p) ? 'LÍNEA NEGRA' : 'LÍNEA BLANCA';
+    p.variantes.forEach(v => { rubroTN[v.sku] = rb; });
   });
 
   // Calcular total a comprar en $ (solo faltante × costo)
@@ -1801,8 +1800,8 @@ function calcProyeccion(silent) {
   </div>`;
 
   el.innerHTML = resumen +
-    renderProyTabla('Qué armar', cProd, stockTN, rubroTN, unD, costoDUX, false, 'pra') +
-    renderProyTabla('Qué comprar', cIns, stockDUX, rubroDUX, unD, costoDUX, true, 'pri');
+    renderProyTabla('Qué comprar', cIns, stockDUX, rubroDUX, unD, costoDUX, true, 'pri') +
+    renderProyTabla('Qué armar', cProd, stockTN, rubroTN, unD, costoDUX, false, 'pra');
 }
 
 function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostrarCosto, NS) {
