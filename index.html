@@ -1749,22 +1749,25 @@ function calcProyeccion(silent) {
     }
   });
 
+  const stockTN = {};
+  DATA.tn.forEach(r => { const sk = (r['SKU'] || '').trim(); if (sk) stockTN[sk] = num(r['Stock']); });
+
   Object.values(cProd).forEach(it => {
-    if (/^FOLLETO/i.test(it.sku)) return; // ya están en cIns desde nivel 1
+    if (/^FOLLETO/i.test(it.sku)) return;
+    const skM = SKU_MAP[it.sku] || it.sku;
+    const dispTN = stockTN[it.sku] !== undefined ? stockTN[it.sku] : (stockTN[skM] || 0);
+    const qtyNeta = Math.max(0, it.qty - dispTN);
     const rec = recetas[it.sku];
     if (rec && rec.length) {
       rec.forEach(c => {
         if (!cIns[c.comp]) cIns[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
-        cIns[c.comp].qty += it.qty * c.qty;
+        cIns[c.comp].qty += qtyNeta * c.qty;
       });
     } else {
       if (!cIns[it.sku]) cIns[it.sku] = { sku: it.sku, qty: 0, nombre: it.nombre || nomD[it.sku] || it.sku };
-      cIns[it.sku].qty += it.qty;
+      cIns[it.sku].qty += qtyNeta;
     }
   });
-
-  const stockTN = {};
-  DATA.tn.forEach(r => { const sk = (r['SKU'] || '').trim(); if (sk) stockTN[sk] = num(r['Stock']); });
 
   const stockDUX = {}, costoDUX = {}, rubroDUX = {};
   DATA.dux.forEach(r => {
