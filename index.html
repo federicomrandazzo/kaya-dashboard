@@ -1756,13 +1756,13 @@ function calcProyeccion(silent) {
     const sk = (r['SKU'] || '').trim(); if (!sk) return;
     const qty = num(r['Stock']);
     stockTN[sk] = (stockTN[sk] || 0) + qty;
-    // Indexar por SKU de compuestos via mapa inverso (ej: TIN-ASH-100 → TIN-ASH100)
     const comp = TN_TO_COMP[sk];
     if (comp) stockTN[comp] = (stockTN[comp] || 0) + qty;
-    // También normalizar quitando guión antes de números (ej: TIN-ASH-100 → TIN-ASH100)
     const norm = sk.replace(/-(\d)/g, '$1');
     if (norm !== sk) stockTN[norm] = (stockTN[norm] || 0) + qty;
+    if (/TIN-ASH|TIN-GIN|FUN-MDL|TIN-TREM/i.test(sk)) console.log('TN row:', sk, qty, '→ comp:', comp, '→ norm:', norm);
   });
+  console.log('stockTN TIN-ASH:', stockTN['TIN-ASH'], '| TIN-ASH100:', stockTN['TIN-ASH100'], '| TIN-ASH-100:', stockTN['TIN-ASH-100']);
 
   Object.values(cProd).forEach(it => {
     if (/^FOLLETO/i.test(it.sku)) return;
