@@ -1755,7 +1755,7 @@ function calcProyeccion(silent) {
   DATA.tn.forEach(r => {
     const sk = (r['SKU'] || '').trim(); if (!sk) return;
     const qty = num(r['Stock']);
-    stockTN[sk] = qty;
+    stockTN[sk] = (stockTN[sk] || 0) + qty;
     // Indexar por SKU de compuestos via mapa inverso (ej: TIN-ASH-100 → TIN-ASH100)
     const comp = TN_TO_COMP[sk];
     if (comp) stockTN[comp] = (stockTN[comp] || 0) + qty;
