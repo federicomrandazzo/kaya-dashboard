@@ -1769,6 +1769,7 @@ function calcProyeccion(silent) {
     const skM = SKU_MAP[it.sku] || it.sku;
     const dispTN = stockTN[it.sku] !== undefined ? stockTN[it.sku] : (stockTN[skM] || 0);
     const qtyNeta = Math.max(0, it.qty - dispTN);
+    if (/ASH|MDL|TREM|GIN/i.test(it.sku)) console.log('cProd:', it.sku, '| qty:', it.qty.toFixed(1), '| dispTN:', dispTN, '| neta:', qtyNeta.toFixed(1));
     const rec = recetas[it.sku];
     if (rec && rec.length) {
       rec.forEach(c => {
