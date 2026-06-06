@@ -1760,25 +1760,26 @@ function calcProyeccion(silent) {
     if (comp) stockTN[comp] = (stockTN[comp] || 0) + qty;
     const norm = sk.replace(/-(\d)/g, '$1');
     if (norm !== sk) stockTN[norm] = (stockTN[norm] || 0) + qty;
-    if (/TIN-ASH|TIN-GIN|FUN-MDL|TIN-TREM/i.test(sk)) console.log('TN row:', sk, qty, '→ comp:', comp, '→ norm:', norm);
   });
-  console.log('stockTN TIN-ASH:', stockTN['TIN-ASH'], '| TIN-ASH100:', stockTN['TIN-ASH100'], '| TIN-ASH-100:', stockTN['TIN-ASH-100']);
 
+  // stockArmado: lts ya embotellados por insumo (stock TN × receta)
+  const stockArmado = {};
   Object.values(cProd).forEach(it => {
     if (/^FOLLETO/i.test(it.sku)) return;
     const skM = SKU_MAP[it.sku] || it.sku;
     const dispTN = stockTN[it.sku] !== undefined ? stockTN[it.sku] : (stockTN[skM] || 0);
     const qtyNeta = Math.max(0, it.qty - dispTN);
-    if (/ASH|MDL|TREM|GIN/i.test(it.sku)) console.log('cProd:', it.sku, '| qty:', it.qty.toFixed(1), '| dispTN:', dispTN, '| neta:', qtyNeta.toFixed(1));
     const rec = recetas[it.sku];
     if (rec && rec.length) {
       rec.forEach(c => {
         if (!cIns[c.comp]) cIns[c.comp] = { sku: c.comp, qty: 0, nombre: c.nombre || nomD[c.comp] || c.comp };
-        cIns[c.comp].qty += qtyNeta * c.qty;
+        cIns[c.comp].qty += it.qty * c.qty; // qty total (antes del descuento)
+        stockArmado[c.comp] = (stockArmado[c.comp] || 0) + dispTN * c.qty; // lts ya embotellados
       });
     } else {
       if (!cIns[it.sku]) cIns[it.sku] = { sku: it.sku, qty: 0, nombre: it.nombre || nomD[it.sku] || it.sku };
-      cIns[it.sku].qty += qtyNeta;
+      cIns[it.sku].qty += it.qty;
+      stockArmado[it.sku] = (stockArmado[it.sku] || 0) + dispTN;
     }
   });
 
@@ -1838,8 +1839,8 @@ function calcProyeccion(silent) {
     </div>
   </div>`;
 
-  const tabComprar = renderProyTabla('Qué comprar', cIns, stockDUX, rubroDUX, unD, costoDUX, true,  'pri');
-  const tabArmar   = renderProyTabla('Qué armar',   cProd, stockTN,  rubroTN,  unD, costoDUX, false, 'pra');
+  const tabComprar = renderProyTabla('Qué comprar', cIns, stockDUX, rubroDUX, unD, costoDUX, true,  stockArmado, 'pri');
+  const tabArmar   = renderProyTabla('Qué armar',   cProd, stockTN,  rubroTN,  unD, costoDUX, false, {},          'pra');
   const tab = proyState.tab || 'comprar';
 
   el.innerHTML = resumen + `
@@ -1852,7 +1853,7 @@ function calcProyeccion(silent) {
   `;
 }
 
-function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostrarCosto, NS) {
+function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostrarCosto, stockArmadoMap, NS) {
   const lista = Object.values(items).filter(x => x.qty > 0.001);
   if (!lista.length) return `<div class="empty">Sin datos para "${titulo}".</div>`;
 
@@ -1869,7 +1870,8 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
   lista.forEach(it => {
     const skM  = SKU_MAP[it.sku] || it.sku;
     const disp = stockMap[it.sku] !== undefined ? stockMap[it.sku] : (stockMap[skM] || 0);
-    const faltante = disp - it.qty;
+    const armado = mostrarCosto ? (stockArmadoMap[it.sku] || stockArmadoMap[skM] || 0) : 0;
+    const faltante = disp + armado - it.qty; // negativo = falta
     const costo    = costoDUX[it.sku] || costoDUX[skM] || 0;
     const totalCompraIt = Math.max(0, -faltante) * costo;
     const rb = rubroMap[it.sku] || rubroMap[skM] ||
@@ -1877,7 +1879,7 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
        /^(JOJ-|ROS-|KIT)/i.test(it.sku) ? 'LÍNEA BLANCA' :
        /^FOLLETO/i.test(it.sku) ? 'FOLLETOS' : 'OTRO');
     if (!grupos[rb]) grupos[rb] = [];
-    grupos[rb].push({ ...it, disp, faltante, skM, costo, totalCompraIt });
+    grupos[rb].push({ ...it, disp, armado, faltante, skM, costo, totalCompraIt });
   });
 
   // Ordenar rubros por total $ a comprar desc (si mostrarCosto), si no por faltante
@@ -1896,13 +1898,17 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
     ? `<span style="min-width:80px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Costo u.</span>
        <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Total compra</span>`
     : '';
+  const colArmadoHdr = mostrarCosto
+    ? `<span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Stock armado</span>`
+    : '';
 
   let h = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;">`;
   h += `<div class="tr nc" style="border-top:none;padding:8px 12px;">
     <span style="width:16px;margin-right:8px;"></span>
     <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Rubro / Ítem</span>
     <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Necesario</span>
-    <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Stock</span>
+    <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">${mostrarCosto ? 'Stock insumo' : 'Stock'}</span>
+    ${colArmadoHdr}
     <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Diferencia</span>
     ${colCostoHdr}
     <span style="min-width:66px;text-align:center;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Estado</span>
@@ -1938,11 +1944,17 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
     its.forEach(it => {
       const necesario  = it.qty;
       const disponible = it.disp;
+      const armado     = it.armado || 0;
       const diferencia = it.faltante;
-      const sem        = semaforo(necesario, disponible);
+      const totalDisp  = disponible + armado;
+      const sem        = semaforo(necesario, totalDisp);
       const un         = unD[it.sku] || '';
       const difColor   = diferencia >= 0 ? 'var(--accent)' : 'var(--accent3)';
       const difPrefix  = diferencia >= 0 ? '+' : '';
+
+      const colArmadoRow = mostrarCosto
+        ? `<span style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums;margin-right:8px;color:var(--accent2);">${fmt(armado)} <span style="font-size:9px;color:var(--muted);">${un}</span></span>`
+        : '';
 
       const colCostoRow = mostrarCosto
         ? `<span style="min-width:80px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);margin-right:8px;font-size:11px;">${it.costo > 0 ? pesos(it.costo) : '—'}</span>
@@ -1954,6 +1966,7 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
         <span class="tl">${it.nombre} <span class="sku-badge" style="margin-left:4px;">${it.sku}</span></span>
         <span style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums;margin-right:8px;">${fmt(necesario)} <span style="font-size:9px;color:var(--muted);">${un}</span></span>
         <span style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums;margin-right:8px;">${fmt(disponible)} <span style="font-size:9px;color:var(--muted);">${un}</span></span>
+        ${colArmadoRow}
         <span style="min-width:90px;text-align:right;font-variant-numeric:tabular-nums;color:${difColor};margin-right:8px;">${difPrefix}${fmt(diferencia)}</span>
         ${colCostoRow}
         <span style="min-width:66px;text-align:center;font-size:11px;color:${sem.color};">● <span style="font-size:9px;letter-spacing:0.08em;">${sem.label}</span></span>
