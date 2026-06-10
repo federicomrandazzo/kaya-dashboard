@@ -538,7 +538,8 @@ function buildRow(c, i, zs, bought, isInact){
   var obsTd=obsTxt?'<span class="obs" title="'+esc(obsTxt)+'">'+esc(obsTxt)+'</span>':'';
   var estado=bought?'<span class="gtag">Compr&#243;</span>':'<span class="stag">Sin compra</span>';
   var detId='det-'+(++detCounter);
-  var btnHtml='<button class="exp-btn" onclick="toggleDet(\''+detId+'\');this.classList.toggle(\'open\')">'+(bought?'Ver compras':'&#250;lt. 3 compras')+'</button>';
+  var _oc="toggleDet('"+detId+"');this.classList.toggle('open')";
+  var btnHtml='<button class="exp-btn" onclick="'+_oc+'">'+(bought?'Ver compras':'&#250;lt. 3 compras')+'</button>';
   var detContent=bought?buildDetBought(c,zs):buildDetNoBought(c,zs);
   return '<tr class="crow">'+
     '<td class="idx">'+(i+1)+'</td>'+
