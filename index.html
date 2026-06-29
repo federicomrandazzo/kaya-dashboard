@@ -556,6 +556,9 @@
     <div class="nav-item active" onclick="showModule('stock')" id="nav-stock">
       <span class="nav-icon">◈</span> Stock
     </div>
+    <div class="nav-item" onclick="showModule('kh')" id="nav-kh">
+      <span class="nav-icon">⬡</span> Operaciones
+    </div>
     <div class="nav-item" onclick="showModule('ventas')" id="nav-ventas">
       <span class="nav-icon">◉</span> Ventas
     </div>
@@ -567,10 +570,6 @@
     </div>
     <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
       <span class="nav-icon">◑</span> Estado de Resultados
-    </div>
-    <div class="nav-section-label" style="margin-top:20px;">Operaciones</div>
-    <div class="nav-item" onclick="showModule('kh')" id="nav-kh">
-      <span class="nav-icon">⬡</span> Kaya House
     </div>
   </div>
   <div class="sidebar-footer">
@@ -764,7 +763,7 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Kaya House':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
