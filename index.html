@@ -1394,7 +1394,7 @@ function renderGeneral(){
   const W=700,H=160,PL=55,PR=10,PT=14,PB=28,PW=W-PL-PR,PH=H-PT-PB;
   const allVals=Object.values(byYear).flatMap(a=>a.filter(v=>v!==null));
   const maxV=Math.max(...allVals,1);
-  const COLORS=['#94a3b8','#b89021','#c0392b','#2563eb','#7c3aed'];
+  const COLORS=['#2563eb','#d97706','#c0392b','#7c3aed','#0891b2'];
   const selY1=vPeriodo1?Number(vPeriodo1.split('-')[0]):null;
   const selY2=vPeriodo2?Number(vPeriodo2.split('-')[0]):null;
   function xOf(i){ return PL+(i/11)*PW; }
@@ -1403,8 +1403,8 @@ function renderGeneral(){
   [0,0.25,0.5,0.75,1].forEach(f=>{ const y=yOf(f*maxV); const lbl=f*maxV>=1e6?`${(f*maxV/1e6).toFixed(1)}M`:f*maxV>=1e3?`${Math.round(f*maxV/1e3)}k`:`${Math.round(f*maxV)}`; svgG+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="#d4c090" stroke-width="1"/><text x="${PL-5}" y="${y+4}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${lbl}</text>`; });
   months.forEach((m,i)=>{ svgG+=`<text x="${xOf(i)}" y="${H-PB+16}" text-anchor="middle" fill="#7a7570" font-size="8" font-family="DM Mono,monospace">${m}</text>`; });
   years.forEach((yr,yi)=>{
-    const color=COLORS[yi%COLORS.length]; const isSel=yr===selY1||yr===selY2; const op=isSel?1:0.28;
-    const sw=yr===selY1?2.5:yr===selY2?2:1.2;
+    const color=COLORS[yi%COLORS.length]; const isSel=yr===selY1||yr===selY2; const op=isSel?1:0.6;
+    const sw=yr===selY1?2.5:yr===selY2?2:1.8;
     const pts=byYear[yr].map((v,i)=>v!==null?{x:xOf(i),y:yOf(v),v,i}:null).filter(Boolean);
     if(!pts.length) return;
     let d=`M ${pts[0].x} ${pts[0].y}`;
