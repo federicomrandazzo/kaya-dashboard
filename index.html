@@ -568,6 +568,10 @@
     <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
       <span class="nav-icon">◑</span> Estado de Resultados
     </div>
+    <div class="nav-section-label" style="margin-top:20px;">Operaciones</div>
+    <div class="nav-item" onclick="showModule('kh')" id="nav-kh">
+      <span class="nav-icon">⬡</span> Kaya House
+    </div>
   </div>
   <div class="sidebar-footer">
     <div id="last-update-sidebar">—</div>
@@ -608,6 +612,7 @@
     <div id="module-ventas" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
     <div id="module-edr" style="display:none;"></div>
+    <div id="module-kh" style="display:none;"></div>
     <div id="welcome" style="display:none;">
       <h3>Seleccioná un módulo</h3>
       <span>Usá el panel izquierdo para navegar.</span>
@@ -624,6 +629,7 @@ const URLS = {
   compuestos: `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1843338909&single=true&output=csv`,
   ventas:     `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1630061936&single=true&output=csv`,
   ordenes:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
+  produccion: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
 };
 
 const SKU_MAP = {
@@ -647,7 +653,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[]};
 let currentModule = 'stock';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -721,19 +727,22 @@ async function loadData() {
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
+  document.getElementById('module-kh').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
       fetch(URLS.ventas).then(r=>r.text()),
       fetch(URLS.ordenes).then(r=>r.text()),
+      fetch(URLS.produccion).then(r=>r.text()),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
     DATA.compuestos = parseCSV(cT.split('\n').slice(2).join('\n')).filter(r=>r['Código Compuesto']);
     DATA.ventas  = parseCSV(vT).filter(r=>r['periodo']&&r['periodo'].trim());
     DATA.ordenes = parseCSV(oT).filter(r=>r['periodo']&&r['periodo'].trim());
+    DATA.produccion = parseCSV(pT).filter(r=>r['fecha']&&r['cantidad']);
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -755,11 +764,12 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='edr'?'Estado de Resultados':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Kaya House':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
+  document.getElementById('module-kh').style.display='none';
   // Show/hide sticky bars: only show when below inline KPIs (via IntersectionObserver)
   if(window._stickyObs){ window._stickyObs.disconnect(); window._stickyObs=null; }
   const sb=document.getElementById('sbar-stock');
@@ -775,6 +785,7 @@ function renderCurrentModule(){
   if(currentModule==='ventas')     renderVentasModule();
   if(currentModule==='proyeccion') renderProyeccion();
   if(currentModule==='edr')        renderEDR();
+  if(currentModule==='kh')         renderKayaHouse();
 }
 
 // ── STICKY BAR: show ONLY when inline KPIs scroll out of view ───
@@ -1992,6 +2003,183 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
   }
 
   return h;
+}
+
+// ── KAYA HOUSE ───────────────────────────────────────────────────
+let khTab = 'produccion';
+let khPeriodo = 'todo';
+
+function formatMes(ym) {
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const [y, m] = ym.split('-').map(Number);
+  return `${meses[m-1]} ${y}`;
+}
+
+function renderKayaHouse() {
+  const el = document.getElementById('module-kh');
+  el.style.display = 'block';
+  if (!DATA.produccion || !DATA.produccion.length) {
+    el.innerHTML = '<div class="empty" style="padding:60px 0;">Sin datos de producción.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="tabs">
+      <div class="tab ${khTab==='produccion'?'active':''}" onclick="setKHTab('produccion')">Producción</div>
+      <div class="tab" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">Asistencias</div>
+      <div class="tab" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">Pedidos</div>
+    </div>
+    <div id="kh-tab-content"></div>`;
+  renderKHContent();
+}
+
+function setKHTab(tab) {
+  khTab = tab;
+  document.querySelectorAll('#module-kh .tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  renderKHContent();
+}
+
+function renderKHContent() {
+  const el = document.getElementById('kh-tab-content');
+  if (!el) return;
+  if (khTab === 'produccion') el.innerHTML = renderProduccion();
+}
+
+function renderProduccion() {
+  const periodos = [...new Set(DATA.produccion.map(r => (r['fecha']||'').substring(0,7)))].filter(Boolean).sort();
+  const periodOpts =
+    `<option value="todo" ${khPeriodo==='todo'?'selected':''}>Todo el período</option>` +
+    periodos.map(p => `<option value="${p}" ${p===khPeriodo?'selected':''}>${formatMes(p)}</option>`).join('');
+
+  const rows = khPeriodo==='todo'
+    ? DATA.produccion
+    : DATA.produccion.filter(r=>(r['fecha']||'').startsWith(khPeriodo));
+
+  if (!rows.length) return '<div class="empty">Sin datos para este período.</div>';
+
+  const totalUds = rows.reduce((s,r)=>s+num(r['cantidad']),0);
+  const diasUnicos = new Set(rows.map(r=>r['fecha'])).size;
+  const promDia = diasUnicos > 0 ? totalUds / diasUnicos : 0;
+
+  // By employee
+  const byEmp = {};
+  rows.forEach(r => {
+    const emp = (r['responsable']||'Sin asignar').trim();
+    if (!byEmp[emp]) byEmp[emp] = {total:0, dias:new Set(), porProd:{}};
+    byEmp[emp].total += num(r['cantidad']);
+    byEmp[emp].dias.add(r['fecha']);
+    const prod = (r['producto']||'').trim();
+    byEmp[emp].porProd[prod] = (byEmp[emp].porProd[prod]||0) + num(r['cantidad']);
+  });
+
+  // By product + medida
+  const byProd = {};
+  rows.forEach(r => {
+    const prod = (r['producto']||'').trim();
+    const med  = (r['medida']||'').trim();
+    if (!byProd[prod]) byProd[prod] = {total:0, medidas:{}};
+    byProd[prod].total += num(r['cantidad']);
+    byProd[prod].medidas[med] = (byProd[prod].medidas[med]||0) + num(r['cantidad']);
+  });
+
+  const allMed = [...new Set(rows.map(r=>(r['medida']||'').trim()))].filter(Boolean)
+    .sort((a,b)=>parseInt(a)-parseInt(b));
+
+  const prodTop = Object.entries(byProd).sort((a,b)=>b[1].total-a[1].total)[0];
+
+  // Monthly trend (bar chart)
+  const byMonth = {};
+  DATA.produccion.forEach(r => {
+    const m = (r['fecha']||'').substring(0,7); if(!m) return;
+    byMonth[m] = (byMonth[m]||0) + num(r['cantidad']);
+  });
+  const mKeys = Object.keys(byMonth).sort();
+  const maxM = Math.max(...Object.values(byMonth), 1);
+  const barW = 100 / mKeys.length;
+  const bars = mKeys.map(m => {
+    const h = Math.round((byMonth[m]/maxM)*100);
+    const isSelected = khPeriodo === m;
+    const lbl = byMonth[m]>=1000 ? Math.round(byMonth[m]/1000)+'k' : byMonth[m];
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end;">
+      <div style="font-size:8px;color:var(--muted);">${lbl}</div>
+      <div style="width:80%;border-radius:3px 3px 0 0;background:${isSelected?'var(--accent)':'var(--surface2)'};border:1px solid ${isSelected?'var(--accent)':'var(--border)'};height:${h}%;min-height:2px;cursor:pointer;transition:opacity 0.15s;"
+        onclick="khPeriodo='${m}';renderKHContent();"
+        onmouseover="this.style.opacity='0.75'" onmouseout="this.style.opacity='1'"></div>
+      <div style="font-size:8px;color:var(--muted);transform:rotate(-35deg);transform-origin:top right;white-space:nowrap;margin-top:2px;">${formatMes(m)}</div>
+    </div>`;
+  }).join('');
+
+  // Employee table rows
+  const empRows = Object.entries(byEmp)
+    .sort((a,b)=>b[1].total-a[1].total)
+    .map(([emp,d]) => {
+      const topProd = Object.entries(d.porProd).sort((a,b)=>b[1]-a[1])[0];
+      const prom = d.dias.size > 0 ? (d.total/d.dias.size).toFixed(0) : 0;
+      return `<tr>
+        <td>${emp}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;">${d.dias.size}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;color:var(--accent);">${Math.round(d.total).toLocaleString('es-AR')}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${prom}</td>
+        <td style="color:var(--muted);font-size:11px;">${topProd?topProd[0]:'—'}</td>
+      </tr>`;
+    }).join('');
+
+  // Product table rows
+  const medHeaders = allMed.map(m=>`<th style="text-align:right;">${m}</th>`).join('');
+  const prodRows = Object.entries(byProd)
+    .sort((a,b)=>b[1].total-a[1].total)
+    .map(([prod,d]) => {
+      const medCols = allMed.map(m=>`<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${((d.medidas[m]||0)).toLocaleString('es-AR')}</td>`).join('');
+      return `<tr>
+        <td>${prod}</td>
+        ${medCols}
+        <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${Math.round(d.total).toLocaleString('es-AR')}</td>
+      </tr>`;
+    }).join('');
+
+  const resetBtn = khPeriodo !== 'todo'
+    ? `<button onclick="khPeriodo='todo';renderKHContent();" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:4px;cursor:pointer;font-family:'Red Hat Display',sans-serif;font-size:10px;letter-spacing:0.06em;">✕ Quitar filtro</button>`
+    : '';
+
+  return `
+    <div style="margin-bottom:20px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;">Período</span>
+      <select class="v-select" onchange="khPeriodo=this.value;renderKHContent();">${periodOpts}</select>
+      ${resetBtn}
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
+      <div class="v-kpi"><div class="v-kpi-label">Unidades producidas</div><div class="v-kpi-val" style="color:var(--accent);">${Math.round(totalUds).toLocaleString('es-AR')}</div><div class="v-kpi-sub">${diasUnicos} días de producción</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Promedio diario</div><div class="v-kpi-val">${promDia.toFixed(0)}</div><div class="v-kpi-sub">unidades / día</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Producto top</div><div class="v-kpi-val" style="font-size:14px;">${prodTop?prodTop[0]:'—'}</div><div class="v-kpi-sub">${prodTop?Math.round(prodTop[1].total).toLocaleString('es-AR')+' uds':''}</div></div>
+    </div>
+
+    <div class="v-chart-wrap" style="margin-bottom:28px;">
+      <div class="v-chart-title" style="margin-bottom:16px;">Producción mensual · clic para filtrar</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:120px;padding-bottom:32px;">${bars}</div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Por empleado</div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Empleado</th><th style="text-align:right;">Días</th>
+          <th style="text-align:right;">Unidades</th><th style="text-align:right;">Prom/día</th>
+          <th>Producto top</th>
+        </tr></thead>
+        <tbody>${empRows}</tbody>
+      </table>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Por producto</div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Producto</th>${medHeaders}<th style="text-align:right;">Total</th>
+        </tr></thead>
+        <tbody>${prodRows}</tbody>
+      </table>
+    </div>`;
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
