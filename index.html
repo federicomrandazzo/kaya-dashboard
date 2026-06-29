@@ -2060,45 +2060,102 @@ function renderAsistencias() {
   const rows = DATA.asistencias;
   if (!rows.length) return '<div class="empty" style="padding:60px 0;">Sin datos de asistencias.</div>';
 
-  // Normalise motivo
   const data = rows.map(r => ({
-    fecha:     (r['Fecha']||'').trim(),
-    nombre:    (r['Nombre']||'').trim(),
-    motivo:    normMotivo(r['Motivo']||''),
-    comentario:(r['Comentario']||'').trim(),
+    fecha:      (r['Fecha']||'').trim(),
+    nombre:     (r['Nombre']||'').trim(),
+    motivo:     normMotivo(r['Motivo']||''),
+    comentario: (r['Comentario']||'').trim(),
   }));
 
-  const total       = data.length;
-  const inasist     = data.filter(r => r.motivo !== 'Llegada tarde').length;
-  const tardanzas   = data.filter(r => r.motivo === 'Llegada tarde').length;
+  const total     = data.length;
+  const inasist   = data.filter(r => r.motivo !== 'Llegada tarde').length;
+  const tardanzas = data.filter(r => r.motivo === 'Llegada tarde').length;
 
-  // By employee
-  const byEmp = {};
+  // ── Daily aggregates for chart ──
+  const byDia = {};
   data.forEach(r => {
-    if (!byEmp[r.nombre]) byEmp[r.nombre] = {inasist:0, tarde:0, total:0};
-    if (r.motivo === 'Llegada tarde') byEmp[r.nombre].tarde++;
+    if (!byDia[r.fecha]) byDia[r.fecha] = {faltas:0, tardanzas:0};
+    if (r.motivo === 'Llegada tarde') byDia[r.fecha].tardanzas++;
+    else byDia[r.fecha].faltas++;
+  });
+  const dias = Object.keys(byDia).sort((a,b) => {
+    const [da,ma]=a.split('/').map(Number), [db,mb]=b.split('/').map(Number);
+    return (ma*100+da)-(mb*100+db);
+  });
+
+  // ── SVG dual-line chart ──
+  const W=660, H=130, PL=28, PR=12, PT=14, PB=30, PW=W-PL-PR, PH=H-PT-PB;
+  const maxV = Math.max(...dias.map(d=>Math.max(byDia[d].faltas, byDia[d].tardanzas)), 1);
+  const n = dias.length;
+  function xOf(i) { return n>1 ? PL+(i/(n-1))*PW : PL+PW/2; }
+  function yOf(v)  { return PT+PH-(v/maxV)*PH; }
+
+  let svgGrid='';
+  [...new Set([0, Math.round(maxV/2), maxV])].forEach(v => {
+    const y=yOf(v);
+    svgGrid+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e0cfa0" stroke-width="1"/>
+      <text x="${(PL-4).toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${v}</text>`;
+  });
+
+  const fPts = dias.map((d,i)=>({x:xOf(i), y:yOf(byDia[d].faltas),    v:byDia[d].faltas}));
+  const tPts = dias.map((d,i)=>({x:xOf(i), y:yOf(byDia[d].tardanzas), v:byDia[d].tardanzas}));
+
+  function makeLine(pts, color) {
+    if (pts.length < 2) return `<circle cx="${pts[0].x.toFixed(1)}" cy="${pts[0].y.toFixed(1)}" r="4" fill="${color}"/>`;
+    let d=`M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for(let k=1;k<pts.length;k++){
+      const cx=((pts[k-1].x+pts[k].x)/2).toFixed(1);
+      d+=` C ${cx} ${pts[k-1].y.toFixed(1)} ${cx} ${pts[k].y.toFixed(1)} ${pts[k].x.toFixed(1)} ${pts[k].y.toFixed(1)}`;
+    }
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2"/>`;
+  }
+  function makeDots(pts, color) {
+    return pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${color}" stroke="#faf8f4" stroke-width="1.5"/>`).join('');
+  }
+  function makeLabels(pts, color) {
+    return pts.filter(p=>p.v>0).map(p=>`<text x="${p.x.toFixed(1)}" y="${(p.y-9).toFixed(1)}" text-anchor="middle" fill="${color}" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">${p.v}</text>`).join('');
+  }
+  const step = n>14 ? Math.ceil(n/10) : 1;
+  const xLbls = dias.map((d,i)=>i%step===0
+    ?`<text x="${xOf(i).toFixed(1)}" y="${H-PB+18}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${d}</text>`
+    :'').join('');
+
+  const chartSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H+16}" style="width:100%;max-height:${H+16}px;overflow:visible;">
+    <circle cx="10" cy="9" r="4" fill="#c0392b"/>
+    <text x="18" y="13" fill="#1a1a1a" font-size="9" font-family="Red Hat Display,sans-serif">Faltas</text>
+    <circle cx="62" cy="9" r="4" fill="#d97706"/>
+    <text x="70" y="13" fill="#1a1a1a" font-size="9" font-family="Red Hat Display,sans-serif">Tardanzas</text>
+    <g transform="translate(0,16)">
+      ${svgGrid}
+      ${makeLine(fPts,'#c0392b')}${makeLine(tPts,'#d97706')}
+      ${makeDots(fPts,'#c0392b')}${makeDots(tPts,'#d97706')}
+      ${makeLabels(fPts,'#c0392b')}${makeLabels(tPts,'#d97706')}
+      ${xLbls}
+    </g>
+  </svg>`;
+
+  // ── By employee ──
+  const byEmp={};
+  data.forEach(r=>{
+    if(!byEmp[r.nombre]) byEmp[r.nombre]={inasist:0,tarde:0,total:0};
+    if(r.motivo==='Llegada tarde') byEmp[r.nombre].tarde++;
     else byEmp[r.nombre].inasist++;
     byEmp[r.nombre].total++;
   });
+  const empRows=Object.entries(byEmp).sort((a,b)=>b[1].total-a[1].total).map(([nombre,d])=>`<tr>
+    <td>${nombre}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--accent3);">${d.inasist||'—'}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--accent2);">${d.tarde||'—'}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${d.total}</td>
+  </tr>`).join('');
 
-  const empRows = Object.entries(byEmp)
-    .sort((a,b) => b[1].total - a[1].total)
-    .map(([nombre, d]) => `<tr>
-      <td>${nombre}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--accent3);">${d.inasist || '—'}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--accent2);">${d.tarde || '—'}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${d.total}</td>
-    </tr>`).join('');
-
-  // Detail log sorted by fecha desc (DD/MM format — sort as string MM/DD for correct order)
-  const sorted = [...data].sort((a,b) => {
-    const [da,ma] = a.fecha.split('/'); const [db,mb] = b.fecha.split('/');
-    return (Number(ma)*100+Number(da)) - (Number(mb)*100+Number(db));
-  }).reverse();
-
-  const motivoColor = m => m==='Llegada tarde'?'var(--accent2)':m==='Enfermedad'?'var(--accent3)':'var(--text)';
-
-  const detailRows = sorted.map(r => `<tr>
+  // ── Detail log ──
+  const sorted=[...data].sort((a,b)=>{
+    const [da,ma]=a.fecha.split('/').map(Number),[db,mb]=b.fecha.split('/').map(Number);
+    return (mb*100+db)-(ma*100+da);
+  });
+  const motivoColor=m=>m==='Llegada tarde'?'var(--accent2)':'var(--accent3)';
+  const detailRows=sorted.map(r=>`<tr>
     <td style="font-variant-numeric:tabular-nums;color:var(--muted);">${r.fecha}</td>
     <td>${r.nombre}</td>
     <td style="color:${motivoColor(r.motivo)};">${r.motivo}</td>
@@ -2106,10 +2163,15 @@ function renderAsistencias() {
   </tr>`).join('');
 
   return `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
       <div class="v-kpi"><div class="v-kpi-label">Total novedades</div><div class="v-kpi-val">${total}</div><div class="v-kpi-sub">registros cargados</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Inasistencias</div><div class="v-kpi-val" style="color:var(--accent3);">${inasist}</div><div class="v-kpi-sub">no vinieron o enfermedad</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Llegadas tarde</div><div class="v-kpi-val" style="color:var(--accent2);">${tardanzas}</div><div class="v-kpi-sub">registros de tardanza</div></div>
+    </div>
+
+    <div class="v-chart-wrap" style="margin-bottom:28px;">
+      <div class="v-chart-title" style="margin-bottom:14px;">Novedades por día</div>
+      ${chartSVG}
     </div>
 
     <div class="subsection">
@@ -2118,7 +2180,7 @@ function renderAsistencias() {
         <thead><tr>
           <th>Empleado</th>
           <th style="text-align:right;">Inasistencias</th>
-          <th style="text-align:right;">Llegadas tarde</th>
+          <th style="text-align:right;">Tardanzas</th>
           <th style="text-align:right;">Total</th>
         </tr></thead>
         <tbody>${empRows}</tbody>
@@ -2128,9 +2190,7 @@ function renderAsistencias() {
     <div class="subsection">
       <div class="subsection-label">Detalle</div>
       <table class="data-table">
-        <thead><tr>
-          <th>Fecha</th><th>Empleado</th><th>Motivo</th><th>Comentario</th>
-        </tr></thead>
+        <thead><tr><th>Fecha</th><th>Empleado</th><th>Motivo</th><th>Comentario</th></tr></thead>
         <tbody>${detailRows}</tbody>
       </table>
     </div>`;
