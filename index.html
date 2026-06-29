@@ -1412,7 +1412,7 @@ function renderGeneral(){
     svgD+=`<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" opacity="${op}"/>`;
     pts.forEach(pt=>{
       svgD+=`<circle cx="${pt.x}" cy="${pt.y}" r="${isSel?4:2}" fill="${color}" opacity="${op}"/>`;
-      if(isSel){ const lbl=pt.v>=1e6?`${(pt.v/1e6).toFixed(1)}M`:pt.v>=1e3?`${Math.round(pt.v/1e3)}k`:`${Math.round(pt.v)}`; const above=pt.y>PT+22; svgL+=`<text x="${pt.x}" y="${pt.y+(above?-7:13)}" text-anchor="middle" fill="${color}" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="600">${lbl}</text>`; }
+      { const lbl=pt.v>=1e6?`${(pt.v/1e6).toFixed(1)}M`:pt.v>=1e3?`${Math.round(pt.v/1e3)}k`:`${Math.round(pt.v)}`; const above=pt.y>PT+22; svgL+=`<text x="${pt.x}" y="${pt.y+(above?-7:13)}" text-anchor="middle" fill="${color}" font-size="${isSel?8:7}" font-family="Red Hat Display,sans-serif" font-weight="${isSel?600:400}" opacity="${op}">${lbl}</text>`; }
     });
     svgLeg+=`<rect x="${10+yi*80}" y="3" width="10" height="8" fill="${color}" opacity="${op}" rx="2"/><text x="${24+yi*80}" y="11" fill="${isSel?'#1a1a1a':'#9a8a6a'}" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="${isSel?'600':'400'}">${yr}</text>`;
   });
