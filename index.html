@@ -2122,18 +2122,6 @@ function renderProduccion() {
     ? ` · <span onclick="khPeriodo='todo';renderKHContent();" style="cursor:pointer;text-decoration:underline;color:#9a8a6a;">ver todo</span>`
     : '';
 
-  const empRows = Object.entries(byEmp).sort((a,b)=>b[1].total-a[1].total).map(([emp,d]) => {
-    const topProd = Object.entries(d.porProd).sort((a,b)=>b[1]-a[1])[0];
-    const prom = d.dias.size>0 ? (d.total/d.dias.size).toFixed(0) : 0;
-    return `<tr>
-      <td>${emp}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;">${d.dias.size}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;color:var(--accent);">${Math.round(d.total).toLocaleString('es-AR')}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${prom}</td>
-      <td style="color:var(--muted);font-size:11px;">${topProd?topProd[0]:'—'}</td>
-    </tr>`;
-  }).join('');
-
   const medHeaders = allMed.map(m=>`<th style="text-align:right;">${m}</th>`).join('');
   const prodRows = Object.entries(byProd).sort((a,b)=>b[1].total-a[1].total).map(([prod,d]) => {
     const medCols = allMed.map(m=>`<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${(d.medidas[m]||0).toLocaleString('es-AR')}</td>`).join('');
