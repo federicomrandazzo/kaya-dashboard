@@ -628,7 +628,8 @@ const URLS = {
   compuestos: `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1843338909&single=true&output=csv`,
   ventas:     `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1630061936&single=true&output=csv`,
   ordenes:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
-  produccion: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
+  produccion:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
+  asistencias:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQeSGNkWldvyD9d3r_yBTm0TWAuxtpAwzB7WMjLJsOyeHd8_DVa96WvfCXdIg8DschcnZ4pODh31xVX/pub?gid=1137230020&single=true&output=csv',
 };
 
 const SKU_MAP = {
@@ -652,7 +653,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[]};
 let currentModule = 'stock';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -728,20 +729,22 @@ async function loadData() {
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
       fetch(URLS.ventas).then(r=>r.text()),
       fetch(URLS.ordenes).then(r=>r.text()),
       fetch(URLS.produccion).then(r=>r.text()),
+      fetch(URLS.asistencias).then(r=>r.text()),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
     DATA.compuestos = parseCSV(cT.split('\n').slice(2).join('\n')).filter(r=>r['Código Compuesto']);
     DATA.ventas  = parseCSV(vT).filter(r=>r['periodo']&&r['periodo'].trim());
     DATA.ordenes = parseCSV(oT).filter(r=>r['periodo']&&r['periodo'].trim());
-    DATA.produccion = parseCSV(pT).filter(r=>r['fecha']&&r['cantidad']);
+    DATA.produccion  = parseCSV(pT).filter(r=>r['fecha']&&r['cantidad']);
+    DATA.asistencias = parseCSV(aT).filter(r=>r['Fecha']&&r['Nombre']);
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -2024,7 +2027,7 @@ function renderKayaHouse() {
   el.innerHTML = `
     <div class="tabs">
       <div class="tab ${khTab==='produccion'?'active':''}" onclick="setKHTab('produccion')">Producción</div>
-      <div class="tab" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">Asistencias</div>
+      <div class="tab ${khTab==='asistencias'?'active':''}" onclick="setKHTab('asistencias')">Asistencias</div>
       <div class="tab" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">Pedidos</div>
     </div>
     <div id="kh-tab-content"></div>`;
@@ -2041,7 +2044,96 @@ function setKHTab(tab) {
 function renderKHContent() {
   const el = document.getElementById('kh-tab-content');
   if (!el) return;
-  if (khTab === 'produccion') el.innerHTML = renderProduccion();
+  if (khTab === 'produccion')   el.innerHTML = renderProduccion();
+  if (khTab === 'asistencias')  el.innerHTML = renderAsistencias();
+}
+
+function normMotivo(m) {
+  const v = (m||'').trim().toLowerCase();
+  if (v.includes('tarde')) return 'Llegada tarde';
+  if (v.includes('no vino') || v.includes('no fue')) return 'No vino';
+  if (v.includes('enferm')) return 'Enfermedad';
+  return m.trim() || 'Otro';
+}
+
+function renderAsistencias() {
+  const rows = DATA.asistencias;
+  if (!rows.length) return '<div class="empty" style="padding:60px 0;">Sin datos de asistencias.</div>';
+
+  // Normalise motivo
+  const data = rows.map(r => ({
+    fecha:     (r['Fecha']||'').trim(),
+    nombre:    (r['Nombre']||'').trim(),
+    motivo:    normMotivo(r['Motivo']||''),
+    comentario:(r['Comentario']||'').trim(),
+  }));
+
+  const total       = data.length;
+  const inasist     = data.filter(r => r.motivo !== 'Llegada tarde').length;
+  const tardanzas   = data.filter(r => r.motivo === 'Llegada tarde').length;
+
+  // By employee
+  const byEmp = {};
+  data.forEach(r => {
+    if (!byEmp[r.nombre]) byEmp[r.nombre] = {inasist:0, tarde:0, total:0};
+    if (r.motivo === 'Llegada tarde') byEmp[r.nombre].tarde++;
+    else byEmp[r.nombre].inasist++;
+    byEmp[r.nombre].total++;
+  });
+
+  const empRows = Object.entries(byEmp)
+    .sort((a,b) => b[1].total - a[1].total)
+    .map(([nombre, d]) => `<tr>
+      <td>${nombre}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--accent3);">${d.inasist || '—'}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--accent2);">${d.tarde || '—'}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${d.total}</td>
+    </tr>`).join('');
+
+  // Detail log sorted by fecha desc (DD/MM format — sort as string MM/DD for correct order)
+  const sorted = [...data].sort((a,b) => {
+    const [da,ma] = a.fecha.split('/'); const [db,mb] = b.fecha.split('/');
+    return (Number(ma)*100+Number(da)) - (Number(mb)*100+Number(db));
+  }).reverse();
+
+  const motivoColor = m => m==='Llegada tarde'?'var(--accent2)':m==='Enfermedad'?'var(--accent3)':'var(--text)';
+
+  const detailRows = sorted.map(r => `<tr>
+    <td style="font-variant-numeric:tabular-nums;color:var(--muted);">${r.fecha}</td>
+    <td>${r.nombre}</td>
+    <td style="color:${motivoColor(r.motivo)};">${r.motivo}</td>
+    <td style="font-size:11px;color:var(--muted);">${r.comentario}</td>
+  </tr>`).join('');
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;">
+      <div class="v-kpi"><div class="v-kpi-label">Total novedades</div><div class="v-kpi-val">${total}</div><div class="v-kpi-sub">registros cargados</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Inasistencias</div><div class="v-kpi-val" style="color:var(--accent3);">${inasist}</div><div class="v-kpi-sub">no vinieron o enfermedad</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Llegadas tarde</div><div class="v-kpi-val" style="color:var(--accent2);">${tardanzas}</div><div class="v-kpi-sub">registros de tardanza</div></div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Por empleado</div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Empleado</th>
+          <th style="text-align:right;">Inasistencias</th>
+          <th style="text-align:right;">Llegadas tarde</th>
+          <th style="text-align:right;">Total</th>
+        </tr></thead>
+        <tbody>${empRows}</tbody>
+      </table>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Detalle</div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Fecha</th><th>Empleado</th><th>Motivo</th><th>Comentario</th>
+        </tr></thead>
+        <tbody>${detailRows}</tbody>
+      </table>
+    </div>`;
 }
 
 function renderProduccion() {
