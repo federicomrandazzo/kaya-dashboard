@@ -1394,13 +1394,13 @@ function renderGeneral(){
   const W=700,H=160,PL=55,PR=10,PT=14,PB=28,PW=W-PL-PR,PH=H-PT-PB;
   const allVals=Object.values(byYear).flatMap(a=>a.filter(v=>v!==null));
   const maxV=Math.max(...allVals,1);
-  const COLORS=['#c8f05a','#f0c85a','#f05a7a','#5af0c8','#c85af0'];
+  const COLORS=['#94a3b8','#b89021','#c0392b','#2563eb','#7c3aed'];
   const selY1=vPeriodo1?Number(vPeriodo1.split('-')[0]):null;
   const selY2=vPeriodo2?Number(vPeriodo2.split('-')[0]):null;
   function xOf(i){ return PL+(i/11)*PW; }
   function yOf(v){ return PT+PH-(v/maxV)*PH; }
   let svgG='', svgD='', svgL='', svgLeg='';
-  [0,0.25,0.5,0.75,1].forEach(f=>{ const y=yOf(f*maxV); const lbl=f*maxV>=1e6?`${(f*maxV/1e6).toFixed(1)}M`:f*maxV>=1e3?`${Math.round(f*maxV/1e3)}k`:`${Math.round(f*maxV)}`; svgG+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="#2a2a2a" stroke-width="1"/><text x="${PL-5}" y="${y+4}" text-anchor="end" fill="#7a7570" font-size="9" font-family="DM Mono,monospace">${lbl}</text>`; });
+  [0,0.25,0.5,0.75,1].forEach(f=>{ const y=yOf(f*maxV); const lbl=f*maxV>=1e6?`${(f*maxV/1e6).toFixed(1)}M`:f*maxV>=1e3?`${Math.round(f*maxV/1e3)}k`:`${Math.round(f*maxV)}`; svgG+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="#d4c090" stroke-width="1"/><text x="${PL-5}" y="${y+4}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${lbl}</text>`; });
   months.forEach((m,i)=>{ svgG+=`<text x="${xOf(i)}" y="${H-PB+16}" text-anchor="middle" fill="#7a7570" font-size="8" font-family="DM Mono,monospace">${m}</text>`; });
   years.forEach((yr,yi)=>{
     const color=COLORS[yi%COLORS.length]; const isSel=yr===selY1||yr===selY2; const op=isSel?1:0.28;
@@ -1412,9 +1412,9 @@ function renderGeneral(){
     svgD+=`<path d="${d}" fill="none" stroke="${color}" stroke-width="${sw}" opacity="${op}"/>`;
     pts.forEach(pt=>{
       svgD+=`<circle cx="${pt.x}" cy="${pt.y}" r="${isSel?4:2}" fill="${color}" opacity="${op}"/>`;
-      if(isSel){ const lbl=pt.v>=1e6?`${(pt.v/1e6).toFixed(1)}M`:pt.v>=1e3?`${Math.round(pt.v/1e3)}k`:`${Math.round(pt.v)}`; const above=pt.y>PT+22; svgL+=`<text x="${pt.x}" y="${pt.y+(above?-7:13)}" text-anchor="middle" fill="${color}" font-size="8" font-family="DM Mono,monospace">${lbl}</text>`; }
+      if(isSel){ const lbl=pt.v>=1e6?`${(pt.v/1e6).toFixed(1)}M`:pt.v>=1e3?`${Math.round(pt.v/1e3)}k`:`${Math.round(pt.v)}`; const above=pt.y>PT+22; svgL+=`<text x="${pt.x}" y="${pt.y+(above?-7:13)}" text-anchor="middle" fill="${color}" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="600">${lbl}</text>`; }
     });
-    svgLeg+=`<rect x="${10+yi*80}" y="3" width="10" height="8" fill="${color}" opacity="${op}" rx="2"/><text x="${24+yi*80}" y="11" fill="${isSel?'#f0ece4':'#7a7570'}" font-size="9" font-family="DM Mono,monospace" font-weight="${isSel?'500':'400'}">${yr}</text>`;
+    svgLeg+=`<rect x="${10+yi*80}" y="3" width="10" height="8" fill="${color}" opacity="${op}" rx="2"/><text x="${24+yi*80}" y="11" fill="${isSel?'#1a1a1a':'#9a8a6a'}" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="${isSel?'600':'400'}">${yr}</text>`;
   });
 
   // Por rubro: KITS first, then descending
