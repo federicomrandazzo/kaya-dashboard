@@ -630,6 +630,7 @@ const URLS = {
   ordenes:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
   produccion:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
   asistencias:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQeSGNkWldvyD9d3r_yBTm0TWAuxtpAwzB7WMjLJsOyeHd8_DVa96WvfCXdIg8DschcnZ4pODh31xVX/pub?gid=1137230020&single=true&output=csv',
+  pedidos:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcbDTtZqDIScLeubq7MzURi9gEGInUaMqw5Ds1P-CezU2_nBezYgOq29ib8HBpfIen3nUDfMd3DDv9/pub?gid=2143737438&single=true&output=csv',
 };
 
 const SKU_MAP = {
@@ -653,7 +654,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[]};
 let currentModule = 'stock';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -729,7 +730,7 @@ async function loadData() {
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT,pdT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
@@ -737,6 +738,7 @@ async function loadData() {
       fetch(URLS.ordenes).then(r=>r.text()),
       fetch(URLS.produccion).then(r=>r.text()),
       fetch(URLS.asistencias).then(r=>r.text()),
+      fetch(URLS.pedidos).then(r=>r.text()),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -745,6 +747,8 @@ async function loadData() {
     DATA.ordenes = parseCSV(oT).filter(r=>r['periodo']&&r['periodo'].trim());
     DATA.produccion  = parseCSV(pT).filter(r=>r['fecha']&&r['cantidad']);
     DATA.asistencias = parseCSV(aT).filter(r=>r['Fecha']&&r['Nombre']);
+    const pedKey = r => Object.keys(r).find(k=>k.toLowerCase().includes('armado') && !k.includes('?') && !k.toLowerCase().includes('por'));
+    DATA.pedidos = parseCSV(pdT).filter(r=>{ const k=pedKey(r); return (r['armado?']||'').trim().toUpperCase()==='SI' && num(r['año'])>1900 && k && r[k]; });
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -2010,6 +2014,7 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
 // ── KAYA HOUSE ───────────────────────────────────────────────────
 let khTab = 'produccion';
 let khPeriodo = 'todo';
+let khPedPeriodo = 'todo';
 
 function formatMes(ym) {
   const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -2028,7 +2033,7 @@ function renderKayaHouse() {
     <div class="tabs">
       <div class="tab ${khTab==='produccion'?'active':''}" onclick="setKHTab('produccion')">Producción</div>
       <div class="tab ${khTab==='asistencias'?'active':''}" onclick="setKHTab('asistencias')">Asistencias</div>
-      <div class="tab" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">Pedidos</div>
+      <div class="tab ${khTab==='pedidos'?'active':''}" onclick="setKHTab('pedidos')">Pedidos</div>
     </div>
     <div id="kh-tab-content"></div>`;
   renderKHContent();
@@ -2046,6 +2051,7 @@ function renderKHContent() {
   if (!el) return;
   if (khTab === 'produccion')   el.innerHTML = renderProduccion();
   if (khTab === 'asistencias')  el.innerHTML = renderAsistencias();
+  if (khTab === 'pedidos')      el.innerHTML = renderPedidos();
 }
 
 function normMotivo(m) {
@@ -2308,6 +2314,112 @@ function renderProduccion() {
         <thead><tr><th>Producto</th>${medHeaders}<th style="text-align:right;">Total</th></tr></thead>
         <tbody>${prodRows}</tbody>
       </table>
+    </div>`;
+}
+
+// ── PEDIDOS ──────────────────────────────────────────────────────
+function renderPedidos() {
+  if (!DATA.pedidos.length) return '<div class="empty" style="padding:60px 0;">Sin datos de pedidos.</div>';
+
+  function periodoKey(r) {
+    const y=num(r['año']), m=num(r['mes']); if(!y||!m) return null;
+    return `${y}-${String(m).padStart(2,'0')}`;
+  }
+
+  // Monthly aggregates (all data)
+  const byMonth={};
+  DATA.pedidos.forEach(r=>{ const pk=periodoKey(r); if(!pk) return; byMonth[pk]=(byMonth[pk]||0)+1; });
+  const mKeys=Object.keys(byMonth).sort();
+
+  // Filtered rows
+  const rows = khPedPeriodo==='todo' ? DATA.pedidos : DATA.pedidos.filter(r=>periodoKey(r)===khPedPeriodo);
+  const total = rows.length;
+
+  // Unique assembly days: use the date column if available
+  const dateKey = Object.keys(DATA.pedidos[0]||{}).find(k=>k.toLowerCase().includes('fecha')&&k.toLowerCase().includes('arm'));
+  const diasUnicos = new Set(rows.map(r=>dateKey?r[dateKey]:periodoKey(r))).size;
+  const promDia = diasUnicos>0 ? total/diasUnicos : 0;
+
+  // By armador
+  const byArm={};
+  rows.forEach(r=>{ const a=(r['Armado por']||'Sin asignar').trim(); byArm[a]=(byArm[a]||0)+1; });
+  const armTop=Object.entries(byArm).sort((a,b)=>b[1]-a[1])[0];
+
+  // By day of week
+  const DS={lun:0,mar:0,mie:0,jue:0,vie:0,sab:0,dom:0};
+  const DSL={lun:'Lun',mar:'Mar',mie:'Mié',jue:'Jue',vie:'Vie',sab:'Sáb',dom:'Dom'};
+  rows.forEach(r=>{ const d=(r['diasem']||'').trim().toLowerCase().substring(0,3); if(DS[d]!==undefined) DS[d]++; });
+
+  // ── Filter bars ──
+  const maxM=Math.max(...mKeys.map(m=>byMonth[m]),1);
+  const filterBars=mKeys.map(m=>{
+    const isSel=khPedPeriodo===m;
+    const pct=Math.round(byMonth[m]/maxM*100);
+    const lbl=byMonth[m]>=1000?(byMonth[m]/1000).toFixed(1)+'k':byMonth[m];
+    const click=isSel?`khPedPeriodo='todo';renderKHContent();`:`khPedPeriodo='${m}';renderKHContent();`;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end;cursor:pointer;" onclick="${click}">
+      <div style="font-size:8px;color:${isSel?'#b89021':'#9a8a6a'};font-family:'Red Hat Display',sans-serif;">${lbl}</div>
+      <div style="width:80%;border-radius:3px 3px 0 0;background:${isSel?'#b89021':'#f4e8c8'};border:1px solid ${isSel?'#b89021':'#e0cfa0'};height:${pct}%;min-height:2px;transition:all 0.15s;"
+        onmouseover="this.style.opacity='0.75'" onmouseout="this.style.opacity='1'"></div>
+      <div style="font-size:8px;color:${isSel?'#b89021':'#9a8a6a'};transform:rotate(-35deg);transform-origin:top right;white-space:nowrap;margin-top:2px;font-family:'Red Hat Display',sans-serif;">${formatMes(m)}</div>
+    </div>`;
+  }).join('');
+
+  const periodoLabel=khPedPeriodo==='todo'?'Todo el período':formatMes(khPedPeriodo);
+  const resetLink=khPedPeriodo!=='todo'?` · <span onclick="khPedPeriodo='todo';renderKHContent();" style="cursor:pointer;text-decoration:underline;color:#9a8a6a;">ver todo</span>`:'';
+
+  // ── Armador table ──
+  const armRows=Object.entries(byArm).sort((a,b)=>b[1]-a[1]).map(([arm,cnt])=>{
+    const pct=total>0?(cnt/total*100).toFixed(1):0;
+    const bw=Math.round(cnt/total*100);
+    return `<tr>
+      <td>${arm}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;color:var(--accent);">${cnt.toLocaleString('es-AR')}</td>
+      <td style="text-align:right;color:var(--muted);">${pct}%</td>
+      <td style="width:120px;"><div style="height:4px;border-radius:2px;background:var(--accent);width:${bw}%;margin-top:4px;"></div></td>
+    </tr>`;
+  }).join('');
+
+  // ── Day-of-week SVG ──
+  const dKeys=['lun','mar','mie','jue','vie','sab','dom'];
+  const maxDs=Math.max(...dKeys.map(k=>DS[k]),1);
+  const W=294,H=88,PT=18,PB=22,PH=H-PT-PB,bw=W/7;
+  const dsBars=dKeys.map((k,i)=>{
+    const v=DS[k], bh=Math.max((v/maxDs)*PH,1);
+    const x=(i*bw+bw*0.1).toFixed(1), bwA=(bw*0.8).toFixed(1), y=(PT+PH-bh).toFixed(1);
+    const isWknd=k==='sab'||k==='dom';
+    return `<rect x="${x}" y="${y}" width="${bwA}" height="${bh.toFixed(1)}" rx="2" fill="${isWknd?'#f4e8c8':'#b89021'}" stroke="${isWknd?'#e0cfa0':'#9a7a1a'}" stroke-width="1"/>
+      <text x="${(i*bw+bw/2).toFixed(1)}" y="${(PT+PH-bh-5).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${v||''}</text>
+      <text x="${(i*bw+bw/2).toFixed(1)}" y="${H-4}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${DSL[k]}</text>`;
+  }).join('');
+
+  return `
+    <div class="v-chart-wrap" style="margin-bottom:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="v-chart-title" style="margin:0;">Pedidos armados por mes · clic para filtrar</div>
+        <div style="font-size:10px;color:var(--accent);letter-spacing:0.06em;">${periodoLabel}${resetLink}</div>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:100px;padding-bottom:30px;">${filterBars}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;">
+      <div class="v-kpi"><div class="v-kpi-label">Pedidos armados</div><div class="v-kpi-val" style="color:var(--accent);">${total.toLocaleString('es-AR')}</div><div class="v-kpi-sub">${diasUnicos} días de trabajo</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Promedio diario</div><div class="v-kpi-val">${promDia.toFixed(0)}</div><div class="v-kpi-sub">pedidos / día</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Armador top</div><div class="v-kpi-val" style="font-size:16px;">${armTop?armTop[0]:'—'}</div><div class="v-kpi-sub">${armTop?armTop[1].toLocaleString('es-AR')+' pedidos':''}</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr auto;gap:32px;align-items:start;">
+      <div class="subsection" style="margin:0;">
+        <div class="subsection-label">Por armador</div>
+        <table class="data-table">
+          <thead><tr><th>Armador</th><th style="text-align:right;">Pedidos</th><th style="text-align:right;">%</th><th></th></tr></thead>
+          <tbody>${armRows}</tbody>
+        </table>
+      </div>
+      <div>
+        <div class="subsection-label" style="margin-bottom:12px;">Por día de semana</div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:${W}px;max-height:${H}px;">${dsBars}</svg>
+      </div>
     </div>`;
 }
 
