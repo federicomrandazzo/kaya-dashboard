@@ -2105,17 +2105,6 @@ function renderProduccion() {
     svgLabels += `<text x="${(x+bwA/2).toFixed(1)}" y="${H-4}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${formatMes(m).substring(0,3)}</text>`;
   });
 
-  // ── By employee ──
-  const byEmp = {};
-  rows.forEach(r => {
-    const emp = (r['responsable']||'Sin asignar').trim();
-    if (!byEmp[emp]) byEmp[emp] = {total:0, dias:new Set(), porProd:{}};
-    byEmp[emp].total += num(r['cantidad']);
-    byEmp[emp].dias.add(r['fecha']);
-    const prod = (r['producto']||'').trim();
-    byEmp[emp].porProd[prod] = (byEmp[emp].porProd[prod]||0) + num(r['cantidad']);
-  });
-
   // ── By product + medida ──
   const byProd = {};
   rows.forEach(r => {
