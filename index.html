@@ -747,8 +747,7 @@ async function loadData() {
     DATA.ordenes = parseCSV(oT).filter(r=>r['periodo']&&r['periodo'].trim());
     DATA.produccion  = parseCSV(pT).filter(r=>r['fecha']&&r['cantidad']);
     DATA.asistencias = parseCSV(aT).filter(r=>r['Fecha']&&r['Nombre']);
-    const pedKey = r => Object.keys(r).find(k=>k.toLowerCase().includes('armado') && !k.includes('?') && !k.toLowerCase().includes('por'));
-    DATA.pedidos = parseCSV(pdT).filter(r=>{ const k=pedKey(r); return (r['armado?']||'').trim().toUpperCase()==='SI' && num(r['año'])>1900 && k && r[k]; });
+    DATA.pedidos = parseCSV(pdT).filter(r=>(r['armado?']||'').trim().toUpperCase()==='SI' && num(r['año'])>1900);
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
