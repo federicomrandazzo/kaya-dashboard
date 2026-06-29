@@ -565,6 +565,9 @@
     <div class="nav-item" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">
       <span class="nav-icon">◈</span> Finanzas
     </div>
+    <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
+      <span class="nav-icon">◑</span> Estado de Resultados
+    </div>
   </div>
   <div class="sidebar-footer">
     <div id="last-update-sidebar">—</div>
@@ -604,6 +607,7 @@
     <div id="module-stock" style="display:none;"></div>
     <div id="module-ventas" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
+    <div id="module-edr" style="display:none;"></div>
     <div id="welcome" style="display:none;">
       <h3>Seleccioná un módulo</h3>
       <span>Usá el panel izquierdo para navegar.</span>
@@ -716,6 +720,7 @@ async function loadData() {
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
+  document.getElementById('module-edr').style.display='none';
   try {
     const [dT,tT,cT,vT,oT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
@@ -750,10 +755,11 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='edr'?'Estado de Resultados':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
+  document.getElementById('module-edr').style.display='none';
   // Show/hide sticky bars: only show when below inline KPIs (via IntersectionObserver)
   if(window._stickyObs){ window._stickyObs.disconnect(); window._stickyObs=null; }
   const sb=document.getElementById('sbar-stock');
@@ -768,6 +774,7 @@ function renderCurrentModule(){
   if(currentModule==='stock')      renderStock();
   if(currentModule==='ventas')     renderVentasModule();
   if(currentModule==='proyeccion') renderProyeccion();
+  if(currentModule==='edr')        renderEDR();
 }
 
 // ── STICKY BAR: show ONLY when inline KPIs scroll out of view ───
@@ -1989,6 +1996,22 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
 
 // ── INIT ─────────────────────────────────────────────────────────
 loadData();
+
+// ── ESTADO DE RESULTADOS ──────────────────────────────────────────
+function renderEDR() {
+  const el = document.getElementById('module-edr');
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="section-header">
+      <span class="section-title">Estado de Resultados</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;height:300px;flex-direction:column;gap:12px;color:var(--muted);">
+      <div style="font-size:32px;">◑</div>
+      <div style="font-size:13px;">Próximamente</div>
+      <div style="font-size:11px;color:var(--border);">Sección en construcción</div>
+    </div>
+  `;
+}
 
 </script>
 </body>
