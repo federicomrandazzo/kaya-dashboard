@@ -2445,12 +2445,11 @@ function renderPedidos() {
       <div class="v-kpi"><div class="v-kpi-label">Día pico</div><div class="v-kpi-val" style="font-size:18px;">${picoLabel}</div><div class="v-kpi-sub">${picoCnt}</div></div>
     </div>
 
-    <div class="subsection" style="margin-bottom:28px;">
-      <div class="subsection-label" style="margin-bottom:12px;">Pedidos por día</div>
-      ${lineSvg}
-    </div>
-
-    <div style="display:flex;gap:48px;align-items:flex-start;">
+    <div style="display:grid;grid-template-columns:1fr auto;gap:32px;align-items:start;">
+      <div class="subsection" style="margin:0;">
+        <div class="subsection-label" style="margin-bottom:12px;">Pedidos por día</div>
+        ${lineSvg}
+      </div>
       <div>
         <div class="subsection-label" style="margin-bottom:12px;">Por día de semana</div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${DW} ${DH}" style="width:${DW}px;max-height:${DH}px;">${dsBars}</svg>
