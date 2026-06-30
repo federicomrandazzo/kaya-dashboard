@@ -632,6 +632,7 @@ const URLS = {
   compuestos: `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1843338909&single=true&output=csv`,
   ventas:     `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1630061936&single=true&output=csv`,
   ordenes:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
+  edrData:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=260416352&single=true&output=csv`,
   produccion:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
   asistencias:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQeSGNkWldvyD9d3r_yBTm0TWAuxtpAwzB7WMjLJsOyeHd8_DVa96WvfCXdIg8DschcnZ4pODh31xVX/pub?gid=1137230020&single=true&output=csv',
   pedidos:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcbDTtZqDIScLeubq7MzURi9gEGInUaMqw5Ds1P-CezU2_nBezYgOq29ib8HBpfIen3nUDfMd3DDv9/pub?gid=2143737438&single=true&output=csv',
@@ -659,7 +660,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[]};
 let currentModule = 'stock';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -739,7 +740,7 @@ async function loadData() {
   document.getElementById('module-kh').style.display='none';
   document.getElementById('module-pub').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
@@ -749,6 +750,7 @@ async function loadData() {
       fetch(URLS.asistencias).then(r=>r.text()),
       fetch(URLS.pedidos).then(r=>r.text()),
       fetch(URLS.publicidad).then(r=>r.text()),
+      fetch(URLS.edrData).then(r=>r.text()),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -759,6 +761,7 @@ async function loadData() {
     DATA.asistencias = parseCSV(aT).filter(r=>r['Fecha']&&r['Nombre']);
     DATA.pedidos = parseCSV(pdT).filter(r=>(r['armado?']||'').trim().toUpperCase()==='SI' && num(r['año'])>1900);
     DATA.publicidad = parseCSV(pbT.split('\n').slice(1).join('\n')).filter(r=>r['Fecha']&&(r['VENTA TN']||'').trim()&&num(r['VENTA TN'])>0);
+    DATA.edrData = parseCSV(edT).filter(r=>r['concepto']&&r['periodo']&&(r['importe eerr']||'').trim());
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -2870,14 +2873,167 @@ loadData();
 function renderEDR() {
   const el = document.getElementById('module-edr');
   el.style.display = 'block';
-  el.innerHTML = `
-    <div class="section-header">
-      <span class="section-title">Estado de Resultados</span>
+  if (!DATA.edrData || !DATA.edrData.length) {
+    el.innerHTML = '<div class="empty" style="padding:60px 0;">Sin datos de Estado de Resultados.</div>';
+    return;
+  }
+
+  const periods = [...new Set(DATA.edrData.map(r=>r['periodo']))].sort();
+
+  function edrSum(concepto, linea, rubro, periodo) {
+    return DATA.edrData.filter(r=>
+      (!concepto || r['concepto']===concepto) &&
+      (!linea    || r['LINEA']===linea) &&
+      (!rubro    || r['RUBRO']===rubro) &&
+      (!periodo  || r['periodo']===periodo)
+    ).reduce((a,r)=>a+num(r['importe eerr']),0);
+  }
+
+  const rubrosVar=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='variables').map(r=>r['RUBRO']))].sort();
+  const rubrosFij=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='fijos').map(r=>r['RUBRO']))].sort();
+
+  const V={},CV={},MB={},G={},GF={},GV={},RES={},RUBVAR={},RUBFIJ={};
+  rubrosVar.forEach(r=>RUBVAR[r]={});
+  rubrosFij.forEach(r=>RUBFIJ[r]={});
+
+  [...periods,null].forEach(p=>{
+    const k=p||'total';
+    V[k] =edrSum('01. ventas',null,null,p);
+    CV[k]=edrSum('02. costo de ventas',null,null,p);
+    MB[k]=V[k]+CV[k];
+    G[k] =edrSum('03. gastos',null,null,p);
+    GF[k]=edrSum('03. gastos','fijos',null,p);
+    GV[k]=edrSum('03. gastos','variables',null,p);
+    RES[k]=V[k]+CV[k]+G[k];
+    rubrosVar.forEach(r=>RUBVAR[r][k]=edrSum('03. gastos','variables',r,p));
+    rubrosFij.forEach(r=>RUBFIJ[r][k]=edrSum('03. gastos','fijos',r,p));
+  });
+
+  const MARPCT={},VARPCT={},PEQ={},MGS={},MGSPCT={};
+  [...periods,'total'].forEach(k=>{
+    MARPCT[k]=V[k]>0?RES[k]/V[k]*100:0;
+    VARPCT[k]=V[k]>0?Math.abs(CV[k]+GV[k])/V[k]*100:0;
+    const mc=1-VARPCT[k]/100;
+    PEQ[k]=mc>0?Math.abs(GF[k])/mc:0;
+    MGS[k]=V[k]-PEQ[k];
+    MGSPCT[k]=PEQ[k]>0?MGS[k]/PEQ[k]*100:0;
+  });
+
+  const $T=v=>{if(!v&&v!==0)return'—';const s=v<0?'-':'';return`${s}$${Math.abs(Math.round(v)).toLocaleString('es-AR')}`;};
+  const pS=(v,base)=>base>0?(v/base*100).toFixed(1)+'%':'—';
+  const fmtP=p=>{const[y,m]=p.split('-');return['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m]+' '+y;};
+  const nP=periods.length;
+
+  function pctVentas(vals){
+    const r={};[...periods,'total'].forEach(k=>{r[k]=V[k]>0?pS(vals[k],V[k]):'—';});return r;
+  }
+
+  const RS_H='background:#f9f5ec;';
+  const RS_S='background:#f0e8d0;border-top:1px solid #d4c5a0;border-bottom:1px solid #d4c5a0;';
+  const RS_R='background:#eaf5ee;border-top:2px solid #27ae60;';
+
+  function tRow(label,vals,pcts,bg,indent,valueColor){
+    const pad=`padding-left:${8+indent*14}px;`;
+    const fw=indent===0?'600':'400';
+    const vcol=valueColor||'var(--text)';
+    const cells=[...periods,'total'].map((k,i)=>`<td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;color:${vcol};${i===nP?'font-weight:600;border-left:1px solid #e8dfc8;':''}">${$T(vals[k])}</td>`).join('');
+    const pctCells=pcts?[...periods,'total'].map((k,i)=>`<td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);${i===nP?'border-left:1px solid #ece5d5;':''}">${pcts[k]}</td>`).join(''):'';
+    return`<tr style="background:${bg||'transparent'};border-bottom:1px solid #f0ead8;">
+      <td style="padding:5px 8px;${pad}font-size:11px;font-weight:${fw};">${label}</td>
+      ${cells}${pctCells}
+    </tr>`;
+  }
+
+  const thCols=periods.map(p=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${fmtP(p)}</th>`).join('');
+  const thTot=`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;font-weight:700;">Total</th>`;
+  const thPct=periods.map(()=>`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);">%</th>`).join('')+`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);border-left:1px solid #ece5d5;">%</th>`;
+
+  const p100={};[...periods,'total'].forEach(k=>p100[k]='100%');
+
+  const tableHTML=`<div style="overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+    <thead><tr style="border-bottom:2px solid #d4c5a0;">
+      <th style="text-align:left;font-size:10px;padding:6px 8px;min-width:170px;letter-spacing:0.05em;">CONCEPTO</th>
+      ${thCols}${thTot}${thPct}
+    </tr></thead>
+    <tbody>
+      ${tRow('01. Ventas',V,p100,RS_H,0,'var(--accent)')}
+      ${tRow('02. Costo de ventas',CV,pctVentas(CV),'',1)}
+      ${tRow('Margen bruto',MB,pctVentas(MB),RS_S,0,'#8b6914')}
+      ${tRow('03. Gastos',G,pctVentas(G),RS_H,0)}
+      ${tRow('Fijos',GF,pctVentas(GF),'',1)}
+      ${rubrosFij.map(r=>tRow(r,RUBFIJ[r],null,'',2)).join('')}
+      ${tRow('Variables',GV,pctVentas(GV),'',1)}
+      ${rubrosVar.map(r=>tRow(r,RUBVAR[r],pctVentas(RUBVAR[r]),'',2)).join('')}
+      ${tRow('Resultado neto',RES,pctVentas(RES),RS_R,0,'#27ae60')}
+    </tbody>
+  </table></div>`;
+
+  const metricRows=[
+    ['Margen %',       MARPCT, v=>v.toFixed(1)+'%', '#27ae60'],
+    ['Total variable %',VARPCT,v=>v.toFixed(1)+'%','var(--muted)'],
+    ['Punto de equilibrio',PEQ,$T,'var(--muted)'],
+    ['Margen de seguridad',MGS,$T,'var(--muted)'],
+    ['Margen de seguridad %',MGSPCT,v=>Math.round(v)+'%','var(--muted)'],
+  ].map(([lbl,vals,fmt,col])=>`<tr style="border-bottom:1px solid #f0ead8;">
+    <td style="font-size:11px;padding:5px 8px;color:var(--muted);">${lbl}</td>
+    ${[...periods,'total'].map((k,i)=>`<td style="text-align:right;font-size:11px;padding:5px 8px;font-variant-numeric:tabular-nums;color:${col};${i===nP?'border-left:1px solid #e8dfc8;font-weight:600;':''}">${fmt(vals[k]??0)}</td>`).join('')}
+  </tr>`).join('');
+
+  const metricsHTML=`<table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+    <thead><tr style="border-bottom:1px solid #d4c5a0;">
+      <th style="text-align:left;font-size:10px;padding:6px 8px;color:var(--muted);letter-spacing:0.05em;">MÉTRICAS DERIVADAS</th>
+      ${thCols}${thTot}
+    </tr></thead>
+    <tbody>${metricRows}</tbody>
+  </table>`;
+
+  // ── Stacked composition chart ──────────────────────────────
+  const LW=520,LH=180,PL=8,PR=8,PT=20,PB=32,CW=LW-PL-PR,CH=LH-PT-PB;
+  const bw=Math.min(72,CW/(nP+1)*0.7);
+  const gap=(CW-bw*nP)/(nP+1);
+  const maxV=Math.max(...periods.map(p=>V[p]||0),1);
+  const COLS={res:'#27ae60',gv:'#e8956d',gf:'#c0392b',cv:'#b8a888'};
+
+  const bars=periods.map((p,i)=>{
+    const v=V[p]||0,cv=Math.abs(CV[p]||0),gf=Math.abs(GF[p]||0),gv=Math.abs(GV[p]||0),res=Math.max(RES[p]||0,0);
+    const x=PL+gap+i*(bw+gap);
+    const hR=res/maxV*CH, hGV=gv/maxV*CH, hGF=gf/maxV*CH, hCV=cv/maxV*CH;
+    const yB=PT+CH, yR=yB-hR, yGV=yR-hGV, yGF=yGV-hGF, yCV=yGF-hCV;
+    const pct=MARPCT[p]||0;
+    return`<rect x="${x.toFixed(1)}" y="${yCV.toFixed(1)}" width="${bw}" height="${hCV.toFixed(1)}" fill="${COLS.cv}" rx="2 2 0 0"/>
+      <rect x="${x.toFixed(1)}" y="${yGF.toFixed(1)}" width="${bw}" height="${hGF.toFixed(1)}" fill="${COLS.gf}"/>
+      <rect x="${x.toFixed(1)}" y="${yGV.toFixed(1)}" width="${bw}" height="${hGV.toFixed(1)}" fill="${COLS.gv}"/>
+      <rect x="${x.toFixed(1)}" y="${yR.toFixed(1)}" width="${bw}" height="${hR.toFixed(1)}" fill="${COLS.res}" rx="0 0 2 2"/>
+      ${hR>16?`<text x="${(x+bw/2).toFixed(1)}" y="${(yR+hR/2+4).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">${pct.toFixed(0)}%</text>`:''}
+      <text x="${(x+bw/2).toFixed(1)}" y="${(PT+CH+14).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${fmtP(p)}</text>
+      <text x="${(x+bw/2).toFixed(1)}" y="${(yCV-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(0)}M</text>`;
+  }).join('');
+
+  const legX=LW-120,legItems=[['Resultado',COLS.res],['G. variables',COLS.gv],['G. fijos',COLS.gf],['Costo venta',COLS.cv]];
+  const legend=legItems.map(([l,c],i)=>`<rect x="${legX}" y="${PT+i*18}" width="9" height="9" fill="${c}" rx="1"/><text x="${legX+12}" y="${PT+i*18+8}" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${l}</text>`).join('');
+
+  const chartSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">${bars}${legend}</svg>`;
+
+  // ── KPIs ──────────────────────────────────────────────────
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+    ${pubKPI('Ventas totales',$T(V.total),periods.length+' meses','var(--accent)')}
+    ${pubKPI('Resultado neto',$T(RES.total),'',RES.total>=0?'#27ae60':'var(--accent3)')}
+    ${pubKPI('Margen %',MARPCT.total.toFixed(1)+'%','promedio del período',MARPCT.total>=20?'#27ae60':'#e67e22')}
+    ${pubKPI('Margen de seguridad %',Math.round(MGSPCT.total)+'%','sobre punto de equilibrio')}
+  </div>`;
+
+  el.innerHTML = kpis +
+    `<div class="subsection" style="margin-bottom:24px;">
+      <div class="subsection-label" style="margin-bottom:12px;">Composición de resultados por mes</div>
+      ${chartSVG}
     </div>
-    <div style="display:flex;align-items:center;justify-content:center;height:300px;flex-direction:column;gap:12px;color:var(--muted);">
-      <div style="font-size:32px;">◑</div>
-      <div style="font-size:13px;">Próximamente</div>
-      <div style="font-size:11px;color:var(--border);">Sección en construcción</div>
+    <div class="subsection" style="margin-bottom:24px;">
+      <div class="subsection-label" style="margin-bottom:14px;">Estado de Resultados</div>
+      ${tableHTML}
+    </div>
+    <div class="subsection">${metricsHTML}</div>`;
+}
     </div>
   `;
 }
