@@ -668,6 +668,7 @@ let bomCache = null;
 let pubTab = 'analisis';
 let pubDesde = '', pubHasta = '';
 let pubCmpADesde = '', pubCmpAHasta = '', pubCmpBDesde = '', pubCmpBHasta = '';
+let edrSelectedPeriods = [];
 
 // ── UTILS ───────────────────────────────────────────────────────
 function parseCSV(text) {
@@ -2845,6 +2846,11 @@ function renderPubComparativo(){
 }
 
 function setPubTab(t){ pubTab=t; renderPublicidad(); }
+function toggleEdrPeriod(p){
+  if(edrSelectedPeriods.includes(p)) edrSelectedPeriods=edrSelectedPeriods.filter(x=>x!==p);
+  else edrSelectedPeriods=[...edrSelectedPeriods,p].sort();
+  renderEDR();
+}
 function renderPubContent(){
   const el=document.getElementById('pub-tab-content');
   if(!el) return;
@@ -2878,7 +2884,8 @@ function renderEDR() {
     return;
   }
 
-  const periods = [...new Set(DATA.edrData.map(r=>r['periodo']))].sort();
+  const allPeriods = [...new Set(DATA.edrData.map(r=>r['periodo']))].sort();
+  const periods = edrSelectedPeriods.length ? edrSelectedPeriods.filter(p=>allPeriods.includes(p)) : allPeriods;
 
   function edrSum(concepto, linea, rubro, periodo) {
     return DATA.edrData.filter(r=>
@@ -2923,6 +2930,7 @@ function renderEDR() {
   const pS=(v,base)=>base>0?(v/base*100).toFixed(1)+'%':'—';
   const fmtP=p=>{const[y,m]=p.split('-');return['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m]+' '+y;};
   const nP=periods.length;
+  const nPct=nP+1;
 
   function pctVentas(vals){
     const r={};[...periods,'total'].forEach(k=>{r[k]=V[k]>0?pS(vals[k],V[k]):'—';});return r;
@@ -2937,7 +2945,7 @@ function renderEDR() {
     const fw=indent===0?'600':'400';
     const vcol=valueColor||'var(--text)';
     const cells=[...periods,'total'].map((k,i)=>`<td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;color:${vcol};${i===nP?'font-weight:600;border-left:1px solid #e8dfc8;':''}">${$T(vals[k])}</td>`).join('');
-    const pctCells=pcts?[...periods,'total'].map((k,i)=>`<td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);${i===nP?'border-left:1px solid #ece5d5;':''}">${pcts[k]}</td>`).join(''):'';
+    const pctCells=pcts?[...periods,'total'].map((k,i)=>`<td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);${i===nP?'border-left:1px solid #ece5d5;':''}">${pcts[k]}</td>`).join(''):Array(nPct).fill('<td></td>').join('');
     return`<tr style="background:${bg||'transparent'};border-bottom:1px solid #f0ead8;">
       <td style="padding:5px 8px;${pad}font-size:11px;font-weight:${fw};">${label}</td>
       ${cells}${pctCells}
@@ -2949,6 +2957,13 @@ function renderEDR() {
   const thPct=periods.map(()=>`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);">%</th>`).join('')+`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);border-left:1px solid #ece5d5;">%</th>`;
 
   const p100={};[...periods,'total'].forEach(k=>p100[k]='100%');
+
+  function mRow(lbl,vals,fmt,col){
+    const cells=[...periods,'total'].map((k,i)=>`<td style="text-align:right;font-size:11px;padding:5px 8px;font-variant-numeric:tabular-nums;color:${col};${i===nP?'border-left:1px solid #e8dfc8;font-weight:600;':''}">${fmt(vals[k]??0)}</td>`).join('');
+    return`<tr style="border-bottom:1px solid #f0ead8;"><td style="font-size:11px;padding:5px 8px 5px 22px;color:var(--muted);">${lbl}</td>${cells}${Array(nPct).fill('<td></td>').join('')}</tr>`;
+  }
+
+  const sepRow=`<tr style="border-top:2px solid #d4c5a0;background:#f4ede0;"><td colspan="${2+nP+nPct}" style="padding:4px 8px;font-size:10px;letter-spacing:0.05em;color:var(--muted);font-weight:600;">MÉTRICAS DERIVADAS</td></tr>`;
 
   const tableHTML=`<div style="overflow-x:auto;">
   <table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
@@ -2966,39 +2981,26 @@ function renderEDR() {
       ${tRow('Variables',GV,pctVentas(GV),'',1)}
       ${rubrosVar.map(r=>tRow(r,RUBVAR[r],pctVentas(RUBVAR[r]),'',2)).join('')}
       ${tRow('Resultado neto',RES,pctVentas(RES),RS_R,0,'#27ae60')}
+      ${sepRow}
+      ${mRow('Margen %',       MARPCT, v=>v.toFixed(1)+'%', '#27ae60')}
+      ${mRow('Total variable %',VARPCT, v=>v.toFixed(1)+'%', 'var(--muted)')}
+      ${mRow('Punto de equilibrio',PEQ, $T, 'var(--muted)')}
+      ${mRow('Margen de seguridad',MGS, $T, 'var(--muted)')}
+      ${mRow('Margen de seguridad %',MGSPCT, v=>Math.round(v)+'%', 'var(--muted)')}
     </tbody>
   </table></div>`;
 
-  const metricRows=[
-    ['Margen %',       MARPCT, v=>v.toFixed(1)+'%', '#27ae60'],
-    ['Total variable %',VARPCT,v=>v.toFixed(1)+'%','var(--muted)'],
-    ['Punto de equilibrio',PEQ,$T,'var(--muted)'],
-    ['Margen de seguridad',MGS,$T,'var(--muted)'],
-    ['Margen de seguridad %',MGSPCT,v=>Math.round(v)+'%','var(--muted)'],
-  ].map(([lbl,vals,fmt,col])=>`<tr style="border-bottom:1px solid #f0ead8;">
-    <td style="font-size:11px;padding:5px 8px;color:var(--muted);">${lbl}</td>
-    ${[...periods,'total'].map((k,i)=>`<td style="text-align:right;font-size:11px;padding:5px 8px;font-variant-numeric:tabular-nums;color:${col};${i===nP?'border-left:1px solid #e8dfc8;font-weight:600;':''}">${fmt(vals[k]??0)}</td>`).join('')}
-  </tr>`).join('');
-
-  const metricsHTML=`<table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
-    <thead><tr style="border-bottom:1px solid #d4c5a0;">
-      <th style="text-align:left;font-size:10px;padding:6px 8px;color:var(--muted);letter-spacing:0.05em;">MÉTRICAS DERIVADAS</th>
-      ${thCols}${thTot}
-    </tr></thead>
-    <tbody>${metricRows}</tbody>
-  </table>`;
-
   // ── Stacked composition chart ──────────────────────────────
-  const LW=520,LH=180,PL=8,PR=8,PT=20,PB=32,CW=LW-PL-PR,CH=LH-PT-PB;
+  const LW=560,LH=180,PL=8,PR=8,PT=20,PB=32,CW=LW-PL-PR,CH=LH-PT-PB;
   const bw=Math.min(72,CW/(nP+1)*0.7);
   const gap=(CW-bw*nP)/(nP+1);
   const maxV=Math.max(...periods.map(p=>V[p]||0),1);
   const COLS={res:'#27ae60',gv:'#e8956d',gf:'#c0392b',cv:'#b8a888'};
 
   const bars=periods.map((p,i)=>{
-    const v=V[p]||0,cv=Math.abs(CV[p]||0),gf=Math.abs(GF[p]||0),gv=Math.abs(GV[p]||0),res=Math.max(RES[p]||0,0);
+    const v=V[p]||0,cvv=Math.abs(CV[p]||0),gf=Math.abs(GF[p]||0),gv=Math.abs(GV[p]||0),res=Math.max(RES[p]||0,0);
     const x=PL+gap+i*(bw+gap);
-    const hR=res/maxV*CH, hGV=gv/maxV*CH, hGF=gf/maxV*CH, hCV=cv/maxV*CH;
+    const hR=res/maxV*CH, hGV=gv/maxV*CH, hGF=gf/maxV*CH, hCV=cvv/maxV*CH;
     const yB=PT+CH, yR=yB-hR, yGV=yR-hGV, yGF=yGV-hGF, yCV=yGF-hCV;
     const pct=MARPCT[p]||0;
     return`<rect x="${x.toFixed(1)}" y="${yCV.toFixed(1)}" width="${bw}" height="${hCV.toFixed(1)}" fill="${COLS.cv}" rx="2 2 0 0"/>
@@ -3007,13 +3009,20 @@ function renderEDR() {
       <rect x="${x.toFixed(1)}" y="${yR.toFixed(1)}" width="${bw}" height="${hR.toFixed(1)}" fill="${COLS.res}" rx="0 0 2 2"/>
       ${hR>16?`<text x="${(x+bw/2).toFixed(1)}" y="${(yR+hR/2+4).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">${pct.toFixed(0)}%</text>`:''}
       <text x="${(x+bw/2).toFixed(1)}" y="${(PT+CH+14).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${fmtP(p)}</text>
-      <text x="${(x+bw/2).toFixed(1)}" y="${(yCV-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(0)}M</text>`;
+      <text x="${(x+bw/2).toFixed(1)}" y="${(yCV-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(1)}M · ${pct.toFixed(0)}%</text>`;
   }).join('');
 
-  const legX=LW-120,legItems=[['Resultado',COLS.res],['G. variables',COLS.gv],['G. fijos',COLS.gf],['Costo venta',COLS.cv]];
-  const legend=legItems.map(([l,c],i)=>`<rect x="${legX}" y="${PT+i*18}" width="9" height="9" fill="${c}" rx="1"/><text x="${legX+12}" y="${PT+i*18+8}" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${l}</text>`).join('');
+  const chartSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">${bars}</svg>`;
+  const legendHTML=`<div style="display:flex;gap:16px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
+    ${[['Resultado',COLS.res],['G. variables',COLS.gv],['G. fijos',COLS.gf],['Costo venta',COLS.cv]].map(([l,c])=>`<span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:10px;height:10px;border-radius:2px;background:${c};display:inline-block;flex-shrink:0;"></span>${l}</span>`).join('')}
+  </div>`;
 
-  const chartSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">${bars}${legend}</svg>`;
+  // ── Period selector ───────────────────────────────────────
+  const periodSel=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
+    <span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-right:2px;">Meses:</span>
+    ${allPeriods.map(p=>{const active=edrSelectedPeriods.length===0||edrSelectedPeriods.includes(p);return`<button onclick="toggleEdrPeriod('${p}')" style="padding:3px 10px;border-radius:20px;border:1px solid ${active?'var(--accent)':'#d0c8b8'};background:${active?'var(--accent)':'transparent'};color:${active?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${fmtP(p)}</button>`;}).join('')}
+    ${edrSelectedPeriods.length?`<button onclick="edrSelectedPeriods=[];renderEDR();" style="padding:3px 10px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;">Todos</button>`:''}
+  </div>`;
 
   // ── KPIs ──────────────────────────────────────────────────
   const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
@@ -3023,16 +3032,15 @@ function renderEDR() {
     ${pubKPI('Margen de seguridad %',Math.round(MGSPCT.total)+'%','sobre punto de equilibrio')}
   </div>`;
 
-  el.innerHTML = kpis +
+  el.innerHTML = periodSel + kpis +
     `<div class="subsection" style="margin-bottom:24px;">
       <div class="subsection-label" style="margin-bottom:12px;">Composición de resultados por mes</div>
-      ${chartSVG}
+      ${chartSVG}${legendHTML}
     </div>
     <div class="subsection" style="margin-bottom:24px;">
       <div class="subsection-label" style="margin-bottom:14px;">Estado de Resultados</div>
       ${tableHTML}
-    </div>
-    <div class="subsection">${metricsHTML}</div>`;
+    </div>`;
 }
 
 </script>
