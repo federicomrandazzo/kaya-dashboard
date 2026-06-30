@@ -2656,22 +2656,33 @@ function pubRoasChart(rows){
   const roasArr=dKeys.map(k=>byDate[k].g>0?byDate[k].v/byDate[k].g:0);
   const avgRoas=roasArr.reduce((a,b)=>a+b,0)/roasArr.length;
   const maxR=Math.max(...roasArr,avgRoas*1.2,1);
-  const LW=640,LH=90,PL=32,PR=12,PT=12,PB=28,CW=LW-PL-PR,CH=LH-PT-PB;
+  const LW=640,LH=180,PL=36,PR=50,PT=16,PB=36,CW=LW-PL-PR,CH=LH-PT-PB;
   const labelEvery=n<=20?3:n<=60?7:14;
   const pts=dKeys.map((k,i)=>({x:PL+i/Math.max(n-1,1)*CW, y:PT+CH-roasArr[i]/maxR*CH}));
   const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area=`M${PL},${PT+CH} `+pts.map(p=>`L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')+` L${LW-PR},${PT+CH} Z`;
   const avgY=(PT+CH-avgRoas/maxR*CH).toFixed(1);
+  // Y-axis ticks: 5 evenly spaced values from 0 to maxR
+  const yStep=maxR/5;
+  const yTicks=[1,2,3,4,5].map(i=>i*yStep);
+  const yLines=yTicks.map(v=>{
+    const yy=(PT+CH-v/maxR*CH).toFixed(1);
+    return `<line x1="${PL}" y1="${yy}" x2="${LW-PR}" y2="${yy}" stroke="#ece5d5" stroke-width="0.5"/>
+      <text x="${PL-4}" y="${yy}" text-anchor="end" dominant-baseline="middle" fill="#c0b090" font-size="8" font-family="Red Hat Display,sans-serif">${v.toFixed(1)}x</text>`;
+  }).join('');
   const xLabels=dKeys.filter((_,i)=>i===0||i===n-1||(i>0&&i%labelEvery===0)).map(k=>{
     const i=dKeys.indexOf(k); const x=(PL+i/Math.max(n-1,1)*CW).toFixed(1); const [,m,d]=k.split('-');
     return `<text x="${x}" y="${PT+CH+14}" text-anchor="end" fill="#9a8a6a" font-size="7" font-family="Red Hat Display,sans-serif" transform="rotate(-40,${x},${PT+CH+14})">${d}/${m}</text>`;
   }).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">
-    <line x1="${PL}" y1="${avgY}" x2="${LW-PR}" y2="${avgY}" stroke="#9a8a6a" stroke-width="0.8" stroke-dasharray="3 3"/>
-    <text x="${LW-PR+2}" y="${avgY}" dominant-baseline="middle" fill="#9a8a6a" font-size="7" font-family="Red Hat Display,sans-serif">x̄ ${avgRoas.toFixed(2)}</text>
+    ${yLines}
+    <line x1="${PL}" y1="${avgY}" x2="${LW-PR}" y2="${avgY}" stroke="#9a8a6a" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="${LW-PR+4}" y="${avgY}" dominant-baseline="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">x̄ ${avgRoas.toFixed(2)}x</text>
     <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+CH}" stroke="#d4c5a0" stroke-width="0.5"/>
     <line x1="${PL}" y1="${PT+CH}" x2="${LW-PR}" y2="${PT+CH}" stroke="#d4c5a0" stroke-width="0.5"/>
-    <polyline points="${poly}" fill="none" stroke="#4a90a4" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
-    ${pts.filter((_,i)=>n<=40).map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2" fill="#4a90a4" stroke="#fff" stroke-width="1"/>`).join('')}
+    <path d="${area}" fill="#4a90a4" opacity="0.07"/>
+    <polyline points="${poly}" fill="none" stroke="#4a90a4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.filter((_,i)=>n<=40).map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#4a90a4" stroke="#fff" stroke-width="1.2"/>`).join('')}
     ${xLabels}
   </svg>`;
 }
