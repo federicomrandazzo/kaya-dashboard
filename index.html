@@ -2344,10 +2344,22 @@ function renderPedidos() {
   rows.forEach(r=>{ const a=(r['Armado por']||'Sin asignar').trim(); byArm[a]=(byArm[a]||0)+1; });
   const armTop=Object.entries(byArm).sort((a,b)=>b[1]-a[1])[0];
 
-  // By day of week
+  // By day of week — compute from assembly date to avoid column name dependency
   const DS={lun:0,mar:0,mie:0,jue:0,vie:0,sab:0,dom:0};
   const DSL={lun:'Lun',mar:'Mar',mie:'Mié',jue:'Jue',vie:'Vie',sab:'Sáb',dom:'Dom'};
-  rows.forEach(r=>{ const d=(r['diasem']||'').trim().toLowerCase().substring(0,3); if(DS[d]!==undefined) DS[d]++; });
+  const _dsIdx=['dom','lun','mar','mie','jue','vie','sab'];
+  rows.forEach(r=>{
+    const raw=dateKey?r[dateKey]:(r['diasem']||'');
+    if(!raw) return;
+    // Try parsing as DD/M/YYYY date first
+    const parts=raw.trim().split('/');
+    if(parts.length>=3){
+      const dt=new Date(+parts[2],+parts[1]-1,+parts[0]);
+      if(!isNaN(dt)){const dk=_dsIdx[dt.getDay()];if(DS[dk]!==undefined)DS[dk]++;return;}
+    }
+    // Fallback: use as-is string (e.g. "lun")
+    const d=raw.trim().toLowerCase().substring(0,3);if(DS[d]!==undefined)DS[d]++;
+  });
 
   // ── Filter bars ──
   const maxM=Math.max(...mKeys.map(m=>byMonth[m]),1);
