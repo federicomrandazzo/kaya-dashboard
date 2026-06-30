@@ -2345,8 +2345,8 @@ function renderPedidos() {
   const armTop=Object.entries(byArm).sort((a,b)=>b[1]-a[1])[0];
 
   // By day of week — compute from assembly date to avoid column name dependency
-  const DS={lun:0,mar:0,mie:0,jue:0,vie:0,sab:0,dom:0};
-  const DSL={lun:'Lun',mar:'Mar',mie:'Mié',jue:'Jue',vie:'Vie',sab:'Sáb',dom:'Dom'};
+  const DS={lun:0,mar:0,mie:0,jue:0,vie:0};
+  const DSL={lun:'Lun',mar:'Mar',mie:'Mié',jue:'Jue',vie:'Vie'};
   const _dsIdx=['dom','lun','mar','mie','jue','vie','sab'];
   rows.forEach(r=>{
     const raw=dateKey?r[dateKey]:(r['diasem']||'');
@@ -2392,9 +2392,9 @@ function renderPedidos() {
   }).join('');
 
   // ── Day-of-week SVG ──
-  const dKeys=['lun','mar','mie','jue','vie','sab','dom'];
+  const dKeys=['lun','mar','mie','jue','vie'];
   const maxDs=Math.max(...dKeys.map(k=>DS[k]),1);
-  const W=294,H=88,PT=18,PB=22,PH=H-PT-PB,bw=W/7;
+  const W=210,H=88,PT=18,PB=22,PH=H-PT-PB,bw=W/5;
   const dsBars=dKeys.map((k,i)=>{
     const v=DS[k], bh=Math.max((v/maxDs)*PH,1);
     const x=(i*bw+bw*0.1).toFixed(1), bwA=(bw*0.8).toFixed(1), y=(PT+PH-bh).toFixed(1);
