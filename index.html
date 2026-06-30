@@ -2325,6 +2325,13 @@ function renderPedidos() {
     return `${y}-${String(m).padStart(2,'0')}`;
   }
 
+  const dateKey = Object.keys(DATA.pedidos[0]||{}).find(k=>k.toLowerCase().includes('fecha')&&k.toLowerCase().includes('arm'));
+  function parseAsmDate(r) {
+    const raw=dateKey?r[dateKey]:null; if(!raw) return null;
+    const p=raw.trim().split('/'); if(p.length<3) return null;
+    const dt=new Date(+p[2],+p[1]-1,+p[0]); return isNaN(dt)?null:dt;
+  }
+
   // Monthly aggregates (all data)
   const byMonth={};
   DATA.pedidos.forEach(r=>{ const pk=periodoKey(r); if(!pk) return; byMonth[pk]=(byMonth[pk]||0)+1; });
@@ -2334,32 +2341,23 @@ function renderPedidos() {
   const rows = khPedPeriodo==='todo' ? DATA.pedidos : DATA.pedidos.filter(r=>periodoKey(r)===khPedPeriodo);
   const total = rows.length;
 
-  // Unique assembly days: use the date column if available
-  const dateKey = Object.keys(DATA.pedidos[0]||{}).find(k=>k.toLowerCase().includes('fecha')&&k.toLowerCase().includes('arm'));
-  const diasUnicos = new Set(rows.map(r=>dateKey?r[dateKey]:periodoKey(r))).size;
-  const promDia = diasUnicos>0 ? total/diasUnicos : 0;
+  // By date (for line chart)
+  const byDate={};
+  rows.forEach(r=>{
+    const dt=parseAsmDate(r); if(!dt) return;
+    const k=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    byDate[k]=(byDate[k]||0)+1;
+  });
+  const dateKeys=Object.keys(byDate).sort();
+  const diasUnicos=dateKeys.length;
+  const promDia=diasUnicos>0?total/diasUnicos:0;
+  const picoEntry=dateKeys.length?Object.entries(byDate).sort((a,b)=>b[1]-a[1])[0]:null;
 
-  // By armador
-  const byArm={};
-  rows.forEach(r=>{ const a=(r['Armado por']||'Sin asignar').trim(); byArm[a]=(byArm[a]||0)+1; });
-  const armTop=Object.entries(byArm).sort((a,b)=>b[1]-a[1])[0];
-
-  // By day of week — compute from assembly date to avoid column name dependency
+  // By day of week
   const DS={lun:0,mar:0,mie:0,jue:0,vie:0};
   const DSL={lun:'Lun',mar:'Mar',mie:'Mié',jue:'Jue',vie:'Vie'};
   const _dsIdx=['dom','lun','mar','mie','jue','vie','sab'];
-  rows.forEach(r=>{
-    const raw=dateKey?r[dateKey]:(r['diasem']||'');
-    if(!raw) return;
-    // Try parsing as DD/M/YYYY date first
-    const parts=raw.trim().split('/');
-    if(parts.length>=3){
-      const dt=new Date(+parts[2],+parts[1]-1,+parts[0]);
-      if(!isNaN(dt)){const dk=_dsIdx[dt.getDay()];if(DS[dk]!==undefined)DS[dk]++;return;}
-    }
-    // Fallback: use as-is string (e.g. "lun")
-    const d=raw.trim().toLowerCase().substring(0,3);if(DS[d]!==undefined)DS[d]++;
-  });
+  rows.forEach(r=>{ const dt=parseAsmDate(r); if(!dt) return; const dk=_dsIdx[dt.getDay()]; if(DS[dk]!==undefined)DS[dk]++; });
 
   // ── Filter bars ──
   const maxM=Math.max(...mKeys.map(m=>byMonth[m]),1);
@@ -2379,30 +2377,58 @@ function renderPedidos() {
   const periodoLabel=khPedPeriodo==='todo'?'Todo el período':formatMes(khPedPeriodo);
   const resetLink=khPedPeriodo!=='todo'?` · <span onclick="khPedPeriodo='todo';renderKHContent();" style="cursor:pointer;text-decoration:underline;color:#9a8a6a;">ver todo</span>`:'';
 
-  // ── Armador table ──
-  const armRows=Object.entries(byArm).sort((a,b)=>b[1]-a[1]).map(([arm,cnt])=>{
-    const pct=total>0?(cnt/total*100).toFixed(1):0;
-    const bw=Math.round(cnt/total*100);
-    return `<tr>
-      <td>${arm}</td>
-      <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;color:var(--accent);">${cnt.toLocaleString('es-AR')}</td>
-      <td style="text-align:right;color:var(--muted);">${pct}%</td>
-      <td style="width:120px;"><div style="height:4px;border-radius:2px;background:var(--accent);width:${bw}%;margin-top:4px;"></div></td>
-    </tr>`;
-  }).join('');
+  // ── Line chart: pedidos por día ──
+  const LW=640,LH=130,LPL=36,LPR=12,LPT=16,LPB=38;
+  const LCW=LW-LPL-LPR, LCH=LH-LPT-LPB;
+  const maxV=Math.max(...Object.values(byDate),1);
+  const n=dateKeys.length;
+  let lineSvg='<div class="empty" style="padding:20px 0;">Sin datos para el período.</div>';
+  if(n>0){
+    const labelEvery=n<=20?3:n<=60?7:14;
+    const pts=dateKeys.map((dk,i)=>({
+      x:LPL+(i/Math.max(n-1,1))*LCW,
+      y:LPT+LCH-(byDate[dk]/maxV)*LCH,
+      v:byDate[dk], dk
+    }));
+    const yTicks=[0.25,0.5,0.75,1];
+    const yLines=yTicks.map(f=>{
+      const yy=(LPT+LCH-f*LCH).toFixed(1);
+      return `<line x1="${LPL}" y1="${yy}" x2="${LW-LPR}" y2="${yy}" stroke="#ece5d5" stroke-width="0.5"/>
+        <text x="${(LPL-4)}" y="${yy}" text-anchor="end" dominant-baseline="middle" fill="#c0b090" font-size="7" font-family="Red Hat Display,sans-serif">${Math.round(f*maxV)}</text>`;
+    }).join('');
+    const areaPath=`M${LPL},${LPT+LCH} `+pts.map(p=>`L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')+` L${(LW-LPR)},${LPT+LCH} Z`;
+    const polyPts=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const dots=n<=60?pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#b89021" stroke="#fff" stroke-width="1.2"/>`).join(''):'';
+    const xLabels=pts.filter((_,i)=>i===0||i===n-1||(i>0&&i%labelEvery===0)).map(p=>{
+      const [py,pm,pd]=p.dk.split('-');
+      return `<text x="${p.x.toFixed(1)}" y="${LPT+LCH+14}" text-anchor="end" fill="#9a8a6a" font-size="7" font-family="Red Hat Display,sans-serif" transform="rotate(-40,${p.x.toFixed(1)},${LPT+LCH+14})">${pd}/${pm}</text>`;
+    }).join('');
+    lineSvg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">
+      ${yLines}
+      <line x1="${LPL}" y1="${LPT}" x2="${LPL}" y2="${LPT+LCH}" stroke="#d4c5a0" stroke-width="0.5"/>
+      <line x1="${LPL}" y1="${LPT+LCH}" x2="${LW-LPR}" y2="${LPT+LCH}" stroke="#d4c5a0" stroke-width="0.5"/>
+      <path d="${areaPath}" fill="#b89021" opacity="0.08"/>
+      <polyline points="${polyPts}" fill="none" stroke="#b89021" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+      ${xLabels}
+    </svg>`;
+  }
 
-  // ── Day-of-week SVG ──
+  // ── Day-of-week bar chart ──
   const dKeys=['lun','mar','mie','jue','vie'];
   const maxDs=Math.max(...dKeys.map(k=>DS[k]),1);
-  const W=210,H=88,PT=18,PB=22,PH=H-PT-PB,bw=W/5;
+  const DW=210,DH=88,DPT=18,DPB=22,DPH=DH-DPT-DPB,dbw=DW/5;
   const dsBars=dKeys.map((k,i)=>{
-    const v=DS[k], bh=Math.max((v/maxDs)*PH,1);
-    const x=(i*bw+bw*0.1).toFixed(1), bwA=(bw*0.8).toFixed(1), y=(PT+PH-bh).toFixed(1);
-    const isWknd=k==='sab'||k==='dom';
-    return `<rect x="${x}" y="${y}" width="${bwA}" height="${bh.toFixed(1)}" rx="2" fill="${isWknd?'#f4e8c8':'#b89021'}" stroke="${isWknd?'#e0cfa0':'#9a7a1a'}" stroke-width="1"/>
-      <text x="${(i*bw+bw/2).toFixed(1)}" y="${(PT+PH-bh-5).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${v||''}</text>
-      <text x="${(i*bw+bw/2).toFixed(1)}" y="${H-4}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${DSL[k]}</text>`;
+    const v=DS[k], bh=Math.max((v/maxDs)*DPH,1);
+    const x=(i*dbw+dbw*0.1).toFixed(1), bwA=(dbw*0.8).toFixed(1), y=(DPT+DPH-bh).toFixed(1);
+    return `<rect x="${x}" y="${y}" width="${bwA}" height="${bh.toFixed(1)}" rx="2" fill="#b89021" stroke="#9a7a1a" stroke-width="1"/>
+      <text x="${(i*dbw+dbw/2).toFixed(1)}" y="${(DPT+DPH-bh-5).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${v||''}</text>
+      <text x="${(i*dbw+dbw/2).toFixed(1)}" y="${DH-4}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${DSL[k]}</text>`;
   }).join('');
+
+  // Formato día pico
+  let picoLabel='—', picoCnt='';
+  if(picoEntry){ const [,pm,pd]=picoEntry[0].split('-'); picoLabel=`${pd}/${pm}`; picoCnt=`${picoEntry[1]} pedidos`; }
 
   return `
     <div class="v-chart-wrap" style="margin-bottom:24px;">
@@ -2416,20 +2442,18 @@ function renderPedidos() {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px;">
       <div class="v-kpi"><div class="v-kpi-label">Pedidos armados</div><div class="v-kpi-val" style="color:var(--accent);">${total.toLocaleString('es-AR')}</div><div class="v-kpi-sub">${diasUnicos} días de trabajo</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Promedio diario</div><div class="v-kpi-val">${promDia.toFixed(0)}</div><div class="v-kpi-sub">pedidos / día</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Armador top</div><div class="v-kpi-val" style="font-size:16px;">${armTop?armTop[0]:'—'}</div><div class="v-kpi-sub">${armTop?armTop[1].toLocaleString('es-AR')+' pedidos':''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Día pico</div><div class="v-kpi-val" style="font-size:18px;">${picoLabel}</div><div class="v-kpi-sub">${picoCnt}</div></div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr auto;gap:32px;align-items:start;">
-      <div class="subsection" style="margin:0;">
-        <div class="subsection-label">Por armador</div>
-        <table class="data-table">
-          <thead><tr><th>Armador</th><th style="text-align:right;">Pedidos</th><th style="text-align:right;">%</th><th></th></tr></thead>
-          <tbody>${armRows}</tbody>
-        </table>
-      </div>
+    <div class="subsection" style="margin-bottom:28px;">
+      <div class="subsection-label" style="margin-bottom:12px;">Pedidos por día</div>
+      ${lineSvg}
+    </div>
+
+    <div style="display:flex;gap:48px;align-items:flex-start;">
       <div>
         <div class="subsection-label" style="margin-bottom:12px;">Por día de semana</div>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:${W}px;max-height:${H}px;">${dsBars}</svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${DW} ${DH}" style="width:${DW}px;max-height:${DH}px;">${dsBars}</svg>
       </div>
     </div>`;
 }
