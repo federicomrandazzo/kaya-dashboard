@@ -2649,24 +2649,30 @@ function pubLineChart(rows, campo1, campo2, label1, label2, col1, col2){
 
 function pubRoasChart(rows){
   const byDate={};
-  rows.forEach(r=>{ const dt=pubParseDate(r); if(!dt) return; const k=pubDateStr(dt); if(!byDate[k]) byDate[k]={v:0,g:0}; byDate[k].v+=num(r['VENTA TN']); byDate[k].g+=num(r['GASTO TOTAL']); });
+  rows.forEach(r=>{
+    const dt=pubParseDate(r); if(!dt) return;
+    const k=pubDateStr(dt);
+    if(!byDate[k]) byDate[k]={v:0,g:0,revie:0};
+    byDate[k].v+=num(r['VENTA TN']);
+    byDate[k].g+=num(r['GASTO TOTAL']);
+    byDate[k].revie+=num(r['Gasto en publicidad']); // last dup = Revie column
+  });
   const dKeys=Object.keys(byDate).sort();
   const n=dKeys.length;
   if(!n) return '';
   const roasArr=dKeys.map(k=>byDate[k].g>0?byDate[k].v/byDate[k].g:0);
+  const isRevie=dKeys.map(k=>byDate[k].revie>0);
   const avgRoas=roasArr.reduce((a,b)=>a+b,0)/roasArr.length;
   const maxR=Math.max(...roasArr,avgRoas*1.2,1);
-  const LW=640,LH=180,PL=36,PR=50,PT=16,PB=36,CW=LW-PL-PR,CH=LH-PT-PB;
+  const LW=640,LH=180,PL=36,PR=50,PT=24,PB=36,CW=LW-PL-PR,CH=LH-PT-PB;
   const labelEvery=n<=20?3:n<=60?7:14;
-  const pts=dKeys.map((k,i)=>({x:PL+i/Math.max(n-1,1)*CW, y:PT+CH-roasArr[i]/maxR*CH}));
+  const pts=dKeys.map((k,i)=>({x:PL+i/Math.max(n-1,1)*CW, y:PT+CH-roasArr[i]/maxR*CH, revie:isRevie[i]}));
   const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const area=`M${PL},${PT+CH} `+pts.map(p=>`L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')+` L${LW-PR},${PT+CH} Z`;
   const avgY=(PT+CH-avgRoas/maxR*CH).toFixed(1);
-  // Y-axis ticks: 5 evenly spaced values from 0 to maxR
   const yStep=maxR/5;
-  const yTicks=[1,2,3,4,5].map(i=>i*yStep);
-  const yLines=yTicks.map(v=>{
-    const yy=(PT+CH-v/maxR*CH).toFixed(1);
+  const yLines=[1,2,3,4,5].map(i=>{
+    const v=i*yStep, yy=(PT+CH-v/maxR*CH).toFixed(1);
     return `<line x1="${PL}" y1="${yy}" x2="${LW-PR}" y2="${yy}" stroke="#ece5d5" stroke-width="0.5"/>
       <text x="${PL-4}" y="${yy}" text-anchor="end" dominant-baseline="middle" fill="#c0b090" font-size="8" font-family="Red Hat Display,sans-serif">${v.toFixed(1)}x</text>`;
   }).join('');
@@ -2674,16 +2680,20 @@ function pubRoasChart(rows){
     const i=dKeys.indexOf(k); const x=(PL+i/Math.max(n-1,1)*CW).toFixed(1); const [,m,d]=k.split('-');
     return `<text x="${x}" y="${PT+CH+14}" text-anchor="end" fill="#9a8a6a" font-size="7" font-family="Red Hat Display,sans-serif" transform="rotate(-40,${x},${PT+CH+14})">${d}/${m}</text>`;
   }).join('');
+  const legend=`<circle cx="${PL}" cy="10" r="4" fill="#4a90a4"/>
+    <text x="${PL+8}" y="14" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">Sin Revie</text>
+    <circle cx="${PL+72}" cy="10" r="4" fill="#e67e22"/>
+    <text x="${PL+80}" y="14" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">Con Revie</text>`;
+  const dots=pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${p.revie?'#e67e22':'#4a90a4'}" stroke="#fff" stroke-width="1.2"/>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">
-    ${yLines}
+    ${legend}${yLines}
     <line x1="${PL}" y1="${avgY}" x2="${LW-PR}" y2="${avgY}" stroke="#9a8a6a" stroke-width="1" stroke-dasharray="4 3"/>
     <text x="${LW-PR+4}" y="${avgY}" dominant-baseline="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">x̄ ${avgRoas.toFixed(2)}x</text>
     <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+CH}" stroke="#d4c5a0" stroke-width="0.5"/>
     <line x1="${PL}" y1="${PT+CH}" x2="${LW-PR}" y2="${PT+CH}" stroke="#d4c5a0" stroke-width="0.5"/>
     <path d="${area}" fill="#4a90a4" opacity="0.07"/>
     <polyline points="${poly}" fill="none" stroke="#4a90a4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    ${pts.filter((_,i)=>n<=40).map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#4a90a4" stroke="#fff" stroke-width="1.2"/>`).join('')}
-    ${xLabels}
+    ${dots}${xLabels}
   </svg>`;
 }
 
@@ -2729,6 +2739,26 @@ function renderPubAnalisis(){
     <div class="subsection">
       <div class="subsection-label" style="margin-bottom:10px;">ROAS diario</div>
       ${pubRoasChart(rows)}
+      ${(()=>{
+        const bd={};
+        rows.forEach(r=>{ const dt=pubParseDate(r); if(!dt) return; const k=pubDateStr(dt); if(!bd[k]) bd[k]={v:0,g:0,revie:0}; bd[k].v+=num(r['VENTA TN']); bd[k].g+=num(r['GASTO TOTAL']); bd[k].revie+=num(r['Gasto en publicidad']); });
+        const conR=Object.values(bd).filter(d=>d.revie>0&&d.g>0);
+        const sinR=Object.values(bd).filter(d=>d.revie===0&&d.g>0);
+        const roasC=conR.length?conR.reduce((a,d)=>a+d.v/d.g,0)/conR.length:0;
+        const roasS=sinR.length?sinR.reduce((a,d)=>a+d.v/d.g,0)/sinR.length:0;
+        const diff=roasS>0?(roasC/roasS*100-100).toFixed(0):null;
+        return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px;">
+          <div class="v-kpi" style="border-left:3px solid #e67e22;">
+            ${pubKPI('ROAS con Revie', roasC.toFixed(2), conR.length+' días','#e67e22')}
+          </div>
+          <div class="v-kpi" style="border-left:3px solid #4a90a4;">
+            ${pubKPI('ROAS sin Revie', roasS.toFixed(2), sinR.length+' días','#4a90a4')}
+          </div>
+          <div class="v-kpi">
+            ${pubKPI('Diferencia Revie', diff!==null?(diff>0?'+':'')+diff+'%':'—', 'vs días sin Revie', diff>0?'#27ae60':'var(--accent3)')}
+          </div>
+        </div>`;
+      })()}
     </div>`;
 }
 
