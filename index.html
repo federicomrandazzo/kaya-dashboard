@@ -2886,6 +2886,7 @@ function renderEDR() {
 
   const allPeriods = [...new Set(DATA.edrData.map(r=>r['periodo']))].sort();
   const periods = edrSelectedPeriods.length ? edrSelectedPeriods.filter(p=>allPeriods.includes(p)) : allPeriods;
+  const showTotal = periods.length > 1;
 
   function edrSum(concepto, linea, rubro, periodo) {
     return DATA.edrData.filter(r=>
@@ -2903,21 +2904,39 @@ function renderEDR() {
   rubrosVar.forEach(r=>RUBVAR[r]={});
   rubrosFij.forEach(r=>RUBFIJ[r]={});
 
-  [...periods,null].forEach(p=>{
-    const k=p||'total';
-    V[k] =edrSum('01. ventas',null,null,p);
-    CV[k]=edrSum('02. costo de ventas',null,null,p);
-    MB[k]=V[k]+CV[k];
-    G[k] =edrSum('03. gastos',null,null,p);
-    GF[k]=edrSum('03. gastos','fijos',null,p);
-    GV[k]=edrSum('03. gastos','variables',null,p);
-    RES[k]=V[k]+CV[k]+G[k];
-    rubrosVar.forEach(r=>RUBVAR[r][k]=edrSum('03. gastos','variables',r,p));
-    rubrosFij.forEach(r=>RUBFIJ[r][k]=edrSum('03. gastos','fijos',r,p));
+  // Per-period values (selected periods only)
+  periods.forEach(p=>{
+    V[p] =edrSum('01. ventas',null,null,p);
+    CV[p]=edrSum('02. costo de ventas',null,null,p);
+    MB[p]=V[p]+CV[p];
+    G[p] =edrSum('03. gastos',null,null,p);
+    GF[p]=edrSum('03. gastos','fijos',null,p);
+    GV[p]=edrSum('03. gastos','variables',null,p);
+    RES[p]=V[p]+CV[p]+G[p];
+    rubrosVar.forEach(r=>RUBVAR[r][p]=edrSum('03. gastos','variables',r,p));
+    rubrosFij.forEach(r=>RUBFIJ[r][p]=edrSum('03. gastos','fijos',r,p));
   });
 
+  // Total = sum of selected periods only
+  if(showTotal){
+    const sp=obj=>periods.reduce((s,p)=>s+(obj[p]||0),0);
+    V.total=sp(V); CV.total=sp(CV); MB.total=sp(MB);
+    G.total=sp(G); GF.total=sp(GF); GV.total=sp(GV); RES.total=sp(RES);
+    rubrosVar.forEach(r=>RUBVAR[r].total=sp(RUBVAR[r]));
+    rubrosFij.forEach(r=>RUBFIJ[r].total=sp(RUBFIJ[r]));
+  }
+
+  // Sort rubros by magnitude descending
+  const sk=showTotal?'total':periods[0];
+  const rubrosFijSorted=[...rubrosFij].sort((a,b)=>Math.abs(RUBFIJ[b][sk]||0)-Math.abs(RUBFIJ[a][sk]||0));
+  const rubrosVarSorted=[...rubrosVar].sort((a,b)=>Math.abs(RUBVAR[b][sk]||0)-Math.abs(RUBVAR[a][sk]||0));
+
+  const allCols=showTotal?[...periods,'total']:[...periods];
+  const nP=periods.length;
+  const nPct=allCols.length;
+
   const MARPCT={},VARPCT={},PEQ={},MGS={},MGSPCT={};
-  [...periods,'total'].forEach(k=>{
+  allCols.forEach(k=>{
     MARPCT[k]=V[k]>0?RES[k]/V[k]*100:0;
     VARPCT[k]=V[k]>0?Math.abs(CV[k]+GV[k])/V[k]*100:0;
     const mc=1-VARPCT[k]/100;
@@ -2929,41 +2948,43 @@ function renderEDR() {
   const $T=v=>{if(!v&&v!==0)return'—';const s=v<0?'-':'';return`${s}$${Math.abs(Math.round(v)).toLocaleString('es-AR')}`;};
   const pS=(v,base)=>base>0?(v/base*100).toFixed(1)+'%':'—';
   const fmtP=p=>{const[y,m]=p.split('-');return['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m]+' '+y;};
-  const nP=periods.length;
-  const nPct=nP+1;
 
   function pctVentas(vals){
-    const r={};[...periods,'total'].forEach(k=>{r[k]=V[k]>0?pS(vals[k],V[k]):'—';});return r;
+    const r={};allCols.forEach(k=>{r[k]=V[k]>0?pS(vals[k],V[k]):'—';});return r;
   }
 
   const RS_H='background:#f9f5ec;';
   const RS_S='background:#f0e8d0;border-top:1px solid #d4c5a0;border-bottom:1px solid #d4c5a0;';
   const RS_R='background:#eaf5ee;border-top:2px solid #27ae60;';
 
-  function tRow(label,vals,pcts,bg,indent,valueColor){
+  function tRow(label,vals,pcts,bg,indent,valueColor,bold){
     const pad=`padding-left:${8+indent*14}px;`;
-    const fw=indent===0?'600':'400';
+    const isHL=indent===0;
+    const fw=(isHL||bold)?'600':'400';
+    const fs=isHL?'12px':'11px';
     const vcol=valueColor||'var(--text)';
-    const cells=[...periods,'total'].map((k,i)=>`<td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;color:${vcol};${i===nP?'font-weight:600;border-left:1px solid #e8dfc8;':''}">${$T(vals[k])}</td>`).join('');
-    const pctCells=pcts?[...periods,'total'].map((k,i)=>`<td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);${i===nP?'border-left:1px solid #ece5d5;':''}">${pcts[k]}</td>`).join(''):Array(nPct).fill('<td></td>').join('');
+    const lastI=allCols.length-1;
+    const cells=allCols.map((k,i)=>`<td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${vcol};${showTotal&&i===lastI?'font-weight:700;border-left:1px solid #e8dfc8;':''}">${$T(vals[k])}</td>`).join('');
+    const pctCells=pcts?allCols.map((k,i)=>`<td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);${showTotal&&i===lastI?'border-left:1px solid #ece5d5;':''}">${pcts[k]}</td>`).join(''):Array(nPct).fill('<td></td>').join('');
     return`<tr style="background:${bg||'transparent'};border-bottom:1px solid #f0ead8;">
-      <td style="padding:5px 8px;${pad}font-size:11px;font-weight:${fw};">${label}</td>
+      <td style="padding:5px 8px;${pad}font-size:${fs};font-weight:${fw};">${label}</td>
       ${cells}${pctCells}
     </tr>`;
   }
 
   const thCols=periods.map(p=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${fmtP(p)}</th>`).join('');
-  const thTot=`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;font-weight:700;">Total</th>`;
-  const thPct=periods.map(()=>`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);">%</th>`).join('')+`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);border-left:1px solid #ece5d5;">%</th>`;
+  const thTot=showTotal?`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;font-weight:700;">Total</th>`:'';
+  const thPct=allCols.map((_,i)=>`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);${showTotal&&i===allCols.length-1?'border-left:1px solid #ece5d5;':''}">%</th>`).join('');
 
-  const p100={};[...periods,'total'].forEach(k=>p100[k]='100%');
+  const p100={};allCols.forEach(k=>p100[k]='100%');
 
   function mRow(lbl,vals,fmt,col){
-    const cells=[...periods,'total'].map((k,i)=>`<td style="text-align:right;font-size:11px;padding:5px 8px;font-variant-numeric:tabular-nums;color:${col};${i===nP?'border-left:1px solid #e8dfc8;font-weight:600;':''}">${fmt(vals[k]??0)}</td>`).join('');
+    const lastI=allCols.length-1;
+    const cells=allCols.map((k,i)=>`<td style="text-align:right;font-size:11px;padding:5px 8px;font-variant-numeric:tabular-nums;color:${col};${showTotal&&i===lastI?'border-left:1px solid #e8dfc8;font-weight:600;':''}">${fmt(vals[k]??0)}</td>`).join('');
     return`<tr style="border-bottom:1px solid #f0ead8;"><td style="font-size:11px;padding:5px 8px 5px 22px;color:var(--muted);">${lbl}</td>${cells}${Array(nPct).fill('<td></td>').join('')}</tr>`;
   }
 
-  const sepRow=`<tr style="border-top:2px solid #d4c5a0;background:#f4ede0;"><td colspan="${2+nP+nPct}" style="padding:4px 8px;font-size:10px;letter-spacing:0.05em;color:var(--muted);font-weight:600;">MÉTRICAS DERIVADAS</td></tr>`;
+  const sepRow=`<tr style="border-top:2px solid #d4c5a0;background:#f4ede0;"><td colspan="${1+allCols.length+nPct}" style="padding:4px 8px;font-size:10px;letter-spacing:0.05em;color:var(--muted);font-weight:600;">MÉTRICAS DERIVADAS</td></tr>`;
 
   const tableHTML=`<div style="overflow-x:auto;">
   <table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
@@ -2973,13 +2994,13 @@ function renderEDR() {
     </tr></thead>
     <tbody>
       ${tRow('01. Ventas',V,p100,RS_H,0,'var(--accent)')}
-      ${tRow('02. Costo de ventas',CV,pctVentas(CV),'',1)}
+      ${tRow('02. Costo de ventas',CV,pctVentas(CV),'',0)}
       ${tRow('Margen bruto',MB,pctVentas(MB),RS_S,0,'#8b6914')}
       ${tRow('03. Gastos',G,pctVentas(G),RS_H,0)}
-      ${tRow('Fijos',GF,pctVentas(GF),'',1)}
-      ${rubrosFij.map(r=>tRow(r,RUBFIJ[r],null,'',2)).join('')}
-      ${tRow('Variables',GV,pctVentas(GV),'',1)}
-      ${rubrosVar.map(r=>tRow(r,RUBVAR[r],pctVentas(RUBVAR[r]),'',2)).join('')}
+      ${tRow('Fijos',GF,pctVentas(GF),'',1,null,true)}
+      ${rubrosFijSorted.map(r=>tRow(r,RUBFIJ[r],pctVentas(RUBFIJ[r]),'',2)).join('')}
+      ${tRow('Variables',GV,pctVentas(GV),'',1,null,true)}
+      ${rubrosVarSorted.map(r=>tRow(r,RUBVAR[r],pctVentas(RUBVAR[r]),'',2)).join('')}
       ${tRow('Resultado neto',RES,pctVentas(RES),RS_R,0,'#27ae60')}
       ${sepRow}
       ${mRow('Margen %',       MARPCT, v=>v.toFixed(1)+'%', '#27ae60')}
@@ -3024,12 +3045,13 @@ function renderEDR() {
     ${edrSelectedPeriods.length?`<button onclick="edrSelectedPeriods=[];renderEDR();" style="padding:3px 10px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;">Todos</button>`:''}
   </div>`;
 
-  // ── KPIs ──────────────────────────────────────────────────
+  // ── KPIs (reflect selected periods) ───────────────────────
+  const kk=showTotal?'total':periods[0];
   const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
-    ${pubKPI('Ventas totales',$T(V.total),periods.length+' meses','var(--accent)')}
-    ${pubKPI('Resultado neto',$T(RES.total),'',RES.total>=0?'#27ae60':'var(--accent3)')}
-    ${pubKPI('Margen %',MARPCT.total.toFixed(1)+'%','promedio del período',MARPCT.total>=20?'#27ae60':'#e67e22')}
-    ${pubKPI('Margen de seguridad %',Math.round(MGSPCT.total)+'%','sobre punto de equilibrio')}
+    ${pubKPI('Ventas totales',$T(V[kk]),periods.length+(periods.length===1?' mes':' meses'),'var(--accent)')}
+    ${pubKPI('Resultado neto',$T(RES[kk]),'',RES[kk]>=0?'#27ae60':'var(--accent3)')}
+    ${pubKPI('Margen %',(MARPCT[kk]||0).toFixed(1)+'%','sobre ventas',(MARPCT[kk]||0)>=20?'#27ae60':'#e67e22')}
+    ${pubKPI('Margen de seguridad %',Math.round(MGSPCT[kk]||0)+'%','sobre punto de equilibrio')}
   </div>`;
 
   el.innerHTML = periodSel + kpis +
