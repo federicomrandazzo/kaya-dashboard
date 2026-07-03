@@ -1320,6 +1320,12 @@ function closeModal(e){
 // ═══════════════════════════════════════════════════════════════
 let vMetrica='ars', vTab='general';
 let vPeriodo1='', vPeriodo2='';
+let vRubroMeses=[];
+function toggleRubroMes(p){
+  if(vRubroMeses.includes(p)) vRubroMeses=vRubroMeses.filter(x=>x!==p);
+  else vRubroMeses=[...vRubroMeses,p].sort();
+  renderVTab();
+}
 
 function metricaLabel(m){ return m==='ars'?'ARS':m==='usd'?'USD':'AXI'; }
 function metricaCol(m){ return m==='ars'?'importe_neto':m==='usd'?'importe_usd':'importe_axi'; }
@@ -1451,19 +1457,47 @@ function renderGeneral(){
     svgLeg+=`<rect x="${10+yi*80}" y="3" width="10" height="8" fill="${color}" opacity="${op}" rx="2"/><text x="${24+yi*80}" y="11" fill="${isSel?'#1a1a1a':'#9a8a6a'}" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="${isSel?'600':'400'}">${yr}</text>`;
   });
 
-  // Por rubro: KITS first, then descending
+  // Por rubro: meses seleccionables (default: período principal), KITS first
+  const mesesSel=vRubroMeses.filter(p=>periodos.includes(p));
+  const meses=mesesSel.length?mesesSel:[vPeriodo1];
+  const multiMes=meses.length>1;
   const byRubro={};
-  r1.forEach(r=>{ const k=getRubro(r); if(!byRubro[k])byRubro[k]={v:0,u:0}; byRubro[k].v+=num(r[col]); byRubro[k].u+=num(r['qty']); });
+  DATA.ventas.filter(r=>meses.includes(r['periodo'])).forEach(r=>{
+    const k=getRubro(r), p=r['periodo'];
+    if(!byRubro[k])byRubro[k]={v:0,u:0,m:{}};
+    byRubro[k].v+=num(r[col]); byRubro[k].u+=num(r['qty']);
+    byRubro[k].m[p]=(byRubro[k].m[p]||0)+num(r[col]);
+  });
+  const vRub=Object.values(byRubro).reduce((s,d)=>s+d.v,0);
+  const uRub=Object.values(byRubro).reduce((s,d)=>s+d.u,0);
   const RORDEN=['KITS','LINEA NEGRA','NEGRA','LINEA BLANCA','BLANCA'];
   const sorted=Object.entries(byRubro).sort((a,b)=>{
     const ia=RORDEN.indexOf(a[0]), ib=RORDEN.indexOf(b[0]);
     if(ia>=0&&ib>=0) return ia-ib; if(ia>=0) return -1; if(ib>=0) return 1; return b[1].v-a[1].v;
   });
-  const maxR=Math.max(...Object.values(byRubro).map(x=>x.v),1);
-  const rubroRows=sorted.map(([rb,d])=>{
-    const pct=(d.v/v1*100).toFixed(1), bw=Math.round(d.v/maxR*100);
-    return `<tr><td>${rb}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
-  }).join('');
+  const mesPills=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+    <span style="font-size:10px;color:var(--muted);white-space:nowrap;">Meses:</span>
+    ${periodos.map(p=>{const act=meses.includes(p);return`<button onclick="toggleRubroMes('${p}')" style="padding:3px 10px;border-radius:20px;border:1px solid ${act?'var(--accent)':'var(--border)'};background:${act?'var(--accent)':'transparent'};color:${act?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${p}</button>`;}).join('')}
+    ${mesesSel.length?`<button onclick="vRubroMeses=[];renderVTab();" style="padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;">Período actual</button>`:''}
+  </div>`;
+  const TOT_STYLE='background:var(--surface2);font-weight:600;border-top:2px solid var(--border);';
+  let rubroTable;
+  if(multiMes){
+    const thM=meses.map(p=>`<th style="text-align:right">${p}</th>`).join('');
+    const rows=sorted.map(([rb,d])=>`<tr><td>${rb}</td>${meses.map(p=>`<td style="text-align:right;font-variant-numeric:tabular-nums;">${d.m[p]?metricaFmt(vMetrica,d.m[p]):'—'}</td>`).join('')}<td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;border-left:1px solid var(--border);">${metricaFmt(vMetrica,d.v)}</td></tr>`).join('');
+    const totRow=`<tr style="${TOT_STYLE}"><td>TOTAL</td>${meses.map(p=>`<td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,sorted.reduce((s,[,d])=>s+(d.m[p]||0),0))}</td>`).join('')}<td style="text-align:right;font-variant-numeric:tabular-nums;border-left:1px solid var(--border);">${metricaFmt(vMetrica,vRub)}</td></tr>`;
+    rubroTable=`<table class="v-rubro-table"><thead><tr><th>Rubro</th>${thM}<th style="text-align:right;border-left:1px solid var(--border);">Total</th></tr></thead>
+      <tbody>${rows}${totRow}</tbody></table>`;
+  } else {
+    const maxR=Math.max(...sorted.map(([,d])=>d.v),1);
+    const rubroRows=sorted.map(([rb,d])=>{
+      const pct=vRub>0?(d.v/vRub*100).toFixed(1):'0.0', bw=Math.round(d.v/maxR*100);
+      return `<tr><td>${rb}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
+    }).join('');
+    const totRow=`<tr style="${TOT_STYLE}"><td>TOTAL</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,vRub)}</td><td style="text-align:right;color:var(--muted);">100%</td><td style="text-align:right;">${Math.round(uRub)}</td><td></td></tr>`;
+    rubroTable=`<table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">Venta</th><th style="text-align:right">%</th><th style="text-align:right">Uds</th><th></th></tr></thead>
+      <tbody>${rubroRows}${totRow}</tbody></table>`;
+  }
   const mainLbl=getMainLabel();
   return `
     <div class="v-kpi-grid">
@@ -1480,9 +1514,9 @@ function renderGeneral(){
       </svg>
     </div>
     <div class="v-chart-wrap">
-      <div class="v-chart-title">Por rubro · ${mainLbl}</div>
-      <table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">Venta</th><th style="text-align:right">%</th><th style="text-align:right">Uds</th><th></th></tr></thead>
-      <tbody>${rubroRows}</tbody></table>
+      <div class="v-chart-title">Por rubro · ${meses.join(' + ')} · ${metricaLabel(vMetrica)}</div>
+      ${mesPills}
+      <div style="overflow-x:auto;">${rubroTable}</div>
     </div>`;
 }
 
