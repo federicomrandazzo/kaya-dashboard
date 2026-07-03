@@ -3124,14 +3124,21 @@ function renderEDR() {
   const rubrosFijSorted=[...rubrosFij].sort((a,b)=>Math.abs(RUBFIJ[b][sk]||0)-Math.abs(RUBFIJ[a][sk]||0));
   const rubrosVarSorted=[...rubrosVar].sort((a,b)=>Math.abs(RUBVAR[b][sk]||0)-Math.abs(RUBVAR[a][sk]||0));
 
-  const MARPCT={},VARPCT={},PEQ={},MGS={},MGSPCT={};
+  const MARPCT={},VARPCT={},PEQ={},MGS={},MGSPCT={},MBPCTV={},CVPCTV={};
   allCols.forEach(k=>{
     MARPCT[k]=V[k]>0?RES[k]/V[k]*100:0;
     VARPCT[k]=V[k]>0?Math.abs(CV[k]+GV[k])/V[k]*100:0;
+    MBPCTV[k]=V[k]>0?MB[k]/V[k]*100:0;
+    CVPCTV[k]=V[k]>0?Math.abs(CV[k])/V[k]*100:0;
     const mc=1-VARPCT[k]/100;
     PEQ[k]=mc>0?Math.abs(GF[k])/mc:0;
     MGS[k]=V[k]-PEQ[k];
     MGSPCT[k]=PEQ[k]>0?MGS[k]/PEQ[k]*100:0;
+  });
+  const RUBVARPCTV={};
+  rubrosVarSorted.forEach(r=>{
+    RUBVARPCTV[r]={};
+    allCols.forEach(k=>{ RUBVARPCTV[r][k]=V[k]>0?Math.abs(RUBVAR[r][k]||0)/V[k]*100:0; });
   });
 
   function pctVentas(vals){
@@ -3185,7 +3192,10 @@ function renderEDR() {
       ${rubrosVarSorted.map(r=>tRow(r,RUBVAR[r],pctVentas(RUBVAR[r]),'',2)).join('')}
       ${tRow('Resultado neto',RES,pctVentas(RES),RS_R,0,'#27ae60')}
       ${sepRow}
-      ${mRow('Margen %',MARPCT,v=>v.toFixed(1)+'%','#27ae60')}
+      ${mRow('Resultado / Ventas',MARPCT,v=>v.toFixed(1)+'%','#27ae60')}
+      ${mRow('Margen bruto / Ventas',MBPCTV,v=>v.toFixed(1)+'%','#8b6914')}
+      ${mRow('Costo de ventas / Ventas',CVPCTV,v=>v.toFixed(1)+'%','var(--muted)')}
+      ${rubrosVarSorted.map(r=>mRow(r+' / Ventas',RUBVARPCTV[r],v=>v.toFixed(1)+'%','var(--muted)')).join('')}
       ${mRow('Total variable %',VARPCT,v=>v.toFixed(1)+'%','var(--muted)')}
       ${mRow('Punto de equilibrio',PEQ,$T,'var(--muted)')}
       ${mRow('Margen de seguridad',MGS,$T,'var(--muted)')}
