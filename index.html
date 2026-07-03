@@ -3225,13 +3225,14 @@ function renderEDR() {
     const hR=res/maxV*CH,hGV=gv/maxV*CH,hGF=gf/maxV*CH,hCV=cvv/maxV*CH;
     const yB=PT+CH,yR=yB-hR,yGV=yR-hGV,yGF=yGV-hGF,yCV=yGF-hCV;
     const pct=MARPCT[p]||0;
+    const seg=(y,h,val)=>(h>13&&v>0)?`<text x="${(x+bw/2).toFixed(1)}" y="${(y+h/2+3.5).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">${(val/v*100).toFixed(0)}%</text>`:'';
     return`<rect x="${x.toFixed(1)}" y="${yCV.toFixed(1)}" width="${bw}" height="${hCV.toFixed(1)}" fill="${COLS.cv}" rx="2 2 0 0"/>
       <rect x="${x.toFixed(1)}" y="${yGF.toFixed(1)}" width="${bw}" height="${hGF.toFixed(1)}" fill="${COLS.gf}"/>
       <rect x="${x.toFixed(1)}" y="${yGV.toFixed(1)}" width="${bw}" height="${hGV.toFixed(1)}" fill="${COLS.gv}"/>
       <rect x="${x.toFixed(1)}" y="${yR.toFixed(1)}" width="${bw}" height="${hR.toFixed(1)}" fill="${COLS.res}" rx="0 0 2 2"/>
-      ${hR>16?`<text x="${(x+bw/2).toFixed(1)}" y="${(yR+hR/2+4).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">${pct.toFixed(0)}%</text>`:''}
+      ${seg(yCV,hCV,cvv)}${seg(yGF,hGF,gf)}${seg(yGV,hGV,gv)}${seg(yR,hR,res)}
       <text x="${(x+bw/2).toFixed(1)}" y="${(PT+CH+14).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${fmtP(p)}</text>
-      <text x="${(x+bw/2).toFixed(1)}" y="${(yCV-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(1)}M · ${pct.toFixed(0)}%</text>`;
+      <text x="${(x+bw/2).toFixed(1)}" y="${(yCV-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(1)}M</text>`;
   }).join('');
   const chartSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">${bars}</svg>`;
   const legendHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap;text-transform:none;letter-spacing:normal;">
