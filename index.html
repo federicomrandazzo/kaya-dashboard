@@ -1326,6 +1326,7 @@ function toggleRubroMes(p){
   else vRubroMeses=[...vRubroMeses,p].sort();
   renderVTab();
 }
+function toggleRubroExp(k){ TS['vrub:'+k]=!TS['vrub:'+k]; renderVTab(); }
 
 function metricaLabel(m){ return m==='ars'?'ARS':m==='usd'?'USD':'AXI'; }
 function metricaCol(m){ return m==='ars'?'importe_neto':m==='usd'?'importe_usd':'importe_axi'; }
@@ -1464,9 +1465,13 @@ function renderGeneral(){
   const byRubro={};
   DATA.ventas.filter(r=>meses.includes(r['periodo'])).forEach(r=>{
     const k=getRubro(r), p=r['periodo'];
-    if(!byRubro[k])byRubro[k]={v:0,u:0,m:{}};
+    if(!byRubro[k])byRubro[k]={v:0,u:0,m:{},prods:{}};
     byRubro[k].v+=num(r[col]); byRubro[k].u+=num(r['qty']);
     byRubro[k].m[p]=(byRubro[k].m[p]||0)+num(r[col]);
+    const sk=getSku(r), nm=(r['nombre']||sk).trim();
+    if(!byRubro[k].prods[sk])byRubro[k].prods[sk]={nombre:nm,sku:sk,v:0,u:0,m:{}};
+    const pd=byRubro[k].prods[sk];
+    pd.v+=num(r[col]); pd.u+=num(r['qty']); pd.m[p]=(pd.m[p]||0)+num(r[col]);
   });
   const vRub=Object.values(byRubro).reduce((s,d)=>s+d.v,0);
   const uRub=Object.values(byRubro).reduce((s,d)=>s+d.u,0);
@@ -1484,15 +1489,34 @@ function renderGeneral(){
   let rubroTable;
   if(multiMes){
     const thM=meses.map(p=>`<th style="text-align:right">${p}</th>`).join('');
-    const rows=sorted.map(([rb,d])=>`<tr><td>${rb}</td>${meses.map(p=>`<td style="text-align:right;font-variant-numeric:tabular-nums;">${d.m[p]?metricaFmt(vMetrica,d.m[p]):'—'}</td>`).join('')}<td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;border-left:1px solid var(--border);">${metricaFmt(vMetrica,d.v)}</td></tr>`).join('');
+    const rows=sorted.map(([rb,d])=>{
+      const key=rb.replace(/\W+/g,'-');
+      const open=!!TS['vrub:'+key];
+      let h=`<tr onclick="toggleRubroExp('${key}')" style="cursor:pointer;"><td><span class="tog${open?' open':''}" style="margin-right:8px;">${open?'−':'+'}</span>${rb}</td>${meses.map(p=>`<td style="text-align:right;font-variant-numeric:tabular-nums;">${d.m[p]?metricaFmt(vMetrica,d.m[p]):'—'}</td>`).join('')}<td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;border-left:1px solid var(--border);">${metricaFmt(vMetrica,d.v)}</td></tr>`;
+      if(open){
+        Object.values(d.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
+          h+=`<tr style="background:var(--surface);"><td style="padding-left:36px;font-size:11px;">${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span></td>${meses.map(p=>`<td style="text-align:right;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;">${pd.m[p]?metricaFmt(vMetrica,pd.m[p]):'—'}</td>`).join('')}<td style="text-align:right;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid var(--border);">${metricaFmt(vMetrica,pd.v)}</td></tr>`;
+        });
+      }
+      return h;
+    }).join('');
     const totRow=`<tr style="${TOT_STYLE}"><td>TOTAL</td>${meses.map(p=>`<td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,sorted.reduce((s,[,d])=>s+(d.m[p]||0),0))}</td>`).join('')}<td style="text-align:right;font-variant-numeric:tabular-nums;border-left:1px solid var(--border);">${metricaFmt(vMetrica,vRub)}</td></tr>`;
     rubroTable=`<table class="v-rubro-table"><thead><tr><th>Rubro</th>${thM}<th style="text-align:right;border-left:1px solid var(--border);">Total</th></tr></thead>
       <tbody>${rows}${totRow}</tbody></table>`;
   } else {
     const maxR=Math.max(...sorted.map(([,d])=>d.v),1);
     const rubroRows=sorted.map(([rb,d])=>{
+      const key=rb.replace(/\W+/g,'-');
+      const open=!!TS['vrub:'+key];
       const pct=vRub>0?(d.v/vRub*100).toFixed(1):'0.0', bw=Math.round(d.v/maxR*100);
-      return `<tr><td>${rb}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
+      let h=`<tr onclick="toggleRubroExp('${key}')" style="cursor:pointer;"><td><span class="tog${open?' open':''}" style="margin-right:8px;">${open?'−':'+'}</span>${rb}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,d.v)}</td><td style="text-align:right;color:var(--muted);">${pct}%</td><td style="text-align:right;color:var(--muted);">${Math.round(d.u)}</td><td style="width:120px;"><div class="v-bar-inline" style="width:${bw}%;"></div></td></tr>`;
+      if(open){
+        Object.values(d.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
+          const ppct=vRub>0?(pd.v/vRub*100).toFixed(1):'0.0';
+          h+=`<tr style="background:var(--surface);"><td style="padding-left:36px;font-size:11px;">${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span></td><td style="text-align:right;font-size:11px;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,pd.v)}</td><td style="text-align:right;font-size:11px;color:var(--muted);">${ppct}%</td><td style="text-align:right;font-size:11px;color:var(--muted);">${Math.round(pd.u)}</td><td></td></tr>`;
+        });
+      }
+      return h;
     }).join('');
     const totRow=`<tr style="${TOT_STYLE}"><td>TOTAL</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,vRub)}</td><td style="text-align:right;color:var(--muted);">100%</td><td style="text-align:right;">${Math.round(uRub)}</td><td></td></tr>`;
     rubroTable=`<table class="v-rubro-table"><thead><tr><th>Rubro</th><th style="text-align:right">Venta</th><th style="text-align:right">%</th><th style="text-align:right">Uds</th><th></th></tr></thead>
