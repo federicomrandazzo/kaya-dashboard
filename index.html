@@ -669,6 +669,7 @@ let pubTab = 'analisis';
 let pubDesde = '', pubHasta = '';
 let pubCmpADesde = '', pubCmpAHasta = '', pubCmpBDesde = '', pubCmpBHasta = '';
 let edrSelectedPeriods = [];
+let edrTab = 'eerr';
 
 // ── UTILS ───────────────────────────────────────────────────────
 function parseCSV(text) {
@@ -1496,7 +1497,7 @@ function renderPorLinea(){
   const lineaCards=['BLANCA','NEGRA','KITS'].map(l=>{ const d=byL[l]||{v:0,u:0}; const pct=totV>0?(d.v/totV*100).toFixed(1):0; return `<div class="v-kpi"><div class="v-kpi-label">${l}</div><div class="v-kpi-val" style="font-size:16px;">${metricaFmt(vMetrica,d.v)}</div><div class="v-kpi-sub">${pct}% · ${Math.round(d.u)} uds</div></div>`; }).join('');
   const tree={}, tree2={};
   r1.forEach(r=>{ const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim(); if(!tree[li]) tree[li]={v:0,u:0,rubros:{}}; tree[li].v+=num(r[col]); tree[li].u+=num(r['qty']); if(!tree[li].rubros[rb]) tree[li].rubros[rb]={v:0,u:0,prods:{}}; tree[li].rubros[rb].v+=num(r[col]); tree[li].rubros[rb].u+=num(r['qty']); if(!tree[li].rubros[rb].prods[sk]) tree[li].rubros[rb].prods[sk]={nombre:nm,sku:sk,v:0,u:0}; tree[li].rubros[rb].prods[sk].v+=num(r[col]); tree[li].rubros[rb].prods[sk].u+=num(r['qty']); });
-  r2.forEach(r=>{ const li=getLinea(r)||'OTRO', rb=getRubro(r); if(!tree2[li])tree2[li]={}; if(!tree2[li][rb])tree2[li][rb]={v:0}; tree2[li][rb].v+=num(r[col]); });
+  r2.forEach(r=>{ const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r); if(!tree2[li])tree2[li]={v:0,rubros:{}}; tree2[li].v+=num(r[col]); if(!tree2[li].rubros[rb])tree2[li].rubros[rb]={v:0,prods:{}}; tree2[li].rubros[rb].v+=num(r[col]); if(!tree2[li].rubros[rb].prods[sk])tree2[li].rubros[rb].prods[sk]={v:0}; tree2[li].rubros[rb].prods[sk].v+=num(r[col]); });
   function dSpan(a,b){ if(!b) return ''; const p=((a-b)/b*100).toFixed(1); return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}" style="font-size:10px;">${p>=0?'▲':'▼'}${Math.abs(p)}%</span>`; }
   const cmpCol=vPeriodo2?`<span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">${vPeriodo2}</span><span style="min-width:55px;text-align:right;font-size:9px;color:var(--muted);">Δ</span>`:'';
   let h=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">${lineaCards}</div>`;
@@ -1512,16 +1513,18 @@ function renderPorLinea(){
   const lkeys=[...LORDEN,...Object.keys(tree).filter(k=>!LORDEN.includes(k))].filter(k=>tree[k]);
   lkeys.forEach(li=>{
     const ld=tree[li];
-    const right=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,ld.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-left:8px;">—</span><span style="min-width:55px;display:inline-block;margin-left:8px;"></span>`:''}`;
+    const ld2=tree2[li]||{v:0,rubros:{}};
+    const right=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,ld.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-left:8px;">${ld2.v?metricaFmt(vMetrica,ld2.v):'—'}</span><span style="min-width:55px;text-align:right;display:inline-block;margin-left:8px;">${dSpan(ld.v,ld2.v)}</span>`:''}`;
     h+=TR(NS,'l-'+li,0,li,'',right,true,false);
     let rubroH='';
     Object.entries(ld.rubros).sort((a,b)=>b[1].v-a[1].v).forEach(([rb,rd])=>{
-      const rd2=(tree2[li]&&tree2[li][rb])||{v:0};
+      const rd2=(ld2.rubros&&ld2.rubros[rb])||{v:0,prods:{}};
       const rRight=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,rd.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-left:8px;">${metricaFmt(vMetrica,rd2.v)}</span><span style="min-width:55px;text-align:right;display:inline-block;margin-left:8px;">${dSpan(rd.v,rd2.v)}</span>`:''}`;
       rubroH+=TR(NS,'r-'+li+'-'+rb,1,rb,`${Math.round(rd.u)} uds`,rRight,true,false);
       let prodH='';
       Object.values(rd.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
-        const pRight=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,pd.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;"></span><span style="min-width:55px;display:inline-block;"></span>`:''}`;
+        const pd2=(rd2.prods&&rd2.prods[pd.sku])||{v:0};
+        const pRight=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,pd.v)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-left:8px;">${pd2.v?metricaFmt(vMetrica,pd2.v):'—'}</span><span style="min-width:55px;text-align:right;display:inline-block;margin-left:8px;">${dSpan(pd.v,pd2.v)}</span>`:''}`;
         prodH+=TR(NS,'p-'+pd.sku,2,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,`${Math.round(pd.u)} uds`,pRight,false,false);
       });
       rubroH+=TC(NS,'r-'+li+'-'+rb,prodH,false);
@@ -2846,6 +2849,7 @@ function renderPubComparativo(){
 }
 
 function setPubTab(t){ pubTab=t; renderPublicidad(); }
+function setEdrTab(t){ edrTab=t; renderEDR(); }
 function toggleEdrPeriod(p){
   if(edrSelectedPeriods.includes(p)) edrSelectedPeriods=edrSelectedPeriods.filter(x=>x!==p);
   else edrSelectedPeriods=[...edrSelectedPeriods,p].sort();
@@ -2884,19 +2888,133 @@ function renderEDR() {
     return;
   }
 
+  // ── Shared setup ─────────────────────────────────────────
   const allPeriods = [...new Set(DATA.edrData.map(r=>r['periodo']))].sort();
   const periods = edrSelectedPeriods.length ? edrSelectedPeriods.filter(p=>allPeriods.includes(p)) : allPeriods;
   const showTotal = periods.length > 1;
+  const allCols = showTotal ? [...periods,'total'] : [...periods];
+  const nP = periods.length;
+  const nPct = allCols.length;
+  const $T=v=>{if(!v&&v!==0)return'—';const s=v<0?'-':'';return`${s}$${Math.abs(Math.round(v)).toLocaleString('es-AR')}`;};
+  const pS=(v,base)=>base>0?(v/base*100).toFixed(1)+'%':'—';
+  const fmtP=p=>{const[y,m]=p.split('-');return['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m]+' '+y;};
+  const lastI=allCols.length-1;
 
-  function edrSum(concepto, linea, rubro, periodo) {
+  function edrSum(concepto,linea,rubro,periodo,unidad){
     return DATA.edrData.filter(r=>
-      (!concepto || r['concepto']===concepto) &&
-      (!linea    || r['LINEA']===linea) &&
-      (!rubro    || r['RUBRO']===rubro) &&
-      (!periodo  || r['periodo']===periodo)
+      (!concepto||r['concepto']===concepto)&&
+      (!linea||r['LINEA']===linea)&&
+      (!rubro||r['RUBRO']===rubro)&&
+      (!periodo||r['periodo']===periodo)&&
+      (!unidad||r['unidad de negocio']===unidad)
     ).reduce((a,r)=>a+num(r['importe eerr']),0);
   }
 
+  const periodSel=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+    <span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-right:2px;">Meses:</span>
+    ${allPeriods.map(p=>{const active=edrSelectedPeriods.length===0||edrSelectedPeriods.includes(p);return`<button onclick="toggleEdrPeriod('${p}')" style="padding:3px 10px;border-radius:20px;border:1px solid ${active?'var(--accent)':'#d0c8b8'};background:${active?'var(--accent)':'transparent'};color:${active?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${fmtP(p)}</button>`;}).join('')}
+    ${edrSelectedPeriods.length?`<button onclick="edrSelectedPeriods=[];renderEDR();" style="padding:3px 10px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;">Todos</button>`:''}
+  </div>`;
+
+  const tabHeader=`<div class="tabs" style="margin-bottom:20px;">
+    <div class="tab ${edrTab==='eerr'?'active':''}" onclick="setEdrTab('eerr')">Estado de Resultados</div>
+    <div class="tab ${edrTab==='udn'?'active':''}" onclick="setEdrTab('udn')">Por Unidad</div>
+  </div>`;
+
+  // ── POR UNIDAD TAB ────────────────────────────────────────
+  if(edrTab==='udn'){
+    const udns=[...new Set(
+      DATA.edrData
+        .filter(r=>r['concepto']==='01. ventas'||r['concepto']==='02. costo de ventas')
+        .map(r=>r['unidad de negocio'])
+    )].sort();
+    const UDN_COLS=['#4a90a4','#e67e22','#8e44ad','#27ae60'];
+    const UV={},UCV={},UMB={},UMBPCT={};
+    udns.forEach(u=>{
+      UV[u]={}; UCV[u]={}; UMB[u]={};
+      periods.forEach(p=>{
+        UV[u][p] =edrSum('01. ventas',null,null,p,u);
+        UCV[u][p]=edrSum('02. costo de ventas',null,null,p,u);
+        UMB[u][p]=UV[u][p]+UCV[u][p];
+      });
+      if(showTotal){
+        UV[u].total =periods.reduce((s,p)=>s+(UV[u][p]||0),0);
+        UCV[u].total=periods.reduce((s,p)=>s+(UCV[u][p]||0),0);
+        UMB[u].total=periods.reduce((s,p)=>s+(UMB[u][p]||0),0);
+      }
+      UMBPCT[u]={};
+      allCols.forEach(k=>{UMBPCT[u][k]=UV[u][k]>0?UMB[u][k]/UV[u][k]*100:0;});
+    });
+    const TV={},TCV={},TMB={},TMBPCT={};
+    allCols.forEach(k=>{
+      TV[k]=udns.reduce((s,u)=>s+(UV[u][k]||0),0);
+      TCV[k]=udns.reduce((s,u)=>s+(UCV[u][k]||0),0);
+      TMB[k]=TV[k]+TCV[k];
+      TMBPCT[k]=TV[k]>0?TMB[k]/TV[k]*100:0;
+    });
+
+    const thU=periods.map(p=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${fmtP(p)}</th>`).join('');
+    const thUtot=showTotal?`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;font-weight:700;">Total</th>`:'';
+
+    function udnBlock(label,V,CV,MB,MBPCT,isTotal){
+      const bg=isTotal?'background:#f9f5ec;':'';
+      const fw=isTotal?'600':'400';
+      const empty=k=>!(V[k]||CV[k]);
+      const mkC=(vals,col)=>allCols.map((k,i)=>`<td style="text-align:right;padding:4px 8px;font-size:11px;font-variant-numeric:tabular-nums;${col?'color:'+col+';':''}${showTotal&&i===lastI?'font-weight:700;border-left:1px solid #e8dfc8;':''}">${empty(k)?'—':$T(vals[k])}</td>`).join('');
+      const pctC=allCols.map((k,i)=>`<td style="text-align:right;padding:4px 8px;font-size:11px;font-weight:600;color:${empty(k)?'var(--muted)':(MBPCT[k]||0)>=30?'#27ae60':(MBPCT[k]||0)>=20?'#e67e22':'var(--accent3)'};${showTotal&&i===lastI?'border-left:1px solid #e8dfc8;':''}">${empty(k)?'—':(MBPCT[k]||0).toFixed(1)+'%'}</td>`).join('');
+      return`<tr style="border-top:2px solid #d4c5a0;${bg}">
+          <td rowspan="4" style="padding:8px;font-size:12px;font-weight:${fw};vertical-align:middle;border-right:1px solid #e8dfc8;">${label}</td>
+          <td style="padding:4px 8px;font-size:10px;color:var(--muted);">Ventas</td>${mkC(V,'var(--accent)')}
+        </tr>
+        <tr style="${bg}"><td style="padding:4px 8px;font-size:10px;color:var(--muted);">CMV</td>${mkC(CV,'')}</tr>
+        <tr style="${bg}"><td style="padding:4px 8px;font-size:10px;color:var(--muted);">Margen bruto</td>${mkC(MB,'#8b6914')}</tr>
+        <tr style="border-bottom:2px solid #e8dfc8;${bg}"><td style="padding:4px 8px;font-size:10px;color:var(--muted);">Margen %</td>${pctC}</tr>`;
+    }
+
+    const udnTable=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">
+        <th style="text-align:left;font-size:10px;padding:6px 8px;min-width:120px;letter-spacing:0.05em;">UNIDAD</th>
+        <th style="text-align:left;font-size:10px;padding:6px 8px;min-width:80px;"></th>
+        ${thU}${thUtot}
+      </tr></thead>
+      <tbody>
+        ${udns.map(u=>udnBlock(u.replace(/^\d+\.\s*/,''),UV[u],UCV[u],UMB[u],UMBPCT[u],false)).join('')}
+        ${udnBlock('Total',TV,TCV,TMB,TMBPCT,true)}
+      </tbody>
+    </table></div>`;
+
+    const uLW=520,uLH=160,uPL=8,uPR=8,uPT=24,uPB=28,uCW=uLW-uPL-uPR,uCH=uLH-uPT-uPB;
+    const nU=udns.length,gW=uCW/(nP+1),bW=Math.min(40,gW/nU*0.78);
+    const maxPct2=Math.max(...udns.flatMap(u=>periods.map(p=>UMBPCT[u][p]||0)),1);
+    const udnBars=periods.map((p,pi)=>{
+      const gx=uPL+(pi+1)*gW;
+      return udns.map((u,ui)=>{
+        if(!(UV[u][p]||UCV[u][p])) return '';
+        const pct=UMBPCT[u][p]||0;
+        const x=gx+(ui-(nU-1)/2)*(bW+2)-bW/2;
+        const h=Math.max(pct/maxPct2*uCH,1);
+        const y=uPT+uCH-h;
+        const col=UDN_COLS[ui%UDN_COLS.length];
+        const lbl=h>14?`<text x="${(x+bW/2).toFixed(1)}" y="${(y+h/2+4).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="600">${pct.toFixed(0)}%</text>`:`<text x="${(x+bW/2).toFixed(1)}" y="${(y-3).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${pct.toFixed(0)}%</text>`;
+        return`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bW}" height="${h.toFixed(1)}" fill="${col}" rx="2 2 0 0"/>${lbl}`;
+      }).join('')+`<text x="${gx.toFixed(1)}" y="${(uPT+uCH+14).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${fmtP(p)}</text>`;
+    }).join('');
+    const udnLeg=udns.map((u,i)=>`<span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:10px;height:10px;border-radius:2px;background:${UDN_COLS[i%UDN_COLS.length]};display:inline-block;flex-shrink:0;"></span>${u.replace(/^\d+\.\s*/,'')}</span>`).join('');
+
+    el.innerHTML=periodSel+tabHeader+
+      `<div class="subsection" style="margin-bottom:24px;">
+        <div class="subsection-label" style="margin-bottom:12px;">Margen bruto % por unidad de negocio</div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${uLW} ${uLH}" style="width:100%;max-height:${uLH}px;">${udnBars}</svg>
+        <div style="display:flex;gap:16px;justify-content:center;margin-top:6px;flex-wrap:wrap;">${udnLeg}</div>
+      </div>
+      <div class="subsection">
+        <div class="subsection-label" style="margin-bottom:14px;">Detalle por unidad de negocio</div>
+        ${udnTable}
+      </div>`;
+    return;
+  }
+
+  // ── ESTADO DE RESULTADOS TAB ──────────────────────────────
   const rubrosVar=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='variables').map(r=>r['RUBRO']))].sort();
   const rubrosFij=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='fijos').map(r=>r['RUBRO']))].sort();
 
@@ -2904,7 +3022,6 @@ function renderEDR() {
   rubrosVar.forEach(r=>RUBVAR[r]={});
   rubrosFij.forEach(r=>RUBFIJ[r]={});
 
-  // Per-period values (selected periods only)
   periods.forEach(p=>{
     V[p] =edrSum('01. ventas',null,null,p);
     CV[p]=edrSum('02. costo de ventas',null,null,p);
@@ -2917,7 +3034,6 @@ function renderEDR() {
     rubrosFij.forEach(r=>RUBFIJ[r][p]=edrSum('03. gastos','fijos',r,p));
   });
 
-  // Total = sum of selected periods only
   if(showTotal){
     const sp=obj=>periods.reduce((s,p)=>s+(obj[p]||0),0);
     V.total=sp(V); CV.total=sp(CV); MB.total=sp(MB);
@@ -2926,14 +3042,9 @@ function renderEDR() {
     rubrosFij.forEach(r=>RUBFIJ[r].total=sp(RUBFIJ[r]));
   }
 
-  // Sort rubros by magnitude descending
   const sk=showTotal?'total':periods[0];
   const rubrosFijSorted=[...rubrosFij].sort((a,b)=>Math.abs(RUBFIJ[b][sk]||0)-Math.abs(RUBFIJ[a][sk]||0));
   const rubrosVarSorted=[...rubrosVar].sort((a,b)=>Math.abs(RUBVAR[b][sk]||0)-Math.abs(RUBVAR[a][sk]||0));
-
-  const allCols=showTotal?[...periods,'total']:[...periods];
-  const nP=periods.length;
-  const nPct=allCols.length;
 
   const MARPCT={},VARPCT={},PEQ={},MGS={},MGSPCT={};
   allCols.forEach(k=>{
@@ -2944,10 +3055,6 @@ function renderEDR() {
     MGS[k]=V[k]-PEQ[k];
     MGSPCT[k]=PEQ[k]>0?MGS[k]/PEQ[k]*100:0;
   });
-
-  const $T=v=>{if(!v&&v!==0)return'—';const s=v<0?'-':'';return`${s}$${Math.abs(Math.round(v)).toLocaleString('es-AR')}`;};
-  const pS=(v,base)=>base>0?(v/base*100).toFixed(1)+'%':'—';
-  const fmtP=p=>{const[y,m]=p.split('-');return['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m]+' '+y;};
 
   function pctVentas(vals){
     const r={};allCols.forEach(k=>{r[k]=V[k]>0?pS(vals[k],V[k]):'—';});return r;
@@ -2963,7 +3070,6 @@ function renderEDR() {
     const fw=(isHL||bold)?'600':'400';
     const fs=isHL?'12px':'11px';
     const vcol=valueColor||'var(--text)';
-    const lastI=allCols.length-1;
     const cells=allCols.map((k,i)=>`<td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${vcol};${showTotal&&i===lastI?'font-weight:700;border-left:1px solid #e8dfc8;':''}">${$T(vals[k])}</td>`).join('');
     const pctCells=pcts?allCols.map((k,i)=>`<td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);${showTotal&&i===lastI?'border-left:1px solid #ece5d5;':''}">${pcts[k]}</td>`).join(''):Array(nPct).fill('<td></td>').join('');
     return`<tr style="background:${bg||'transparent'};border-bottom:1px solid #f0ead8;">
@@ -2974,12 +3080,10 @@ function renderEDR() {
 
   const thCols=periods.map(p=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${fmtP(p)}</th>`).join('');
   const thTot=showTotal?`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;font-weight:700;">Total</th>`:'';
-  const thPct=allCols.map((_,i)=>`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);${showTotal&&i===allCols.length-1?'border-left:1px solid #ece5d5;':''}">%</th>`).join('');
-
+  const thPct=allCols.map((_,i)=>`<th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);${showTotal&&i===lastI?'border-left:1px solid #ece5d5;':''}">%</th>`).join('');
   const p100={};allCols.forEach(k=>p100[k]='100%');
 
   function mRow(lbl,vals,fmt,col){
-    const lastI=allCols.length-1;
     const cells=allCols.map((k,i)=>`<td style="text-align:right;font-size:11px;padding:5px 8px;font-variant-numeric:tabular-nums;color:${col};${showTotal&&i===lastI?'border-left:1px solid #e8dfc8;font-weight:600;':''}">${fmt(vals[k]??0)}</td>`).join('');
     return`<tr style="border-bottom:1px solid #f0ead8;"><td style="font-size:11px;padding:5px 8px 5px 22px;color:var(--muted);">${lbl}</td>${cells}${Array(nPct).fill('<td></td>').join('')}</tr>`;
   }
@@ -3003,26 +3107,24 @@ function renderEDR() {
       ${rubrosVarSorted.map(r=>tRow(r,RUBVAR[r],pctVentas(RUBVAR[r]),'',2)).join('')}
       ${tRow('Resultado neto',RES,pctVentas(RES),RS_R,0,'#27ae60')}
       ${sepRow}
-      ${mRow('Margen %',       MARPCT, v=>v.toFixed(1)+'%', '#27ae60')}
-      ${mRow('Total variable %',VARPCT, v=>v.toFixed(1)+'%', 'var(--muted)')}
-      ${mRow('Punto de equilibrio',PEQ, $T, 'var(--muted)')}
-      ${mRow('Margen de seguridad',MGS, $T, 'var(--muted)')}
-      ${mRow('Margen de seguridad %',MGSPCT, v=>Math.round(v)+'%', 'var(--muted)')}
+      ${mRow('Margen %',MARPCT,v=>v.toFixed(1)+'%','#27ae60')}
+      ${mRow('Total variable %',VARPCT,v=>v.toFixed(1)+'%','var(--muted)')}
+      ${mRow('Punto de equilibrio',PEQ,$T,'var(--muted)')}
+      ${mRow('Margen de seguridad',MGS,$T,'var(--muted)')}
+      ${mRow('Margen de seguridad %',MGSPCT,v=>Math.round(v)+'%','var(--muted)')}
     </tbody>
   </table></div>`;
 
-  // ── Stacked composition chart ──────────────────────────────
   const LW=560,LH=180,PL=8,PR=8,PT=20,PB=32,CW=LW-PL-PR,CH=LH-PT-PB;
   const bw=Math.min(72,CW/(nP+1)*0.7);
   const gap=(CW-bw*nP)/(nP+1);
   const maxV=Math.max(...periods.map(p=>V[p]||0),1);
   const COLS={res:'#27ae60',gv:'#e8956d',gf:'#c0392b',cv:'#b8a888'};
-
   const bars=periods.map((p,i)=>{
     const v=V[p]||0,cvv=Math.abs(CV[p]||0),gf=Math.abs(GF[p]||0),gv=Math.abs(GV[p]||0),res=Math.max(RES[p]||0,0);
     const x=PL+gap+i*(bw+gap);
-    const hR=res/maxV*CH, hGV=gv/maxV*CH, hGF=gf/maxV*CH, hCV=cvv/maxV*CH;
-    const yB=PT+CH, yR=yB-hR, yGV=yR-hGV, yGF=yGV-hGF, yCV=yGF-hCV;
+    const hR=res/maxV*CH,hGV=gv/maxV*CH,hGF=gf/maxV*CH,hCV=cvv/maxV*CH;
+    const yB=PT+CH,yR=yB-hR,yGV=yR-hGV,yGF=yGV-hGF,yCV=yGF-hCV;
     const pct=MARPCT[p]||0;
     return`<rect x="${x.toFixed(1)}" y="${yCV.toFixed(1)}" width="${bw}" height="${hCV.toFixed(1)}" fill="${COLS.cv}" rx="2 2 0 0"/>
       <rect x="${x.toFixed(1)}" y="${yGF.toFixed(1)}" width="${bw}" height="${hGF.toFixed(1)}" fill="${COLS.gf}"/>
@@ -3032,20 +3134,11 @@ function renderEDR() {
       <text x="${(x+bw/2).toFixed(1)}" y="${(PT+CH+14).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${fmtP(p)}</text>
       <text x="${(x+bw/2).toFixed(1)}" y="${(yCV-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(1)}M · ${pct.toFixed(0)}%</text>`;
   }).join('');
-
   const chartSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">${bars}</svg>`;
   const legendHTML=`<div style="display:flex;gap:16px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
     ${[['Resultado',COLS.res],['G. variables',COLS.gv],['G. fijos',COLS.gf],['Costo venta',COLS.cv]].map(([l,c])=>`<span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:10px;height:10px;border-radius:2px;background:${c};display:inline-block;flex-shrink:0;"></span>${l}</span>`).join('')}
   </div>`;
 
-  // ── Period selector ───────────────────────────────────────
-  const periodSel=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
-    <span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-right:2px;">Meses:</span>
-    ${allPeriods.map(p=>{const active=edrSelectedPeriods.length===0||edrSelectedPeriods.includes(p);return`<button onclick="toggleEdrPeriod('${p}')" style="padding:3px 10px;border-radius:20px;border:1px solid ${active?'var(--accent)':'#d0c8b8'};background:${active?'var(--accent)':'transparent'};color:${active?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${fmtP(p)}</button>`;}).join('')}
-    ${edrSelectedPeriods.length?`<button onclick="edrSelectedPeriods=[];renderEDR();" style="padding:3px 10px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;">Todos</button>`:''}
-  </div>`;
-
-  // ── KPIs (reflect selected periods) ───────────────────────
   const kk=showTotal?'total':periods[0];
   const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
     ${pubKPI('Ventas totales',$T(V[kk]),periods.length+(periods.length===1?' mes':' meses'),'var(--accent)')}
@@ -3054,7 +3147,7 @@ function renderEDR() {
     ${pubKPI('Margen de seguridad %',Math.round(MGSPCT[kk]||0)+'%','sobre punto de equilibrio')}
   </div>`;
 
-  el.innerHTML = periodSel + kpis +
+  el.innerHTML=periodSel+tabHeader+kpis+
     `<div class="subsection" style="margin-bottom:24px;">
       <div class="subsection-label" style="margin-bottom:12px;">Composición de resultados por mes</div>
       ${chartSVG}${legendHTML}
