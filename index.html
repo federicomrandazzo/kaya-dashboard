@@ -3214,8 +3214,8 @@ function renderEDR() {
     </tbody>
   </table></div>`;
 
-  const LW=560,LH=180,PL=8,PR=8,PT=20,PB=32,CW=LW-PL-PR,CH=LH-PT-PB;
-  const bw=Math.min(72,CW/(nP+1)*0.7);
+  const LW=560,LH=300,PL=8,PR=8,PT=20,PB=32,CW=LW-PL-PR,CH=LH-PT-PB;
+  const bw=Math.min(54,CW/(nP+1)*0.525);
   const gap=(CW-bw*nP)/(nP+1);
   const maxV=Math.max(...periods.map(p=>V[p]||0),1);
   const COLS={res:'#27ae60',gv:'#e8956d',gf:'#c0392b',cv:'#b8a888'};
@@ -3234,7 +3234,7 @@ function renderEDR() {
       <text x="${(x+bw/2).toFixed(1)}" y="${(yCV-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(1)}M · ${pct.toFixed(0)}%</text>`;
   }).join('');
   const chartSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">${bars}</svg>`;
-  const legendHTML=`<div style="display:flex;gap:16px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
+  const legendHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap;text-transform:none;letter-spacing:normal;">
     ${[['Resultado',COLS.res],['G. variables',COLS.gv],['G. fijos',COLS.gf],['Costo venta',COLS.cv]].map(([l,c])=>`<span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:10px;height:10px;border-radius:2px;background:${c};display:inline-block;flex-shrink:0;"></span>${l}</span>`).join('')}
   </div>`;
 
@@ -3247,9 +3247,12 @@ function renderEDR() {
   </div>`;
 
   el.innerHTML=periodSel+tabHeader+kpis+
-    `<div class="subsection" style="margin-bottom:24px;">
-      <div class="subsection-label" style="margin-bottom:12px;">Composición de resultados por mes</div>
-      ${chartSVG}${legendHTML}
+    `<div class="subsection" style="margin-bottom:36px;">
+      <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <span>Composición de resultados por mes</span>
+        ${legendHTML}
+      </div>
+      ${chartSVG}
     </div>
     <div class="subsection" style="margin-bottom:24px;">
       <div class="subsection-label" style="margin-bottom:14px;">Estado de Resultados</div>
