@@ -902,7 +902,7 @@ function renderKPIsInline(k){
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
         <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">A la venta</div><div style="font-size:17px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(k.ventaV)}</div></div>
         <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Por armar</div><div style="font-size:17px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums;">${pesos(k.armarV)}</div></div>
-        <div style="border-left:1px solid var(--border);padding-left:20px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total potencial</div><div style="font-size:17px;font-weight:500;color:var(--white);font-variant-numeric:tabular-nums;">${pesos(k.ventaV+k.armarV)}</div></div>
+        <div style="border-left:1px solid var(--border);padding-left:20px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total potencial</div><div style="font-size:17px;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums;">${pesos(k.ventaV+k.armarV)}</div></div>
       </div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
@@ -910,7 +910,7 @@ function renderKPIsInline(k){
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
         <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Stock venta</div><div style="font-size:17px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(k.ventaC)}</div></div>
         <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Insumos</div><div style="font-size:17px;font-weight:500;color:var(--accent2);font-variant-numeric:tabular-nums;">${pesos(k.insCosto)}</div></div>
-        <div style="border-left:1px solid var(--border);padding-left:20px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total inventario</div><div style="font-size:17px;font-weight:500;color:var(--white);font-variant-numeric:tabular-nums;">${pesos(k.ventaC+k.insCosto)}</div></div>
+        <div style="border-left:1px solid var(--border);padding-left:20px;"><div style="font-size:10px;color:var(--muted);margin-bottom:3px;">Total inventario</div><div style="font-size:17px;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums;">${pesos(k.ventaC+k.insCosto)}</div></div>
       </div>
     </div>
   </div>`;
