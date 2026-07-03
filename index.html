@@ -1925,12 +1925,13 @@ function calcProyeccion(silent) {
     });
   });
 
-  // Total a comprar en $ (faltante × costo)
+  // Total a comprar en $ (faltante × costo), descontando stock armado igual que la tabla
   let totalComprar = 0;
   Object.values(cIns).forEach(it => {
     const skM = SKU_MAP[it.sku] || it.sku;
     const disp = stockDUX[it.sku] !== undefined ? stockDUX[it.sku] : (stockDUX[skM] || 0);
-    const falta = Math.max(0, it.qty - disp);
+    const armado = stockArmado[it.sku] || stockArmado[skM] || 0;
+    const falta = Math.max(0, it.qty - disp - armado);
     totalComprar += falta * (costoDUX[it.sku] || costoDUX[skM] || 0);
   });
 
