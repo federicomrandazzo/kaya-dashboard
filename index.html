@@ -1537,76 +1537,88 @@ function renderPorLinea(){
 
 // ── BOM DATA ─────────────────────────────────────────────────────
 function buildBOM(){
-  const cacheKey=vPeriodo1;
+  const cacheKey=vPeriodo1+'|'+(vPeriodo2||'');
   if(bomCache&&bomCache.key===cacheKey) return bomCache.data;
   const recetas={};
   DATA.compuestos.forEach(r=>{ const cod=(r['Código Compuesto']||'').trim(); if(!cod) return; if(!recetas[cod]) recetas[cod]=[]; recetas[cod].push({comp:(r['Código Componente']||'').trim(),qty:num(r['Cantidad']),nombre:(r['Producto Componente']||'').trim()}); });
   const nomD={}, unD={};
   DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
-  const rows=getMainRows();
-  // Build per-SKU totals AND track venta directa vs from kits
-  const bySkuVta={};
-  rows.forEach(r=>{
-    const sk=getSku(r), q=num(r['qty']); if(!sk) return;
-    if(!bySkuVta[sk]) bySkuVta[sk]={sku:sk,qty:0,qtyDirect:0,qtyKit:0,nombre:r['nombre']||'',linea:getLinea(r)};
-    bySkuVta[sk].qty+=q;
-    const esKit=/^KIT/i.test(sk);
-    if(esKit) bySkuVta[sk].qtyKit+=q; else bySkuVta[sk].qtyDirect+=q;
-  });
-  // consumo productos: kits → their components
-  const cProd={};
-  // Also track origin breakdown: {sku: {total, direct, fromKits}}
-  const cProdOrigin={};
-  Object.values(bySkuVta).forEach(it=>{
-    const esKit=/^KIT/i.test(it.sku), rec=recetas[it.sku];
-    if(esKit&&rec&&rec.length){
-      rec.forEach(c=>{
-        if(!cProd[c.comp]) cProd[c.comp]={sku:c.comp,qty:0,nombre:c.nombre||nomD[c.comp]||c.comp};
-        cProd[c.comp].qty+=it.qty*c.qty;
-        if(!cProdOrigin[c.comp]) cProdOrigin[c.comp]={direct:0,fromKit:0};
-        cProdOrigin[c.comp].fromKit+=it.qty*c.qty;
-      });
-    } else {
-      if(!cProd[it.sku]) cProd[it.sku]={sku:it.sku,qty:0,nombre:it.nombre||nomD[it.sku]||it.sku};
-      cProd[it.sku].qty+=it.qty;
-      if(!cProdOrigin[it.sku]) cProdOrigin[it.sku]={direct:0,fromKit:0};
-      cProdOrigin[it.sku].direct+=it.qty;
-    }
-  });
-  const cIns={};
-  Object.values(cProd).forEach(it=>{
-    const rec=recetas[it.sku];
-    if(rec&&rec.length){ rec.forEach(c=>{ if(!cIns[c.comp])cIns[c.comp]={sku:c.comp,qty:0,nombre:c.nombre||nomD[c.comp]||c.comp}; cIns[c.comp].qty+=it.qty*c.qty; }); }
-    else { if(!cIns[it.sku])cIns[it.sku]={sku:it.sku,qty:0,nombre:it.nombre||nomD[it.sku]||it.sku}; cIns[it.sku].qty+=it.qty; }
-  });
-  const data={cProd,cProdOrigin,cIns,nomD,unD};
+  function computeBOM(rows){
+    // Build per-SKU totals AND track venta directa vs from kits
+    const bySkuVta={};
+    rows.forEach(r=>{
+      const sk=getSku(r), q=num(r['qty']); if(!sk) return;
+      if(!bySkuVta[sk]) bySkuVta[sk]={sku:sk,qty:0,qtyDirect:0,qtyKit:0,nombre:r['nombre']||'',linea:getLinea(r)};
+      bySkuVta[sk].qty+=q;
+      const esKit=/^KIT/i.test(sk);
+      if(esKit) bySkuVta[sk].qtyKit+=q; else bySkuVta[sk].qtyDirect+=q;
+    });
+    // consumo productos: kits → their components
+    const cProd={};
+    // Also track origin breakdown: {sku: {total, direct, fromKits}}
+    const cProdOrigin={};
+    Object.values(bySkuVta).forEach(it=>{
+      const esKit=/^KIT/i.test(it.sku), rec=recetas[it.sku];
+      if(esKit&&rec&&rec.length){
+        rec.forEach(c=>{
+          if(!cProd[c.comp]) cProd[c.comp]={sku:c.comp,qty:0,nombre:c.nombre||nomD[c.comp]||c.comp};
+          cProd[c.comp].qty+=it.qty*c.qty;
+          if(!cProdOrigin[c.comp]) cProdOrigin[c.comp]={direct:0,fromKit:0};
+          cProdOrigin[c.comp].fromKit+=it.qty*c.qty;
+        });
+      } else {
+        if(!cProd[it.sku]) cProd[it.sku]={sku:it.sku,qty:0,nombre:it.nombre||nomD[it.sku]||it.sku};
+        cProd[it.sku].qty+=it.qty;
+        if(!cProdOrigin[it.sku]) cProdOrigin[it.sku]={direct:0,fromKit:0};
+        cProdOrigin[it.sku].direct+=it.qty;
+      }
+    });
+    const cIns={};
+    Object.values(cProd).forEach(it=>{
+      const rec=recetas[it.sku];
+      if(rec&&rec.length){ rec.forEach(c=>{ if(!cIns[c.comp])cIns[c.comp]={sku:c.comp,qty:0,nombre:c.nombre||nomD[c.comp]||c.comp}; cIns[c.comp].qty+=it.qty*c.qty; }); }
+      else { if(!cIns[it.sku])cIns[it.sku]={sku:it.sku,qty:0,nombre:it.nombre||nomD[it.sku]||it.sku}; cIns[it.sku].qty+=it.qty; }
+    });
+    return {cProd,cProdOrigin,cIns};
+  }
+  const main=computeBOM(getMainRows());
+  const cmp=vPeriodo2?computeBOM(getCompareRows()):null;
+  const data={...main,cProd2:cmp?cmp.cProd:null,cIns2:cmp?cmp.cIns:null,nomD,unD};
   bomCache={key:cacheKey,data};
   return data;
 }
 
 // ── CONSUMO TREE ─────────────────────────────────────────────────
-function renderConsumoTree(items, unD, NS, groupFn, originMap){
+function renderConsumoTree(items, unD, NS, groupFn, originMap, items2){
   const list=Object.values(items).filter(x=>x.qty>0.001).sort((a,b)=>b.qty-a.qty);
   if(!list.length) return '<div class="empty">Sin datos para este período</div>';
+  const hasCmp=!!(vPeriodo2&&items2);
+  const fq=q=>q>=1?q.toLocaleString('es-AR',{maximumFractionDigits:2}):q.toFixed(3);
+  const dQ=(a,b)=>{ if(!b) return ''; const p=((a-b)/b*100).toFixed(1); return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}" style="font-size:10px;">${p>=0?'▲':'▼'}${Math.abs(p)}%</span>`; };
+  const cmpQty=sku=>(items2&&items2[sku])?items2[sku].qty:0;
+  const cmpSpans=(a,b)=>hasCmp?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-right:8px;font-variant-numeric:tabular-nums;">${b>0.001?fq(b):'—'}</span><span style="min-width:55px;text-align:right;display:inline-block;margin-right:8px;">${dQ(a,b)}</span>`:'';
+  const cmpBlank=hasCmp?`<span style="min-width:100px;display:inline-block;margin-right:8px;"></span><span style="min-width:55px;display:inline-block;margin-right:8px;"></span>`:'';
   const groups={};
-  list.forEach(it=>{ const g=groupFn?groupFn(it):'General'; if(!groups[g])groups[g]={total:0,items:[]}; groups[g].total+=it.qty; groups[g].items.push(it); });
+  list.forEach(it=>{ const g=groupFn?groupFn(it):'General'; if(!groups[g])groups[g]={total:0,cmp:0,items:[]}; groups[g].total+=it.qty; groups[g].cmp+=cmpQty(it.sku); groups[g].items.push(it); });
   const gkeys=Object.keys(groups).sort((a,b)=>groups[b].total-groups[a].total);
   let h=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
   h+=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
     <span style="width:16px;margin-right:8px;"></span>
     <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Grupo / Ítem</span>
-    <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Total</span>
+    <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">${getMainLabel()}</span>
+    ${hasCmp?`<span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">${vPeriodo2}</span><span style="min-width:55px;text-align:right;font-size:9px;color:var(--muted);margin-right:8px;">Δ</span>`:''}
     <span style="min-width:70px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Unidad</span>
   </div>`;
   gkeys.forEach(gk=>{
     const g=groups[gk];
     const key=NS+'-'+gk.replace(/\W+/g,'-');
-    const totFmt=g.total>=1?g.total.toLocaleString('es-AR',{maximumFractionDigits:2}):g.total.toFixed(3);
+    const totFmt=fq(g.total);
     h+=TR(NS,key,0,`${gk} <span style="color:var(--muted);font-size:10px;font-weight:400;">· ${g.items.length} ítems</span>`,
-      `<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);">${totFmt}</span>`,'',true,false);
+      `<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);">${totFmt}</span>${cmpSpans(g.total,g.cmp)}<span style="min-width:70px;display:inline-block;"></span>`,'',true,false);
     const leaveH=g.items.map(it=>{
       const un=unD[it.sku]||'UNIDAD';
-      const qf=it.qty>=1?it.qty.toLocaleString('es-AR',{maximumFractionDigits:2}):it.qty.toFixed(3);
+      const qf=fq(it.qty);
+      const q2=cmpQty(it.sku);
       const hasOrigin=originMap&&originMap[it.sku];
       const origin=hasOrigin?originMap[it.sku]:null;
       // Show origin breakdown if product appears both direct and in kits
@@ -1621,15 +1633,15 @@ function renderConsumoTree(items, unD, NS, groupFn, originMap){
           <div class="tr l2 nc"><span style="width:16px;margin-right:8px;flex-shrink:0;"></span><span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
             <span class="tl" style="color:var(--muted);font-size:11px;">Ventas directas</span>
             <span style="min-width:100px;text-align:right;font-size:11px;margin-right:8px;font-variant-numeric:tabular-nums;">${origin.direct.toLocaleString('es-AR',{maximumFractionDigits:1})}</span>
-            <span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>
+            ${cmpBlank}<span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>
           </div>
           <div class="tr l2 nc"><span style="width:16px;margin-right:8px;flex-shrink:0;"></span><span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
             <span class="tl" style="color:var(--muted);font-size:11px;">Ventas en kits</span>
             <span style="min-width:100px;text-align:right;font-size:11px;margin-right:8px;font-variant-numeric:tabular-nums;">${origin.fromKit.toLocaleString('es-AR',{maximumFractionDigits:1})}</span>
-            <span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>
+            ${cmpBlank}<span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>
           </div>`;
         return TR(NS,itemKey,1,`${it.nombre} <span class="sku-badge" style="margin-left:4px;">${it.sku}</span>`,
-          `<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</span>`,
+          `<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;font-weight:500;">${qf}</span>${cmpSpans(it.qty,q2)}`,
           `<span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>`,true,false)
           +TC(NS,itemKey,detailH,false);
       }
@@ -1637,7 +1649,7 @@ function renderConsumoTree(items, unD, NS, groupFn, originMap){
         <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
         <span class="tl">${it.nombre} <span class="sku-badge" style="margin-left:4px;">${it.sku}</span>${origDetail}</span>
         <span style="min-width:100px;text-align:right;font-variant-numeric:tabular-nums;font-weight:500;margin-right:8px;">${qf}</span>
-        <span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>
+        ${cmpSpans(it.qty,q2)}<span style="min-width:70px;text-align:right;font-size:10px;color:var(--muted);">${un}</span>
       </div>`;
     }).join('');
     h+=TC(NS,key,leaveH,false);
@@ -1647,21 +1659,21 @@ function renderConsumoTree(items, unD, NS, groupFn, originMap){
 }
 
 function renderConsumoProductos(){
-  const {cProd,cProdOrigin,unD}=buildBOM();
+  const {cProd,cProd2,cProdOrigin,unD}=buildBOM();
   const NS='cp';
   const skuLinea={};
   getMainRows().forEach(r=>{ skuLinea[getSku(r)]=getLinea(r)||'OTRO'; });
-  return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${getMainLabel()}</strong> · Kits abiertos a productos · Clic en producto para ver desglose directo/kit</div>
-    ${renderConsumoTree(cProd,unD,NS,it=>skuLinea[it.sku]||'OTRO',cProdOrigin)}`;
+  return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${getMainLabel()}</strong>${vPeriodo2?` vs <strong style="color:var(--text);">${vPeriodo2}</strong>`:''} · Kits abiertos a productos · Clic en producto para ver desglose directo/kit</div>
+    ${renderConsumoTree(cProd,unD,NS,it=>skuLinea[it.sku]||'OTRO',cProdOrigin,cProd2)}`;
 }
 
 function renderConsumoInsumos(){
-  const {cIns,unD}=buildBOM();
+  const {cIns,cIns2,unD}=buildBOM();
   const NS='ci';
   const skuRub={};
   DATA.dux.forEach(r=>{ skuRub[(r['Código Producto']||'').trim()]=(r['Rubro']||'OTRO').trim().toUpperCase(); });
-  return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${getMainLabel()}</strong> · Productos abiertos a insumos</div>
-    ${renderConsumoTree(cIns,unD,NS,it=>skuRub[it.sku]||'OTRO',null)}`;
+  return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${getMainLabel()}</strong>${vPeriodo2?` vs <strong style="color:var(--text);">${vPeriodo2}</strong>`:''} · Productos abiertos a insumos</div>
+    ${renderConsumoTree(cIns,unD,NS,it=>skuRub[it.sku]||'OTRO',null,cIns2)}`;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
