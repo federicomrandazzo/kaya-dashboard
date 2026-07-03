@@ -553,20 +553,20 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-section-label">Módulos</div>
-    <div class="nav-item active" onclick="showModule('stock')" id="nav-stock">
-      <span class="nav-icon">◈</span> Stock
-    </div>
-    <div class="nav-item" onclick="showModule('kh')" id="nav-kh">
-      <span class="nav-icon">⬡</span> Operaciones
-    </div>
-    <div class="nav-item" onclick="showModule('ventas')" id="nav-ventas">
+    <div class="nav-item active" onclick="showModule('ventas')" id="nav-ventas">
       <span class="nav-icon">◉</span> Ventas
     </div>
     <div class="nav-item" onclick="showModule('pub')" id="nav-pub">
       <span class="nav-icon">◈</span> Publicidad
     </div>
+    <div class="nav-item" onclick="showModule('stock')" id="nav-stock">
+      <span class="nav-icon">◈</span> Stock
+    </div>
     <div class="nav-item" onclick="showModule('proyeccion')" id="nav-proyeccion">
       <span class="nav-icon">◎</span> Proyección
+    </div>
+    <div class="nav-item" onclick="showModule('kh')" id="nav-kh">
+      <span class="nav-icon">⬡</span> Operaciones
     </div>
     <div class="nav-item" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">
       <span class="nav-icon">◈</span> Finanzas
@@ -582,7 +582,7 @@
 
 <div id="main">
   <div id="topbar">
-    <h2 id="topbar-title">Stock</h2>
+    <h2 id="topbar-title">Ventas</h2>
     <div style="display:flex;align-items:center;gap:16px;">
       <span class="last-update" id="last-update-label"></span>
       <button id="refresh-btn" onclick="loadData()">↺ Actualizar</button>
@@ -661,7 +661,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
 let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[]};
-let currentModule = 'stock';
+let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
 let bomCache = null;
