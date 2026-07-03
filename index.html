@@ -2378,11 +2378,26 @@ function renderProduccion() {
     ? ` · <span onclick="khPeriodo='todo';renderKHContent();" style="cursor:pointer;text-decoration:underline;color:#9a8a6a;">ver todo</span>`
     : '';
 
-  const medHeaders = allMed.map(m=>`<th style="text-align:right;">${m}</th>`).join('');
-  const prodRows = Object.entries(byProd).sort((a,b)=>b[1].total-a[1].total).map(([prod,d]) => {
-    const medCols = allMed.map(m=>`<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${(d.medidas[m]||0).toLocaleString('es-AR')}</td>`).join('');
-    return `<tr><td>${prod}</td>${medCols}<td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:500;">${Math.round(d.total).toLocaleString('es-AR')}</td></tr>`;
-  }).join('');
+  // Dos tablas: negra (50/100) y blanca (resto de medidas: 30/60/125)
+  const medNegra  = allMed.filter(m=>[50,100].includes(parseInt(m)));
+  const medBlanca = allMed.filter(m=>![50,100].includes(parseInt(m)));
+  function prodTable(label, meds){
+    const items = Object.entries(byProd)
+      .map(([prod,d])=>({prod, d, sub: meds.reduce((s,m)=>s+(d.medidas[m]||0),0)}))
+      .filter(x=>x.sub>0)
+      .sort((a,b)=>b.sub-a.sub);
+    if(!items.length||!meds.length) return '';
+    const headers = meds.map(m=>`<th style="text-align:right;">${m}</th>`).join('');
+    const rows = items.map(x=>`<tr><td>${x.prod}</td>${meds.map(m=>`<td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${(x.d.medidas[m]||0).toLocaleString('es-AR')}</td>`).join('')}</tr>`).join('');
+    const totRow = `<tr style="background:var(--surface2);"><td style="font-weight:600;">TOTAL</td>${meds.map(m=>`<td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">${Math.round(items.reduce((s,x)=>s+(x.d.medidas[m]||0),0)).toLocaleString('es-AR')}</td>`).join('')}</tr>`;
+    return `<div class="subsection">
+      <div class="subsection-label">Por producto · ${label}</div>
+      <table class="data-table">
+        <thead><tr><th>Producto</th>${headers}</tr></thead>
+        <tbody>${rows}${totRow}</tbody>
+      </table>
+    </div>`;
+  }
 
   return `
     <div class="v-chart-wrap" style="margin-bottom:24px;">
@@ -2406,13 +2421,8 @@ function renderProduccion() {
       </svg>
     </div>
 
-    <div class="subsection">
-      <div class="subsection-label">Por producto</div>
-      <table class="data-table">
-        <thead><tr><th>Producto</th>${medHeaders}<th style="text-align:right;">Total</th></tr></thead>
-        <tbody>${prodRows}</tbody>
-      </table>
-    </div>`;
+    ${prodTable('Línea Negra', medNegra)}
+    ${prodTable('Línea Blanca', medBlanca)}`;
 }
 
 // ── PEDIDOS ──────────────────────────────────────────────────────
