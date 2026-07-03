@@ -1531,6 +1531,14 @@ function renderPorLinea(){
     });
     h+=TC(NS,'l-'+li,rubroH,false);
   });
+  const totV2=sumV(r2,vMetrica), totU=sumU(r1);
+  const totRight=`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;">${metricaFmt(vMetrica,totV)}</span>${vPeriodo2?`<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);font-size:11px;margin-left:8px;">${totV2?metricaFmt(vMetrica,totV2):'—'}</span><span style="min-width:55px;text-align:right;display:inline-block;margin-left:8px;">${dSpan(totV,totV2)}</span>`:''}`;
+  h+=`<div class="tr l0 nc" style="border-top:2px solid var(--border);">
+    <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+    <span class="tl">TOTAL</span>
+    <span class="tu">${Math.round(totU)} uds</span>
+    <span class="tv">${totRight}</span>
+  </div>`;
   h+=`</div>`;
   return h;
 }
