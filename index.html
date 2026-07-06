@@ -556,6 +556,9 @@
     <div class="nav-item active" onclick="showModule('ventas')" id="nav-ventas">
       <span class="nav-icon">◉</span> Ventas
     </div>
+    <div class="nav-item" onclick="showModule('semanal')" id="nav-semanal">
+      <span class="nav-icon">▦</span> Semanal
+    </div>
     <div class="nav-item" onclick="showModule('pub')" id="nav-pub">
       <span class="nav-icon">◈</span> Publicidad
     </div>
@@ -612,6 +615,7 @@
     </div>
     <div id="module-stock" style="display:none;"></div>
     <div id="module-ventas" style="display:none;"></div>
+    <div id="module-semanal" style="display:none;"></div>
     <div id="module-pub" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
     <div id="module-edr" style="display:none;"></div>
@@ -633,6 +637,7 @@ const URLS = {
   ventas:     `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1630061936&single=true&output=csv`,
   ordenes:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=889232857&single=true&output=csv`,
   edrData:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=260416352&single=true&output=csv`,
+  semanal:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1038423384&single=true&output=csv`,
   produccion:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
   asistencias:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQeSGNkWldvyD9d3r_yBTm0TWAuxtpAwzB7WMjLJsOyeHd8_DVa96WvfCXdIg8DschcnZ4pODh31xVX/pub?gid=1137230020&single=true&output=csv',
   pedidos:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcbDTtZqDIScLeubq7MzURi9gEGInUaMqw5Ds1P-CezU2_nBezYgOq29ib8HBpfIen3nUDfMd3DDv9/pub?gid=2143737438&single=true&output=csv',
@@ -660,7 +665,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[]};
 let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -670,6 +675,7 @@ let pubDesde = '', pubHasta = '';
 let pubCmpADesde = '', pubCmpAHasta = '', pubCmpBDesde = '', pubCmpBHasta = '';
 let edrSelectedPeriods = [];
 let edrTab = 'eerr';
+let vSem1 = '', vSem2 = '';
 
 // ── UTILS ───────────────────────────────────────────────────────
 function parseCSV(text) {
@@ -737,12 +743,13 @@ async function loadData() {
   document.getElementById('loading').style.display='flex';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
+  document.getElementById('module-semanal').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
   document.getElementById('module-pub').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
@@ -753,6 +760,7 @@ async function loadData() {
       fetch(URLS.pedidos).then(r=>r.text()),
       fetch(URLS.publicidad).then(r=>r.text()),
       fetch(URLS.edrData).then(r=>r.text()),
+      fetch(URLS.semanal).then(r=>r.text()),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -764,6 +772,7 @@ async function loadData() {
     DATA.pedidos = parseCSV(pdT).filter(r=>(r['armado?']||'').trim().toUpperCase()==='SI' && num(r['año'])>1900);
     DATA.publicidad = parseCSV(pbT.split('\n').slice(1).join('\n')).filter(r=>r['Fecha']&&(r['VENTA TN']||'').trim()&&num(r['VENTA TN'])>0);
     DATA.edrData = parseCSV(edT).filter(r=>r['concepto']&&r['periodo']&&(r['importe eerr']||'').trim());
+    DATA.semanal = parseCSV(swT).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -785,9 +794,10 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':mod==='pub'?'Publicidad':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Semanal':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':mod==='pub'?'Publicidad':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
+  document.getElementById('module-semanal').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
@@ -805,6 +815,7 @@ function showModule(mod) {
 function renderCurrentModule(){
   if(currentModule==='stock')      renderStock();
   if(currentModule==='ventas')     renderVentasModule();
+  if(currentModule==='semanal')    renderSemanal();
   if(currentModule==='proyeccion') renderProyeccion();
   if(currentModule==='edr')        renderEDR();
   if(currentModule==='kh')         renderKayaHouse();
@@ -1599,6 +1610,125 @@ function renderPorLinea(){
   </div>`;
   h+=`</div>`;
   return h;
+}
+
+// ── SEMANAL ──────────────────────────────────────────────────────
+function setSem1(s){ vSem1=s; renderSemanal(); }
+function setSem2(s){ vSem2=s; renderSemanal(); }
+function semWeeks(){ return [...new Set(DATA.semanal.map(r=>(r['semana']||'').trim()))].filter(Boolean).sort(); }
+const SEM_MES=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function semRange(s){ const [y,m,d]=s.split('-').map(Number); const end=new Date(y,m-1,d+6); const p=n=>String(n).padStart(2,'0'); return `${p(d)}/${p(m)}–${p(end.getDate())}/${p(end.getMonth()+1)}`; }
+function semShort(s){ const [y,m,d]=s.split('-').map(Number); return `${d} ${SEM_MES[m]}`; }
+function semAgg(sem){ let venta=0,costo=0,qty=0; DATA.semanal.filter(r=>r['semana']===sem).forEach(r=>{ venta+=num(r['importe_neto']); costo+=num(r['costo_total']); qty+=num(r['qty']); }); return {venta,costo,qty,margen:venta-costo}; }
+
+function renderSemanal(){
+  const el=document.getElementById('module-semanal');
+  el.style.display='block';
+  if(!DATA.semanal||!DATA.semanal.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos semanales. Verificá que la hoja esté publicada.</div>'; return; }
+  const NS='sem';
+  const weeks=semWeeks();
+  if(!vSem1||!weeks.includes(vSem1)){
+    // Default: última semana COMPLETA (salta una semana final parcial < 50% de la mediana)
+    const vals=weeks.map(w=>semAgg(w).venta).slice().sort((a,b)=>a-b);
+    const med=vals[Math.floor(vals.length/2)]||0;
+    let idx=weeks.length-1;
+    while(idx>0 && semAgg(weeks[idx]).venta < med*0.5) idx--;
+    vSem1=weeks[idx];
+  }
+  if(vSem2&&!weeks.includes(vSem2)) vSem2='';
+  if(!vSem2){ const i=weeks.indexOf(vSem1); if(i>0) vSem2=weeks[i-1]; }
+  const a1=semAgg(vSem1), a2=vSem2?semAgg(vSem2):null;
+  const mg1=a1.venta>0?a1.margen/a1.venta*100:0;
+  const dPct=(x,y)=>{ if(!y) return ''; const p=(x-y)/y*100; return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`; };
+  const mgColor=p=>p>=40?'#27ae60':p>=25?'#e67e22':'var(--accent3)';
+
+  // ── Selector ──
+  const selector=`<div style="display:flex;gap:10px;align-items:center;margin-bottom:22px;flex-wrap:wrap;">
+    <span class="v-filter-label">Semana</span>
+    <select class="v-select" onchange="setSem1(this.value)">${weeks.map(w=>`<option value="${w}" ${w===vSem1?'selected':''}>${semRange(w)}</option>`).join('')}</select>
+    <span class="v-filter-label">vs</span>
+    <select class="v-select" onchange="setSem2(this.value)"><option value="">— ninguna —</option>${weeks.map(w=>`<option value="${w}" ${w===vSem2?'selected':''}>${semRange(w)}</option>`).join('')}</select>
+  </div>`;
+
+  // ── KPIs ──
+  const cmpLbl=vSem2?'vs sem. ant.':'';
+  const kpis=`<div class="v-kpi-grid">
+    <div class="v-kpi"><div class="v-kpi-label">Venta neta</div><div class="v-kpi-val" style="color:var(--accent);">${pesos(a1.venta)}</div><div class="v-kpi-sub">${dPct(a1.venta,a2&&a2.venta)} ${cmpLbl}</div></div>
+    <div class="v-kpi"><div class="v-kpi-label">Costo de venta</div><div class="v-kpi-val" style="color:var(--accent2);">${pesos(a1.costo)}</div><div class="v-kpi-sub">${dPct(a1.costo,a2&&a2.costo)} ${cmpLbl}</div></div>
+    <div class="v-kpi"><div class="v-kpi-label">Margen bruto</div><div class="v-kpi-val" style="color:#8b6914;">${pesos(a1.margen)}</div><div class="v-kpi-sub">${dPct(a1.margen,a2&&a2.margen)} ${cmpLbl}</div></div>
+    <div class="v-kpi"><div class="v-kpi-label">Margen %</div><div class="v-kpi-val" style="color:${mgColor(mg1)};">${mg1.toFixed(1)}%</div><div class="v-kpi-sub">${a2?(mg1-(a2.venta>0?a2.margen/a2.venta*100:0)).toFixed(1)+' pts':''} ${cmpLbl}</div></div>
+  </div>`;
+
+  // ── Trend chart (todas las semanas): venta = costo + margen, label mg% ──
+  const LW=720,LH=230,PL=8,PR=8,PT=22,PB=34,CW=LW-PL-PR,CH=LH-PT-PB;
+  const nW=weeks.length, bw=Math.min(40,CW/nW*0.62), gap=(CW-bw*nW)/(nW+1);
+  const maxV=Math.max(...weeks.map(w=>semAgg(w).venta),1);
+  const bars=weeks.map((w,i)=>{
+    const a=semAgg(w), x=PL+gap+i*(bw+gap);
+    const hC=Math.max(a.costo,0)/maxV*CH, hMg=Math.max(a.margen,0)/maxV*CH;
+    const yB=PT+CH, yC=yB-hC, yMg=yC-hMg, sel=w===vSem1;
+    const mgp=a.venta>0?a.margen/a.venta*100:0;
+    return `<rect x="${x.toFixed(1)}" y="${yC.toFixed(1)}" width="${bw.toFixed(1)}" height="${hC.toFixed(1)}" fill="#b8a888" rx="0 0 2 2"/>
+      <rect x="${x.toFixed(1)}" y="${yMg.toFixed(1)}" width="${bw.toFixed(1)}" height="${hMg.toFixed(1)}" fill="${sel?'#1e8449':'#27ae60'}" rx="2 2 0 0"/>
+      ${hMg>13?`<text x="${(x+bw/2).toFixed(1)}" y="${(yMg+hMg/2+3.5).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="600">${mgp.toFixed(0)}%</text>`:''}
+      <text x="${(x+bw/2).toFixed(1)}" y="${(yMg-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="7.5" font-family="Red Hat Display,sans-serif">$${(a.venta/1e6).toFixed(1)}M</text>
+      <text x="${(x+bw/2).toFixed(1)}" y="${(yB+13).toFixed(1)}" text-anchor="middle" fill="${sel?'#b89021':'#9a8a6a'}" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="${sel?'600':'400'}">${semShort(w)}</text>`;
+  }).join('');
+  const chart=`<div class="subsection" style="margin-bottom:28px;">
+    <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+      <span>Venta y margen bruto por semana</span>
+      <span style="display:flex;gap:14px;text-transform:none;letter-spacing:normal;">
+        <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:10px;height:10px;border-radius:2px;background:#27ae60;display:inline-block;"></span>Margen</span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:10px;height:10px;border-radius:2px;background:#b8a888;display:inline-block;"></span>Costo</span>
+      </span>
+    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LW} ${LH}" style="width:100%;max-height:${LH}px;">${bars}</svg>
+  </div>`;
+
+  // ── Árbol línea → rubro → producto (semana seleccionada) ──
+  const tree={};
+  DATA.semanal.filter(r=>r['semana']===vSem1).forEach(r=>{
+    const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim();
+    const v=num(r['importe_neto']), c=num(r['costo_total']), q=num(r['qty']);
+    if(!tree[li]) tree[li]={v:0,c:0,q:0,rubros:{}}; tree[li].v+=v; tree[li].c+=c; tree[li].q+=q;
+    if(!tree[li].rubros[rb]) tree[li].rubros[rb]={v:0,c:0,q:0,prods:{}}; const R=tree[li].rubros[rb]; R.v+=v; R.c+=c; R.q+=q;
+    if(!R.prods[sk]) R.prods[sk]={nombre:nm,sku:sk,v:0,c:0,q:0}; const P=R.prods[sk]; P.v+=v; P.c+=c; P.q+=q;
+  });
+  const cellV=(v,col,muted)=>`<span style="min-width:100px;text-align:right;display:inline-block;font-variant-numeric:tabular-nums;${col?'color:'+col+';':''}${muted?'font-size:11px;':''}margin-left:8px;">${pesos(v)}</span>`;
+  function rowRight(v,c){ const m=v-c, p=v>0?m/v*100:0; return `${cellV(v,'',false).replace('margin-left:8px;','')}${cellV(c,'var(--muted)',true)}${cellV(m,'#8b6914',false)}<span style="min-width:55px;text-align:right;display:inline-block;color:${mgColor(p)};margin-left:8px;">${p.toFixed(1)}%</span>`; }
+  const hCol=(l,w)=>`<span style="min-width:${w}px;text-align:right;display:inline-block;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-left:8px;">${l}</span>`;
+  let h=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
+  h+=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
+    <span style="width:16px;margin-right:8px;"></span>
+    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Línea / Rubro / Producto</span>
+    ${hCol('Venta',100)}${hCol('Costo',100)}${hCol('Margen',100)}${hCol('Mg%',55)}
+  </div>`;
+  const LORDEN=['NEGRA','BLANCA','KITS'];
+  const lkeys=[...LORDEN,...Object.keys(tree).filter(k=>!LORDEN.includes(k))].filter(k=>tree[k]);
+  lkeys.forEach(li=>{
+    const ld=tree[li];
+    h+=TR(NS,'l-'+li,0,li,'',rowRight(ld.v,ld.c),true,false);
+    let rubroH='';
+    Object.entries(ld.rubros).sort((a,b)=>b[1].v-a[1].v).forEach(([rb,rd])=>{
+      rubroH+=TR(NS,'r-'+li+'-'+rb,1,rb,`${Math.round(rd.q)} uds`,rowRight(rd.v,rd.c),true,false);
+      let prodH='';
+      Object.values(rd.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
+        prodH+=TR(NS,'p-'+li+'-'+rb+'-'+pd.sku,2,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,`${Math.round(pd.q)} uds`,rowRight(pd.v,pd.c),false,false);
+      });
+      rubroH+=TC(NS,'r-'+li+'-'+rb,prodH,false);
+    });
+    h+=TC(NS,'l-'+li,rubroH,false);
+  });
+  h+=`<div class="tr l0 nc" style="border-top:2px solid var(--border);">
+    <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+    <span class="tl">TOTAL</span>
+    <span class="tu">${Math.round(a1.qty)} uds</span>
+    <span class="tv">${rowRight(a1.venta,a1.costo)}</span>
+  </div>`;
+  h+=`</div>`;
+  const tabla=`<div class="subsection"><div class="subsection-label" style="margin-bottom:14px;">Detalle · semana del ${semRange(vSem1)}</div>${h}</div>`;
+
+  el.innerHTML=selector+kpis+chart+tabla;
 }
 
 // ── BOM DATA ─────────────────────────────────────────────────────
