@@ -676,6 +676,7 @@ let pubCmpADesde = '', pubCmpAHasta = '', pubCmpBDesde = '', pubCmpBHasta = '';
 let edrSelectedPeriods = [];
 let edrTab = 'eerr';
 let vSem1 = '', vSem2 = '';
+let semTab = 'margen', semCmpWeeks = [], semCmpExp = new Set(), semLineHidden = new Set(), semLineInit = false;
 
 // ── UTILS ───────────────────────────────────────────────────────
 function parseCSV(text) {
@@ -1621,10 +1622,19 @@ function semRange(s){ const [y,m,d]=s.split('-').map(Number); const end=new Date
 function semShort(s){ const [y,m,d]=s.split('-').map(Number); return `${d} ${SEM_MES[m]}`; }
 function semAgg(sem){ let venta=0,costo=0,qty=0; DATA.semanal.filter(r=>r['semana']===sem).forEach(r=>{ venta+=num(r['importe_neto']); costo+=num(r['costo_total']); qty+=num(r['qty']); }); return {venta,costo,qty,margen:venta-costo}; }
 
+function setSemTab(t){ semTab=t; renderSemanal(); }
 function renderSemanal(){
   const el=document.getElementById('module-semanal');
   el.style.display='block';
   if(!DATA.semanal||!DATA.semanal.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos semanales. Verificá que la hoja esté publicada.</div>'; return; }
+  const tabs=`<div class="v-tabs" style="margin-bottom:22px;">
+    <div class="v-tab ${semTab==='margen'?'active':''}" onclick="setSemTab('margen')">Margen semanal</div>
+    <div class="v-tab ${semTab==='lineas'?'active':''}" onclick="setSemTab('lineas')">Gráficos de línea</div>
+    <div class="v-tab ${semTab==='comp'?'active':''}" onclick="setSemTab('comp')">Comparativo ventas</div>
+  </div>`;
+  el.innerHTML=tabs+`<div id="sem-tabc">${semTab==='lineas'?renderSemLineas():semTab==='comp'?renderSemComparativo():renderSemMargen()}</div>`;
+}
+function renderSemMargen(){
   const NS='sem';
   const weeks=semWeeks();
   if(!vSem1||!weeks.includes(vSem1)){
@@ -1660,8 +1670,8 @@ function renderSemanal(){
   </div>`;
 
   // ── Trend chart (todas las semanas): venta = costo + margen, label mg% ──
-  const LW=720,LH=230,PL=8,PR=8,PT=22,PB=34,CW=LW-PL-PR,CH=LH-PT-PB;
-  const nW=weeks.length, bw=Math.min(40,CW/nW*0.62), gap=(CW-bw*nW)/(nW+1);
+  const LW=720,LH=310,PL=8,PR=8,PT=22,PB=34,CW=LW-PL-PR,CH=LH-PT-PB;
+  const nW=weeks.length, bw=Math.min(42,CW/nW*0.64), gap=(CW-bw*nW)/(nW+1);
   const maxV=Math.max(...weeks.map(w=>semAgg(w).venta),1);
   const bars=weeks.map((w,i)=>{
     const a=semAgg(w), x=PL+gap+i*(bw+gap);
@@ -1671,6 +1681,7 @@ function renderSemanal(){
     return `<rect x="${x.toFixed(1)}" y="${yC.toFixed(1)}" width="${bw.toFixed(1)}" height="${hC.toFixed(1)}" fill="#b8a888" rx="0 0 2 2"/>
       <rect x="${x.toFixed(1)}" y="${yMg.toFixed(1)}" width="${bw.toFixed(1)}" height="${hMg.toFixed(1)}" fill="${sel?'#1e8449':'#27ae60'}" rx="2 2 0 0"/>
       ${hMg>13?`<text x="${(x+bw/2).toFixed(1)}" y="${(yMg+hMg/2+3.5).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="600">${mgp.toFixed(0)}%</text>`:''}
+      ${hC>13?`<text x="${(x+bw/2).toFixed(1)}" y="${(yC+hC/2+3.5).toFixed(1)}" text-anchor="middle" fill="#4a3d1e" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="600">${(a.venta>0?a.costo/a.venta*100:0).toFixed(0)}%</text>`:''}
       <text x="${(x+bw/2).toFixed(1)}" y="${(yMg-4).toFixed(1)}" text-anchor="middle" fill="#9a8a6a" font-size="7.5" font-family="Red Hat Display,sans-serif">$${(a.venta/1e6).toFixed(1)}M</text>
       <text x="${(x+bw/2).toFixed(1)}" y="${(yB+13).toFixed(1)}" text-anchor="middle" fill="${sel?'#b89021':'#9a8a6a'}" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="${sel?'600':'400'}">${semShort(w)}</text>`;
   }).join('');
@@ -1728,7 +1739,117 @@ function renderSemanal(){
   h+=`</div>`;
   const tabla=`<div class="subsection"><div class="subsection-label" style="margin-bottom:14px;">Detalle · semana del ${semRange(vSem1)}</div>${h}</div>`;
 
-  el.innerHTML=selector+kpis+chart+tabla;
+  return selector+kpis+chart+tabla;
+}
+
+// ── SEMANAL · series para gráficos de línea ─────────────────────
+function semSeriesDefs(){
+  const rows=DATA.semanal;
+  const defs=[{name:'TOTAL', total:true, match:()=>true}];
+  [...new Set(rows.filter(r=>getLinea(r)==='NEGRA').map(r=>getRubro(r)))].sort()
+    .forEach(rb=>defs.push({name:rb, grp:'Negra', match:r=>getLinea(r)==='NEGRA'&&getRubro(r)===rb}));
+  defs.push({name:'Aceite de Jojoba', grp:'Blanca', match:r=>getLinea(r)==='BLANCA'&&getRubro(r)==='ACEITE DE JOJOBA'});
+  [...new Map(rows.filter(r=>getLinea(r)==='BLANCA'&&getRubro(r)!=='ACEITE DE JOJOBA').map(r=>[getSku(r),(r['nombre']||getSku(r)).trim()])).entries()]
+    .forEach(([sk,nm])=>defs.push({name:nm, grp:'Blanca', match:r=>getLinea(r)==='BLANCA'&&getSku(r)===sk}));
+  [...new Map(rows.filter(r=>getLinea(r)==='KITS').map(r=>[getSku(r),(r['nombre']||getSku(r)).trim()])).entries()]
+    .forEach(([sk,nm])=>defs.push({name:nm, grp:'Kits', match:r=>getLinea(r)==='KITS'&&getSku(r)===sk}));
+  defs.forEach((d,i)=>{ d.color=d.total?'#1a1a1a':`hsl(${(i*53)%360} 60% 46%)`; });
+  return defs;
+}
+function semSeriesValues(defs, field, weeks){
+  return defs.map(d=>({name:d.name,color:d.color,total:d.total,grp:d.grp,values:weeks.map(w=>DATA.semanal.filter(r=>r['semana']===w&&d.match(r)).reduce((s,r)=>s+num(r[field]),0))}));
+}
+function toggleSemLine(i){ const d=semSeriesDefs()[i]; if(!d) return; if(semLineHidden.has(d.name)) semLineHidden.delete(d.name); else semLineHidden.add(d.name); renderSemanal(); }
+function semLineChart(series, weeks){
+  const vis=series.filter(s=>!semLineHidden.has(s.name));
+  const W=760,H=250,PL=56,PR=14,PT=14,PB=28,PW=W-PL-PR,PH=H-PT-PB;
+  const maxV=Math.max(...vis.flatMap(s=>s.values),1);
+  const xOf=i=>PL+(weeks.length<=1?PW/2:(i/(weeks.length-1))*PW);
+  const yOf=v=>PT+PH-(v/maxV)*PH;
+  let g='';
+  [0,.25,.5,.75,1].forEach(f=>{ const y=PT+PH-f*PH, val=f*maxV, lbl=val>=1e6?(val/1e6).toFixed(0)+'M':Math.round(val/1e3)+'k'; g+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e8dfc8" stroke-width="1"/><text x="${PL-6}" y="${(y+3).toFixed(1)}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${lbl}</text>`; });
+  weeks.forEach((w,i)=>{ g+=`<text x="${xOf(i).toFixed(1)}" y="${H-PB+16}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${semShort(w)}</text>`; });
+  let pth='';
+  vis.forEach(s=>{ const pts=s.values.map((v,i)=>({x:xOf(i),y:yOf(v)})); if(!pts.length) return; let d=`M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`; for(let k=1;k<pts.length;k++){ const p0=pts[k-1],p1=pts[k],cx=((p0.x+p1.x)/2).toFixed(1); d+=` C ${cx} ${p0.y.toFixed(1)} ${cx} ${p1.y.toFixed(1)} ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`; } pth+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.total?3:1.5}" opacity="${s.total?1:0.85}"/>`; if(s.total) pts.forEach(p=>pth+=`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${s.color}"/>`); });
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;">${g}${pth}</svg>`;
+}
+function semLineLegend(series){
+  return `<div style="display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:10px;">${series.map((s,i)=>{ const off=semLineHidden.has(s.name); return `<span onclick="toggleSemLine(${i})" style="display:flex;align-items:center;gap:5px;font-size:10px;color:${off?'#cabf9f':'var(--muted)'};cursor:pointer;${off?'text-decoration:line-through;':''}"><span style="width:12px;height:${s.total?'4':'3'}px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0;"></span>${s.name}</span>`; }).join('')}</div>`;
+}
+function renderSemLineas(){
+  const weeks=semWeeks();
+  const defs=semSeriesDefs();
+  const ventas=semSeriesValues(defs,'importe_neto',weeks);
+  const costo=semSeriesValues(defs,'costo_total',weeks);
+  if(!semLineInit){ ventas.filter(s=>!s.total).slice().sort((a,b)=>b.values.reduce((x,y)=>x+y,0)-a.values.reduce((x,y)=>x+y,0)).slice(10).forEach(s=>semLineHidden.add(s.name)); semLineInit=true; }
+  return `<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Arranca con el total y las 10 líneas más grandes. Tocá una referencia para encender u ocultar cualquier serie. La línea negra gruesa es el total del negocio.</div>
+    <div class="subsection" style="margin-bottom:30px;">
+      <div class="subsection-label" style="margin-bottom:12px;">Ventas por semana · total · rubros de Negra · Jojoba y productos de Blanca · cada Kit ($)</div>
+      <div class="linechart-wrap">${semLineChart(ventas,weeks)}${semLineLegend(ventas)}</div>
+    </div>
+    <div class="subsection">
+      <div class="subsection-label" style="margin-bottom:12px;">Costo de producto por semana · mismas líneas ($)</div>
+      <div class="linechart-wrap">${semLineChart(costo,weeks)}${semLineLegend(costo)}</div>
+    </div>`;
+}
+
+// ── SEMANAL · comparativo de ventas (2 a 5 semanas) ─────────────
+function toggleSemCmp(w){
+  if(semCmpWeeks.includes(w)){ if(semCmpWeeks.length<=2) return; semCmpWeeks=semCmpWeeks.filter(x=>x!==w); }
+  else { if(semCmpWeeks.length>=5) return; semCmpWeeks=[...semCmpWeeks,w].sort(); }
+  renderSemanal();
+}
+function toggleSemCmpExp(k){ if(semCmpExp.has(k)) semCmpExp.delete(k); else semCmpExp.add(k); renderSemanal(); }
+function renderSemComparativo(){
+  const weeks=semWeeks();
+  if(semCmpWeeks.length<2){
+    const vals=weeks.map(w=>semAgg(w).venta).slice().sort((a,b)=>a-b); const med=vals[Math.floor(vals.length/2)]||0;
+    let ws=weeks.slice(); while(ws.length>2 && semAgg(ws[ws.length-1]).venta<med*0.5) ws=ws.slice(0,-1);
+    semCmpWeeks=ws.slice(-4);
+  }
+  const cols=semCmpWeeks.filter(w=>weeks.includes(w));
+  const pills=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;align-items:center;">
+    <span style="font-size:11px;color:var(--muted);margin-right:2px;">Semanas (2 a 5):</span>
+    ${weeks.map(w=>{ const act=cols.includes(w), dis=!act&&cols.length>=5; return `<button onclick="toggleSemCmp('${w}')" ${dis?'disabled':''} style="padding:3px 10px;border-radius:20px;border:1px solid ${act?'var(--accent)':'#d0c8b8'};background:${act?'var(--accent)':'transparent'};color:${act?'#fff':dis?'#cfc7b5':'var(--muted)'};font-size:10px;cursor:${dis?'not-allowed':'pointer'};font-family:inherit;">${semRange(w)}</button>`; }).join('')}
+  </div>`;
+  const tree={};
+  DATA.semanal.filter(r=>cols.includes(r['semana'])).forEach(r=>{
+    const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim(), w=r['semana'], v=num(r['importe_neto']);
+    if(!tree[li]) tree[li]={tot:0,m:{},rubros:{}}; tree[li].tot+=v; tree[li].m[w]=(tree[li].m[w]||0)+v;
+    const R=tree[li].rubros; if(!R[rb]) R[rb]={tot:0,m:{},prods:{}}; R[rb].tot+=v; R[rb].m[w]=(R[rb].m[w]||0)+v;
+    const P=R[rb].prods; if(!P[sk]) P[sk]={nombre:nm,sku:sk,tot:0,m:{}}; P[sk].tot+=v; P[sk].m[w]=(P[sk].m[w]||0)+v;
+  });
+  function trow(label,obj,indent,key,hasChildren,bg){
+    const open=key&&semCmpExp.has(key);
+    const tog=hasChildren?`<span style="display:inline-block;width:14px;color:var(--muted);">${open?'−':'+'}</span>`:`<span style="display:inline-block;width:14px;"></span>`;
+    const cells=cols.map(w=>`<td style="text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;${indent>0?'color:var(--muted);font-size:11px;':''}">${obj.m[w]?pesos(obj.m[w]):'—'}</td>`).join('');
+    const tot=`<td style="text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;font-weight:${indent===0?'600':'500'};border-left:1px solid #e8dfc8;">${pesos(obj.tot)}</td>`;
+    const click=hasChildren?`onclick="toggleSemCmpExp('${key.replace(/'/g,'')}')" style="cursor:pointer;${bg||''}"`:`style="${bg||''}"`;
+    return `<tr ${click}><td style="padding:5px 8px;padding-left:${8+indent*18}px;font-size:${indent===0?'12px':'11px'};font-weight:${indent===0?'600':'400'};">${tog}${label}</td>${cells}${tot}</tr>`;
+  }
+  const LORDEN=['NEGRA','BLANCA','KITS'];
+  const lkeys=[...LORDEN,...Object.keys(tree).filter(k=>!LORDEN.includes(k))].filter(k=>tree[k]);
+  let rows='';
+  lkeys.forEach(li=>{
+    const ld=tree[li], kL='L:'+li;
+    rows+=trow(li,ld,0,kL,true,'background:#f4e8c8;');
+    if(semCmpExp.has(kL)){
+      Object.entries(ld.rubros).sort((a,b)=>b[1].tot-a[1].tot).forEach(([rb,rd])=>{
+        const kR=kL+'|R:'+rb;
+        rows+=trow(rb,rd,1,kR,true,'');
+        if(semCmpExp.has(kR)) Object.values(rd.prods).sort((a,b)=>b.tot-a.tot).forEach(pd=>{
+          rows+=trow(`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,pd,2,null,false,'background:var(--surface);');
+        });
+      });
+    }
+  });
+  const totM={}; cols.forEach(w=>totM[w]=lkeys.reduce((s,li)=>s+(tree[li].m[w]||0),0));
+  const grand=lkeys.reduce((s,li)=>s+tree[li].tot,0);
+  const totRow=`<tr style="background:var(--surface2);border-top:2px solid var(--border);"><td style="padding:6px 8px;font-weight:600;">TOTAL</td>${cols.map(w=>`<td style="text-align:right;padding:6px 8px;font-weight:600;font-variant-numeric:tabular-nums;">${pesos(totM[w])}</td>`).join('')}<td style="text-align:right;padding:6px 8px;font-weight:700;border-left:1px solid #e8dfc8;font-variant-numeric:tabular-nums;">${pesos(grand)}</td></tr>`;
+  const table=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;min-width:${180+cols.length*110}px;">
+    <thead><tr style="border-bottom:2px solid #d4c5a0;"><th style="text-align:left;font-size:10px;padding:6px 8px;">Línea / Rubro / Producto</th>${cols.map(w=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${semRange(w)}</th>`).join('')}<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Total</th></tr></thead>
+    <tbody>${rows}${totRow}</tbody></table></div>`;
+  return pills+`<div style="font-size:10px;color:var(--muted);margin-bottom:12px;">Ventas ($) por semana. Tocá una línea o rubro para desplegar.</div>`+table;
 }
 
 // ── BOM DATA ─────────────────────────────────────────────────────
