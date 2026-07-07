@@ -546,7 +546,17 @@
 </head>
 <body>
 
-<nav id="sidebar">
+<div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:100;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+  <img src="logo-kaya.png" alt="Kaya" style="width:150px;">
+  <div style="font-size:10px;color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">Dashboard</div>
+  <input id="login-pass" type="password" placeholder="Contraseña" autocomplete="current-password"
+    style="width:230px;padding:10px 14px;font-size:13px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-family:'Red Hat Display',sans-serif;color:var(--text);outline:none;"
+    onkeydown="if(event.key==='Enter')doLogin()">
+  <button onclick="doLogin()" style="width:230px;padding:10px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;font-family:'Red Hat Display',sans-serif;">Ingresar</button>
+  <div id="login-err" style="display:none;color:var(--accent3);font-size:11px;">Contraseña incorrecta</div>
+</div>
+
+<nav id="sidebar" style="display:none;">
   <div class="sidebar-logo">
     <img src="logo-kaya.png" alt="Kaya">
     <span>Dashboard</span>
@@ -571,7 +581,7 @@
     <div class="nav-item" onclick="showModule('kh')" id="nav-kh">
       <span class="nav-icon">⬡</span> Operaciones
     </div>
-    <div class="nav-item" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">
+    <div class="nav-item" id="nav-finanzas" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">
       <span class="nav-icon">◈</span> Finanzas
     </div>
     <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
@@ -579,11 +589,15 @@
     </div>
   </div>
   <div class="sidebar-footer">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span id="user-label" style="letter-spacing:0.08em;text-transform:uppercase;"></span>
+      <span onclick="logout()" style="cursor:pointer;text-decoration:underline;color:var(--muted);">Salir</span>
+    </div>
     <div id="last-update-sidebar">—</div>
   </div>
 </nav>
 
-<div id="main">
+<div id="main" style="display:none;">
   <div id="topbar">
     <h2 id="topbar-title">Ventas</h2>
     <div style="display:flex;align-items:center;gap:16px;">
@@ -628,6 +642,47 @@
 </div>
 
 <script>
+// ── AUTH ────────────────────────────────────────────────────────
+// Solo se guardan hashes SHA-256 de las contraseñas, nunca el texto plano.
+const AUTH_USERS = {
+  '0dc43effc3daf28f7dadd5948d1584d6b5b87ead1b4a86e2651fe9661798cfac': {role:'admin',  label:'Admin'},
+  '2ab6a6584c235b1655e1bcfac29560a04e1cb02b322848f7c07c4c6338d23272': {role:'ventas', label:'Ventas'},
+  'f1a2d3904b29f075fcc10b689bb6ba23c1475e682d6481131434f91010a60f20': {role:'house',  label:'House'},
+};
+const ROLE_MODULES = {
+  admin:  ['ventas','semanal','pub','stock','proyeccion','kh','edr'],
+  ventas: ['ventas','semanal','pub','stock','proyeccion'],
+  house:  ['stock','proyeccion','kh'],
+};
+let USER = null;
+function roleAllows(mod){ return !!(USER && ROLE_MODULES[USER.role] && ROLE_MODULES[USER.role].includes(mod)); }
+async function sha256hex(t){ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+async function doLogin(){
+  const v=(document.getElementById('login-pass').value||'').trim();
+  if(!v) return;
+  const h=await sha256hex(v);
+  const u=AUTH_USERS[h];
+  if(!u){ document.getElementById('login-err').style.display='block'; return; }
+  localStorage.setItem('kayaAuth',h);
+  startApp(u);
+}
+function logout(){ localStorage.removeItem('kayaAuth'); location.reload(); }
+function startApp(u){
+  USER=u;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('sidebar').style.display='flex';
+  document.getElementById('main').style.display='flex';
+  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',edr:'nav-edr'};
+  Object.entries(NAVMAP).forEach(([m,id])=>{ const el=document.getElementById(id); if(el) el.style.display=roleAllows(m)?'flex':'none'; });
+  const fin=document.getElementById('nav-finanzas'); if(fin) fin.style.display=u.role==='admin'?'flex':'none';
+  document.getElementById('user-label').textContent=u.label;
+  currentModule=roleAllows('ventas')?'ventas':'stock';
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  const n=document.getElementById('nav-'+currentModule); if(n) n.classList.add('active');
+  document.getElementById('topbar-title').textContent=currentModule==='ventas'?'Ventas':'Stock';
+  loadData();
+}
+
 // ── CONFIG ──────────────────────────────────────────────────────
 const PUB_ID = '2PACX-1vQUYvdo1IOKfZS3NupXy24eIctfNsXLIZ_wfH6671Y7rr0hWesmdAmmTjNj69b1VxjjVe1RLbqGE-7R';
 const URLS = {
@@ -759,9 +814,9 @@ async function loadData() {
       fetch(URLS.produccion).then(r=>r.text()),
       fetch(URLS.asistencias).then(r=>r.text()),
       fetch(URLS.pedidos).then(r=>r.text()),
-      fetch(URLS.publicidad).then(r=>r.text()),
-      fetch(URLS.edrData).then(r=>r.text()),
-      fetch(URLS.semanal).then(r=>r.text()),
+      roleAllows('pub')?fetch(URLS.publicidad).then(r=>r.text()):Promise.resolve(''),
+      roleAllows('edr')?fetch(URLS.edrData).then(r=>r.text()):Promise.resolve(''),
+      roleAllows('semanal')?fetch(URLS.semanal).then(r=>r.text()):Promise.resolve(''),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -792,6 +847,7 @@ async function loadData() {
 
 // ── NAV ─────────────────────────────────────────────────────────
 function showModule(mod) {
+  if(!roleAllows(mod)) return;
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
@@ -3231,7 +3287,12 @@ function renderPublicidad(){
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
-loadData();
+(function(){
+  const h=localStorage.getItem('kayaAuth');
+  const u=h?AUTH_USERS[h]:null;
+  if(u) startApp(u);
+  else { document.getElementById('login-screen').style.display='flex'; const i=document.getElementById('login-pass'); if(i) setTimeout(()=>i.focus(),50); }
+})();
 
 // ── ESTADO DE RESULTADOS ──────────────────────────────────────────
 function renderEDR() {
