@@ -676,7 +676,7 @@ let pubCmpADesde = '', pubCmpAHasta = '', pubCmpBDesde = '', pubCmpBHasta = '';
 let edrSelectedPeriods = [];
 let edrTab = 'eerr';
 let vSem1 = '', vSem2 = '';
-let semTab = 'margen', semCmpWeeks = [], semCmpExp = new Set(), semLineHidden = new Set(), semLineInit = false;
+let semTab = 'margen', semCmpWeeks = [], semCmpExp = new Set(), semLineHidden = new Set(), semLineInit = false, semLinePreset = 'linea';
 
 // ── UTILS ───────────────────────────────────────────────────────
 function parseCSV(text) {
@@ -1743,53 +1743,62 @@ function renderSemMargen(){
 }
 
 // ── SEMANAL · series para gráficos de línea ─────────────────────
+const SEM_PRESETS={ total:['total'], linea:['total','linea'], negra:['total','negra'], blanca:['total','blanca'], kits:['total','kit'] };
 function semSeriesDefs(){
   const rows=DATA.semanal;
-  const defs=[{name:'TOTAL', total:true, match:()=>true}];
+  const defs=[{name:'TOTAL', kind:'total', total:true, match:()=>true}];
+  [['NEGRA','Línea Negra'],['BLANCA','Línea Blanca'],['KITS','Kits (total)']].forEach(([li,nm])=>defs.push({name:nm, kind:'linea', match:r=>getLinea(r)===li}));
   [...new Set(rows.filter(r=>getLinea(r)==='NEGRA').map(r=>getRubro(r)))].sort()
-    .forEach(rb=>defs.push({name:rb, grp:'Negra', match:r=>getLinea(r)==='NEGRA'&&getRubro(r)===rb}));
-  defs.push({name:'Aceite de Jojoba', grp:'Blanca', match:r=>getLinea(r)==='BLANCA'&&getRubro(r)==='ACEITE DE JOJOBA'});
+    .forEach(rb=>defs.push({name:rb, kind:'negra', match:r=>getLinea(r)==='NEGRA'&&getRubro(r)===rb}));
+  defs.push({name:'Aceite de Jojoba', kind:'blanca', match:r=>getLinea(r)==='BLANCA'&&getRubro(r)==='ACEITE DE JOJOBA'});
   [...new Map(rows.filter(r=>getLinea(r)==='BLANCA'&&getRubro(r)!=='ACEITE DE JOJOBA').map(r=>[getSku(r),(r['nombre']||getSku(r)).trim()])).entries()]
-    .forEach(([sk,nm])=>defs.push({name:nm, grp:'Blanca', match:r=>getLinea(r)==='BLANCA'&&getSku(r)===sk}));
+    .forEach(([sk,nm])=>defs.push({name:nm, kind:'blanca', match:r=>getLinea(r)==='BLANCA'&&getSku(r)===sk}));
   [...new Map(rows.filter(r=>getLinea(r)==='KITS').map(r=>[getSku(r),(r['nombre']||getSku(r)).trim()])).entries()]
-    .forEach(([sk,nm])=>defs.push({name:nm, grp:'Kits', match:r=>getLinea(r)==='KITS'&&getSku(r)===sk}));
-  defs.forEach((d,i)=>{ d.color=d.total?'#1a1a1a':`hsl(${(i*53)%360} 60% 46%)`; });
+    .forEach(([sk,nm])=>defs.push({name:nm, kind:'kit', match:r=>getLinea(r)==='KITS'&&getSku(r)===sk}));
+  defs.forEach((d,i)=>{ d.color=d.total?'#1a1a1a':`hsl(${(i*61)%360} 60% 46%)`; });
   return defs;
 }
+function semApplyPreset(p){ semLinePreset=p; const kinds=SEM_PRESETS[p]||['total']; semLineHidden=new Set(semSeriesDefs().filter(d=>!kinds.includes(d.kind)).map(d=>d.name)); renderSemanal(); }
 function semSeriesValues(defs, field, weeks){
-  return defs.map(d=>({name:d.name,color:d.color,total:d.total,grp:d.grp,values:weeks.map(w=>DATA.semanal.filter(r=>r['semana']===w&&d.match(r)).reduce((s,r)=>s+num(r[field]),0))}));
+  return defs.map(d=>({name:d.name,color:d.color,total:d.total,kind:d.kind,values:weeks.map(w=>DATA.semanal.filter(r=>r['semana']===w&&d.match(r)).reduce((s,r)=>s+num(r[field]),0))}));
+}
+function semSeriesRatio(defs, weeks){
+  return defs.map(d=>({name:d.name,color:d.color,total:d.total,kind:d.kind,values:weeks.map(w=>{ let v=0,c=0; DATA.semanal.filter(r=>r['semana']===w&&d.match(r)).forEach(r=>{ v+=num(r['importe_neto']); c+=num(r['costo_total']); }); return v>0?c/v*100:0; })}));
 }
 function toggleSemLine(i){ const d=semSeriesDefs()[i]; if(!d) return; if(semLineHidden.has(d.name)) semLineHidden.delete(d.name); else semLineHidden.add(d.name); renderSemanal(); }
-function semLineChart(series, weeks){
+function semLineChart(series, weeks, isPct){
   const vis=series.filter(s=>!semLineHidden.has(s.name));
   const W=760,H=250,PL=56,PR=14,PT=14,PB=28,PW=W-PL-PR,PH=H-PT-PB;
   const maxV=Math.max(...vis.flatMap(s=>s.values),1);
   const xOf=i=>PL+(weeks.length<=1?PW/2:(i/(weeks.length-1))*PW);
   const yOf=v=>PT+PH-(v/maxV)*PH;
   let g='';
-  [0,.25,.5,.75,1].forEach(f=>{ const y=PT+PH-f*PH, val=f*maxV, lbl=val>=1e6?(val/1e6).toFixed(0)+'M':Math.round(val/1e3)+'k'; g+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e8dfc8" stroke-width="1"/><text x="${PL-6}" y="${(y+3).toFixed(1)}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${lbl}</text>`; });
+  [0,.25,.5,.75,1].forEach(f=>{ const y=PT+PH-f*PH, val=f*maxV, lbl=isPct?val.toFixed(0)+'%':(val>=1e6?(val/1e6).toFixed(0)+'M':Math.round(val/1e3)+'k'); g+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e8dfc8" stroke-width="1"/><text x="${PL-6}" y="${(y+3).toFixed(1)}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${lbl}</text>`; });
   weeks.forEach((w,i)=>{ g+=`<text x="${xOf(i).toFixed(1)}" y="${H-PB+16}" text-anchor="middle" fill="#9a8a6a" font-size="8" font-family="Red Hat Display,sans-serif">${semShort(w)}</text>`; });
   let pth='';
   vis.forEach(s=>{ const pts=s.values.map((v,i)=>({x:xOf(i),y:yOf(v)})); if(!pts.length) return; let d=`M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`; for(let k=1;k<pts.length;k++){ const p0=pts[k-1],p1=pts[k],cx=((p0.x+p1.x)/2).toFixed(1); d+=` C ${cx} ${p0.y.toFixed(1)} ${cx} ${p1.y.toFixed(1)} ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`; } pth+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.total?3:1.5}" opacity="${s.total?1:0.85}"/>`; if(s.total) pts.forEach(p=>pth+=`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${s.color}"/>`); });
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;">${g}${pth}</svg>`;
 }
 function semLineLegend(series){
-  return `<div style="display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:10px;">${series.map((s,i)=>{ const off=semLineHidden.has(s.name); return `<span onclick="toggleSemLine(${i})" style="display:flex;align-items:center;gap:5px;font-size:10px;color:${off?'#cabf9f':'var(--muted)'};cursor:pointer;${off?'text-decoration:line-through;':''}"><span style="width:12px;height:${s.total?'4':'3'}px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0;"></span>${s.name}</span>`; }).join('')}</div>`;
+  const kinds=SEM_PRESETS[semLinePreset]||['total'];
+  return `<div style="display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:10px;">${series.map((s,i)=>{ if(!kinds.includes(s.kind)) return ''; const off=semLineHidden.has(s.name); return `<span onclick="toggleSemLine(${i})" style="display:flex;align-items:center;gap:5px;font-size:10px;color:${off?'#cabf9f':'var(--muted)'};cursor:pointer;${off?'text-decoration:line-through;':''}"><span style="width:12px;height:${s.total?'4':'3'}px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0;"></span>${s.name}</span>`; }).join('')}</div>`;
 }
 function renderSemLineas(){
   const weeks=semWeeks();
   const defs=semSeriesDefs();
+  if(!semLineInit){ const kinds=SEM_PRESETS[semLinePreset]||['total']; semLineHidden=new Set(defs.filter(d=>!kinds.includes(d.kind)).map(d=>d.name)); semLineInit=true; }
   const ventas=semSeriesValues(defs,'importe_neto',weeks);
-  const costo=semSeriesValues(defs,'costo_total',weeks);
-  if(!semLineInit){ ventas.filter(s=>!s.total).slice().sort((a,b)=>b.values.reduce((x,y)=>x+y,0)-a.values.reduce((x,y)=>x+y,0)).slice(10).forEach(s=>semLineHidden.add(s.name)); semLineInit=true; }
-  return `<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Arranca con el total y las 10 líneas más grandes. Tocá una referencia para encender u ocultar cualquier serie. La línea negra gruesa es el total del negocio.</div>
+  const ratio=semSeriesRatio(defs,weeks);
+  const presets=[['total','Total'],['linea','Por línea'],['negra','Negra'],['blanca','Blanca'],['kits','Kits']];
+  const btnRow=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${presets.map(([k,l])=>`<button onclick="semApplyPreset('${k}')" style="padding:5px 12px;border-radius:4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:1px solid ${semLinePreset===k?'var(--accent)':'var(--border)'};background:${semLinePreset===k?'var(--accent)':'transparent'};color:${semLinePreset===k?'#fff':'var(--muted)'};font-family:inherit;">${l}</button>`).join('')}</div>`;
+  return btnRow+`<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Elegí una vista con los botones y afiná con la leyenda (tocá para ocultar o mostrar). La línea negra gruesa es el total del negocio.</div>
     <div class="subsection" style="margin-bottom:30px;">
-      <div class="subsection-label" style="margin-bottom:12px;">Ventas por semana · total · rubros de Negra · Jojoba y productos de Blanca · cada Kit ($)</div>
-      <div class="linechart-wrap">${semLineChart(ventas,weeks)}${semLineLegend(ventas)}</div>
+      <div class="subsection-label" style="margin-bottom:12px;">Ventas por semana ($)</div>
+      <div class="linechart-wrap">${semLineChart(ventas,weeks,false)}${semLineLegend(ventas)}</div>
     </div>
     <div class="subsection">
-      <div class="subsection-label" style="margin-bottom:12px;">Costo de producto por semana · mismas líneas ($)</div>
-      <div class="linechart-wrap">${semLineChart(costo,weeks)}${semLineLegend(costo)}</div>
+      <div class="subsection-label" style="margin-bottom:12px;">Costo / venta por semana (%) · ratio de costo de cada serie</div>
+      <div class="linechart-wrap">${semLineChart(ratio,weeks,true)}${semLineLegend(ratio)}</div>
     </div>`;
 }
 
