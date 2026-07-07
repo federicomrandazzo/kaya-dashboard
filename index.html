@@ -1671,7 +1671,6 @@ function renderPorLinea(){
 
 // ── SEMANAL ──────────────────────────────────────────────────────
 function setSem1(s){ vSem1=s; renderSemanal(); }
-function setSem2(s){ vSem2=s; renderSemanal(); }
 function semWeeks(){ return [...new Set(DATA.semanal.map(r=>(r['semana']||'').trim()))].filter(Boolean).sort(); }
 const SEM_MES=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function semRange(s){ const [y,m,d]=s.split('-').map(Number); const end=new Date(y,m-1,d+6); const p=n=>String(n).padStart(2,'0'); return `${p(d)}/${p(m)}–${p(end.getDate())}/${p(end.getMonth()+1)}`; }
@@ -1701,8 +1700,9 @@ function renderSemMargen(){
     while(idx>0 && semAgg(weeks[idx]).venta < med*0.5) idx--;
     vSem1=weeks[idx];
   }
-  if(vSem2&&!weeks.includes(vSem2)) vSem2='';
-  if(!vSem2){ const i=weeks.indexOf(vSem1); if(i>0) vSem2=weeks[i-1]; }
+  // Comparación siempre contra la semana anterior a la seleccionada
+  const iSem=weeks.indexOf(vSem1);
+  vSem2=iSem>0?weeks[iSem-1]:'';
   const a1=semAgg(vSem1), a2=vSem2?semAgg(vSem2):null;
   const mg1=a1.venta>0?a1.margen/a1.venta*100:0;
   const dPct=(x,y)=>{ if(!y) return ''; const p=(x-y)/y*100; return `<span class="${p>=0?'v-kpi-delta-pos':'v-kpi-delta-neg'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`; };
@@ -1712,8 +1712,7 @@ function renderSemMargen(){
   const selector=`<div style="display:flex;gap:10px;align-items:center;margin-bottom:22px;flex-wrap:wrap;">
     <span class="v-filter-label">Semana</span>
     <select class="v-select" onchange="setSem1(this.value)">${weeks.map(w=>`<option value="${w}" ${w===vSem1?'selected':''}>${semRange(w)}</option>`).join('')}</select>
-    <span class="v-filter-label">vs</span>
-    <select class="v-select" onchange="setSem2(this.value)"><option value="">— ninguna —</option>${weeks.map(w=>`<option value="${w}" ${w===vSem2?'selected':''}>${semRange(w)}</option>`).join('')}</select>
+    ${vSem2?`<span style="font-size:10px;color:var(--muted);">comparada contra la anterior (${semRange(vSem2)})</span>`:''}
   </div>`;
 
   // ── KPIs ──
