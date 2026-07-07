@@ -676,7 +676,7 @@ let pubCmpADesde = '', pubCmpAHasta = '', pubCmpBDesde = '', pubCmpBHasta = '';
 let edrSelectedPeriods = [];
 let edrTab = 'eerr';
 let vSem1 = '', vSem2 = '';
-let semTab = 'margen', semCmpWeeks = [], semCmpExp = new Set(), semLineHidden = new Set(), semLineInit = false, semLinePreset = 'linea';
+let semTab = 'margen', semCmpWeeks = [], semCmpExp = new Set(), semLineHidden = new Set(), semLineInit = false, semLinePreset = 'linea', semCmpCleared = false;
 
 // ── UTILS ───────────────────────────────────────────────────────
 function parseCSV(text) {
@@ -1805,23 +1805,27 @@ function renderSemLineas(){
 
 // ── SEMANAL · comparativo de ventas (2 a 5 semanas) ─────────────
 function toggleSemCmp(w){
-  if(semCmpWeeks.includes(w)){ if(semCmpWeeks.length<=2) return; semCmpWeeks=semCmpWeeks.filter(x=>x!==w); }
+  if(semCmpWeeks.includes(w)){ semCmpWeeks=semCmpWeeks.filter(x=>x!==w); semCmpCleared=true; }
   else { if(semCmpWeeks.length>=5) return; semCmpWeeks=[...semCmpWeeks,w].sort(); }
   renderSemanal();
 }
+function semClearCmp(){ const w=semWeeks(); semCmpWeeks=w.length?[w[w.length-1]]:[]; semCmpCleared=true; renderSemanal(); }
 function toggleSemCmpExp(k){ if(semCmpExp.has(k)) semCmpExp.delete(k); else semCmpExp.add(k); renderSemanal(); }
 function renderSemComparativo(){
   const weeks=semWeeks();
-  if(semCmpWeeks.length<2){
+  if(!semCmpCleared && semCmpWeeks.length<2){
     const vals=weeks.map(w=>semAgg(w).venta).slice().sort((a,b)=>a-b); const med=vals[Math.floor(vals.length/2)]||0;
     let ws=weeks.slice(); while(ws.length>2 && semAgg(ws[ws.length-1]).venta<med*0.5) ws=ws.slice(0,-1);
     semCmpWeeks=ws.slice(-4);
   }
   const cols=semCmpWeeks.filter(w=>weeks.includes(w));
+  const showTot=cols.length>1;
   const pills=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;align-items:center;">
-    <span style="font-size:11px;color:var(--muted);margin-right:2px;">Semanas (2 a 5):</span>
+    <span style="font-size:11px;color:var(--muted);margin-right:2px;">Semanas (1 a 5):</span>
     ${weeks.map(w=>{ const act=cols.includes(w), dis=!act&&cols.length>=5; return `<button onclick="toggleSemCmp('${w}')" ${dis?'disabled':''} style="padding:3px 10px;border-radius:20px;border:1px solid ${act?'var(--accent)':'#d0c8b8'};background:${act?'var(--accent)':'transparent'};color:${act?'#fff':dis?'#cfc7b5':'var(--muted)'};font-size:10px;cursor:${dis?'not-allowed':'pointer'};font-family:inherit;">${semRange(w)}</button>`; }).join('')}
+    ${cols.length?`<button onclick="semClearCmp()" style="padding:3px 12px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;margin-left:4px;">Limpiar</button>`:''}
   </div>`;
+  if(!cols.length) return pills+'<div class="empty" style="padding:44px 0;">Elegí al menos una semana.</div>';
   const tree={};
   DATA.semanal.filter(r=>cols.includes(r['semana'])).forEach(r=>{
     const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim(), w=r['semana'], v=num(r['importe_neto']);
@@ -1833,7 +1837,7 @@ function renderSemComparativo(){
     const open=key&&semCmpExp.has(key);
     const tog=hasChildren?`<span style="display:inline-block;width:14px;color:var(--muted);">${open?'−':'+'}</span>`:`<span style="display:inline-block;width:14px;"></span>`;
     const cells=cols.map(w=>`<td style="text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;${indent>0?'color:var(--muted);font-size:11px;':''}">${obj.m[w]?pesos(obj.m[w]):'—'}</td>`).join('');
-    const tot=`<td style="text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;font-weight:${indent===0?'600':'500'};border-left:1px solid #e8dfc8;">${pesos(obj.tot)}</td>`;
+    const tot=showTot?`<td style="text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;font-weight:${indent===0?'600':'500'};border-left:1px solid #e8dfc8;">${pesos(obj.tot)}</td>`:'';
     const click=hasChildren?`onclick="toggleSemCmpExp('${key.replace(/'/g,'')}')" style="cursor:pointer;${bg||''}"`:`style="${bg||''}"`;
     return `<tr ${click}><td style="padding:5px 8px;padding-left:${8+indent*18}px;font-size:${indent===0?'12px':'11px'};font-weight:${indent===0?'600':'400'};">${tog}${label}</td>${cells}${tot}</tr>`;
   }
@@ -1855,9 +1859,9 @@ function renderSemComparativo(){
   });
   const totM={}; cols.forEach(w=>totM[w]=lkeys.reduce((s,li)=>s+(tree[li].m[w]||0),0));
   const grand=lkeys.reduce((s,li)=>s+tree[li].tot,0);
-  const totRow=`<tr style="background:var(--surface2);border-top:2px solid var(--border);"><td style="padding:6px 8px;font-weight:600;">TOTAL</td>${cols.map(w=>`<td style="text-align:right;padding:6px 8px;font-weight:600;font-variant-numeric:tabular-nums;">${pesos(totM[w])}</td>`).join('')}<td style="text-align:right;padding:6px 8px;font-weight:700;border-left:1px solid #e8dfc8;font-variant-numeric:tabular-nums;">${pesos(grand)}</td></tr>`;
+  const totRow=`<tr style="background:var(--surface2);border-top:2px solid var(--border);"><td style="padding:6px 8px;font-weight:600;">TOTAL</td>${cols.map(w=>`<td style="text-align:right;padding:6px 8px;font-weight:600;font-variant-numeric:tabular-nums;">${pesos(totM[w])}</td>`).join('')}${showTot?`<td style="text-align:right;padding:6px 8px;font-weight:700;border-left:1px solid #e8dfc8;font-variant-numeric:tabular-nums;">${pesos(grand)}</td>`:''}</tr>`;
   const table=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;min-width:${180+cols.length*110}px;">
-    <thead><tr style="border-bottom:2px solid #d4c5a0;"><th style="text-align:left;font-size:10px;padding:6px 8px;">Línea / Rubro / Producto</th>${cols.map(w=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${semRange(w)}</th>`).join('')}<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Total</th></tr></thead>
+    <thead><tr style="border-bottom:2px solid #d4c5a0;"><th style="text-align:left;font-size:10px;padding:6px 8px;">Línea / Rubro / Producto</th>${cols.map(w=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${semRange(w)}</th>`).join('')}${showTot?`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Total</th>`:''}</tr></thead>
     <tbody>${rows}${totRow}</tbody></table></div>`;
   return pills+`<div style="font-size:10px;color:var(--muted);margin-bottom:12px;">Ventas ($) por semana. Tocá una línea o rubro para desplegar.</div>`+table;
 }
