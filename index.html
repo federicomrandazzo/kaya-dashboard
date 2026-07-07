@@ -1766,8 +1766,9 @@ function semSeriesRatio(defs, weeks){
   return defs.map(d=>({name:d.name,color:d.color,total:d.total,kind:d.kind,values:weeks.map(w=>{ let v=0,c=0; DATA.semanal.filter(r=>r['semana']===w&&d.match(r)).forEach(r=>{ v+=num(r['importe_neto']); c+=num(r['costo_total']); }); return v>0?c/v*100:0; })}));
 }
 function toggleSemLine(i){ const d=semSeriesDefs()[i]; if(!d) return; if(semLineHidden.has(d.name)) semLineHidden.delete(d.name); else semLineHidden.add(d.name); renderSemanal(); }
-function semLineChart(series, weeks, isPct){
-  const vis=series.filter(s=>!semLineHidden.has(s.name));
+function semLineChart(series, weeks, isPct, dropTotal){
+  let vis=series.filter(s=>!semLineHidden.has(s.name));
+  if(dropTotal) vis=vis.filter(s=>!s.total);
   const W=760,H=250,PL=56,PR=14,PT=14,PB=28,PW=W-PL-PR,PH=H-PT-PB;
   const maxV=Math.max(...vis.flatMap(s=>s.values),1);
   const xOf=i=>PL+(weeks.length<=1?PW/2:(i/(weeks.length-1))*PW);
@@ -1794,7 +1795,7 @@ function renderSemLineas(){
   return btnRow+`<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Elegí una vista con los botones y afiná con la leyenda (tocá para ocultar o mostrar). La línea negra gruesa es el total del negocio.</div>
     <div class="subsection" style="margin-bottom:30px;">
       <div class="subsection-label" style="margin-bottom:12px;">Ventas por semana ($)</div>
-      <div class="linechart-wrap">${semLineChart(ventas,weeks,false)}${semLineLegend(ventas)}</div>
+      <div class="linechart-wrap">${semLineChart(ventas,weeks,false,['negra','blanca','kits'].includes(semLinePreset))}${semLineLegend(ventas)}</div>
     </div>
     <div class="subsection">
       <div class="subsection-label" style="margin-bottom:12px;">Costo / venta por semana (%) · ratio de costo de cada serie</div>
