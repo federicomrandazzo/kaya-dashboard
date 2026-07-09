@@ -832,7 +832,7 @@ async function loadData() {
     DATA.publicidad = parseCSV(pbT.split('\n').slice(1).join('\n')).filter(r=>r['Fecha']&&(r['VENTA TN']||'').trim()&&num(r['VENTA TN'])>0);
     DATA.edrData = parseCSV(edT).filter(r=>r['concepto']&&r['periodo']&&(r['importe eerr']||'').trim());
     DATA.semanal = parseCSV(swT).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
-    DATA.finanzas = parseCSV(fnT).filter(r=>(r['vencimiento']||'').trim()&&(r['monto']||'').trim());
+    DATA.finanzas = parseCSV(fnT.split('\n').slice(1).join('\n')).filter(r=>(r['FUENTE']||'').trim()&&(r['IMPORTE']||'').trim());
     const _sl = parseSaldosCSV(slT);
     DATA.saldos = _sl.rows; DATA.saldosFecha = _sl.fecha;
     bomCache = null;
@@ -1933,7 +1933,7 @@ function renderSemComparativo(){
 // Conexión al archivo de flujo de fondos (distinto del doc principal).
 // Pendiente: URLs CSV publicadas de las hojas recopilador y saldos + Web App de Apps Script.
 const FIN = {
-  recopilador: '',  // URL CSV de la hoja recopilador (vencimiento|concepto|categoria|monto|cuenta)
+  recopilador: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8ewAIAM0Suu4Kj1zf-9Hzr8ig7lWEJEIxxHN_lKDJlrMmGQYx98LHnGo61ClwVZwugS1iR94VgTCj/pub?gid=1088880984&single=true&output=csv',
   saldos: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8ewAIAM0Suu4Kj1zf-9Hzr8ig7lWEJEIxxHN_lKDJlrMmGQYx98LHnGo61ClwVZwugS1iR94VgTCj/pub?gid=89645947&single=true&output=csv',
   appsScript: 'https://script.google.com/macros/s/AKfycbzNYWMNPAFhcN7l8XeLPNkeNOzn5Bh63rDM-hbcyiNbrTN-KL27QBMjOHj8HOpPdJlYWA/exec',
   token: 'kaya-fin',
@@ -1967,14 +1967,25 @@ function finDate(s){
   return null;
 }
 function finHoy(){ const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+// Fuentes del recopilador que NO son pagos del flujo (saldos duplica la otra hoja;
+// proveedores y retiros quedan afuera por pedido de Federico, jul 2026)
+const FIN_EXCLUIR=['01. SALDOS','05. PROVEEDORES','06. RETIROS'];
+let finVista='agenda';
+function setFinVista(v){ finVista=v; renderFinanzas(); }
 function finPagos(){
-  return DATA.finanzas.map(r=>({
-    fecha:finDate(r['vencimiento']),
-    concepto:(r['concepto']||'').trim()||'(sin concepto)',
-    categoria:(r['categoria']||'Otro').trim()||'Otro',
-    monto:Math.abs(num(r['monto'])),
-    cuenta:(r['cuenta']||'').trim(),
-  })).filter(p=>p.fecha&&p.monto>0).sort((a,b)=>a.fecha-b.fecha);
+  return DATA.finanzas.filter(r=>{
+    const f=(r['FUENTE']||'').trim();
+    if(!f||FIN_EXCLUIR.includes(f)) return false;
+    return (r['COMPUTABLE']||'').trim().toUpperCase()==='SI';
+  }).map(r=>{
+    const fuente=(r['FUENTE']||'').trim().replace(/^\d+\s*\.\s*/,'');
+    const prov=(r['PROVEEDOR']||'').trim(), conc=(r['CONCEPTO']||'').trim();
+    const esCheque=/CHEQUE/i.test(fuente);
+    // gastos fijos: PROVEEDOR es el ítem y CONCEPTO la categoría; cheques: al revés (CONCEPTO=proveedor, PROVEEDOR=nº)
+    const label=esCheque?[conc,prov?'cheque '+prov:''].filter(Boolean).join(' · '):[prov,conc].filter(Boolean).join(' · ');
+    const detalle=esCheque?(prov?'cheque '+prov:conc):(prov||conc);
+    return {fecha:finDate(r['FECHA ESTIMADA']),fuente,concepto:esCheque?conc:(conc||'(sin concepto)'),detalle:detalle||'(sin detalle)',label:label||'(sin detalle)',monto:Math.abs(num(r['IMPORTE'])),cuenta:(r['CUENTA']||'').trim()};
+  }).filter(p=>p.fecha&&p.monto>0).sort((a,b)=>a.fecha-b.fecha);
 }
 function finSaldos(){
   let rows=DATA.saldos.map(r=>({cuenta:r.cuenta,saldo:num(r.saldo)}));
@@ -2041,7 +2052,9 @@ function renderFinanzas(){
   const conPagos=!!FIN.recopilador;
   const hoy=finHoy();
   const pagos=conPagos?finPagos():[];
+  const en10=new Date(hoy.getTime()+10*86400000);
   const en30=new Date(hoy.getTime()+30*86400000);
+  const pag10=pagos.filter(p=>p.fecha<=en10);
   const pag30=pagos.filter(p=>p.fecha<=en30);
   const grandes30=pag30.filter(p=>p.monto>=UMBRAL_GRANDE);
   const {rows:cuentasRows,fecha:saldosFecha}=finSaldos();
@@ -2054,11 +2067,12 @@ function renderFinanzas(){
   // ── KPIs ──
   const resColor=reserva>=PISO_RESERVA*1.1?'#27ae60':reserva>=PISO_RESERVA?'#e67e22':'var(--accent3)';
   const sinRec='falta conectar recopilador';
-  const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;">
     ${pubKPI('Reserva hoy',pesos(reserva),`piso ${pesos(PISO_RESERVA)}${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
-    ${pubKPI('Pagos próximos 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos':sinRec)}
+    ${pubKPI('A pagar 10 días',conPagos?pesos(pag10.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag10.length+' pagos':sinRec,'var(--accent2)')}
+    ${pubKPI('A pagar 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos':sinRec)}
     ${pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',conPagos?pesos(grandes30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?grandes30.length+' pagos':sinRec,'var(--accent3)')}
-    ${pubKPI('Próximo pago grande',proxGrande?pesos(proxGrande.monto):'—',proxGrande?`${proxGrande.concepto} · ${DSEM[proxGrande.fecha.getDay()]} ${fF(proxGrande.fecha)}`:conPagos?'sin pagos ≥3M cargados':sinRec,'var(--accent2)')}
+    ${pubKPI('Próximo pago grande',proxGrande?pesos(proxGrande.monto):'—',proxGrande?`${proxGrande.label} · ${DSEM[proxGrande.fecha.getDay()]} ${fF(proxGrande.fecha)}`:conPagos?'sin pagos ≥3M cargados':sinRec,'var(--accent2)')}
   </div>`;
 
   // ── Curva de reserva proyectada (60 días, sin ingresos) ──
@@ -2091,7 +2105,7 @@ function renderFinanzas(){
   </div>`;
 
   // ── Agenda de pagos ──
-  const cats=[...new Set(pagos.map(p=>p.categoria))].sort();
+  const cats=[...new Set(pagos.map(p=>p.fuente))].sort();
   const umbrales=[[0,'Todos'],[3000000,'≥ $3M'],[5000000,'≥ $5M']];
   const filtros=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
     ${umbrales.map(([u,l])=>`<button onclick="setFinUmbral(${u})" style="padding:3px 12px;border-radius:20px;border:1px solid ${finUmbral===u?'var(--accent)':'var(--border)'};background:${finUmbral===u?'var(--accent)':'transparent'};color:${finUmbral===u?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${l}</button>`).join('')}
@@ -2101,7 +2115,7 @@ function renderFinanzas(){
   </div>`;
   const grandesPorDia={};
   pagos.forEach(p=>{ if(p.monto>=UMBRAL_GRANDE){ const k=dKey(p.fecha); grandesPorDia[k]=(grandesPorDia[k]||0)+1; } });
-  const list=pagos.filter(p=>p.monto>=finUmbral&&(!finCat||p.categoria===finCat));
+  const list=pagos.filter(p=>p.monto>=finUmbral&&(!finCat||p.fuente===finCat));
   const vencidos=list.filter(p=>p.fecha<hoy);
   const futuros=list.filter(p=>p.fecha>=hoy);
   const mondayOf=d=>{ const x=new Date(d); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; };
@@ -2110,7 +2124,7 @@ function renderFinanzas(){
     const cluster=grande&&grandesPorDia[dKey(p.fecha)]>=2;
     return `<div class="tr nc" style="${grande?'background:#fdf3f1;':''}">
       <span style="min-width:86px;font-size:11px;color:var(--muted);flex-shrink:0;">${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</span>
-      <span class="tl">${p.concepto} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.categoria}</span>${cluster?`<span style="font-size:9px;color:var(--accent3);margin-left:8px;font-weight:600;">⚠ ${grandesPorDia[dKey(p.fecha)]} grandes ese día</span>`:''}</span>
+      <span class="tl">${p.label} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.fuente}</span>${cluster?`<span style="font-size:9px;color:var(--accent3);margin-left:8px;font-weight:600;">⚠ ${grandesPorDia[dKey(p.fecha)]} grandes ese día</span>`:''}</span>
       <span style="min-width:80px;text-align:right;font-size:10px;color:var(--muted);margin-right:14px;">${p.cuenta||'—'}</span>
       <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</span>
     </div>`;
@@ -2128,10 +2142,48 @@ function renderFinanzas(){
     agendaH+=ps.map(pRow).join('');
   });
   if(!agendaH) agendaH='<div class="empty">Sin pagos que cumplan el filtro.</div>';
+
+  // Vista árbol: fuente → concepto → detalle (con fecha, cuenta y monto)
+  const NSF='finarb';
+  const ftree={};
+  list.forEach(p=>{
+    if(!ftree[p.fuente]) ftree[p.fuente]={t:0,n:0,conceptos:{}};
+    const F=ftree[p.fuente]; F.t+=p.monto; F.n++;
+    if(!F.conceptos[p.concepto]) F.conceptos[p.concepto]={t:0,items:[]};
+    F.conceptos[p.concepto].t+=p.monto; F.conceptos[p.concepto].items.push(p);
+  });
+  let arbolH='';
+  Object.entries(ftree).sort((a,b)=>b[1].t-a[1].t).forEach(([f,F])=>{
+    const fk=f.replace(/\W+/g,'-');
+    arbolH+=TR(NSF,'f-'+fk,0,f,`${F.n} pagos`,pesos(F.t),true,false);
+    let concH='';
+    Object.entries(F.conceptos).sort((a,b)=>b[1].t-a[1].t).forEach(([c,C])=>{
+      const ck=fk+'-'+c.replace(/\W+/g,'-');
+      concH+=TR(NSF,'c-'+ck,1,c,`${C.items.length} pagos`,pesos(C.t),true,false);
+      let itemH='';
+      C.items.slice().sort((a,b)=>a.fecha-b.fecha).forEach((p,i)=>{
+        const grande=p.monto>=UMBRAL_GRANDE;
+        itemH+=`<div class="tr l2 nc" style="${grande?'background:#fdf3f1;':''}">
+          <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+          <span class="tl">${p.detalle} <span style="font-size:10px;color:${p.fecha<hoy?'var(--accent3)':'var(--muted)'};margin-left:8px;">${p.fecha<hoy?'vencido · ':''}${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</span></span>
+          <span style="min-width:80px;text-align:right;font-size:10px;color:var(--muted);margin-right:14px;">${p.cuenta||'—'}</span>
+          <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</span>
+        </div>`;
+      });
+      concH+=TC(NSF,'c-'+ck,itemH,false);
+    });
+    arbolH+=TC(NSF,'f-'+fk,concH,false);
+  });
+  if(!arbolH) arbolH='<div class="empty">Sin pagos que cumplan el filtro.</div>';
+
+  const vistaBtn=(v,l)=>`<button onclick="setFinVista('${v}')" style="padding:5px 14px;border-radius:4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:1px solid ${finVista===v?'var(--accent)':'var(--border)'};background:${finVista===v?'var(--accent)':'transparent'};color:${finVista===v?'#fff':'var(--muted)'};font-family:inherit;">${l}</button>`;
   const agenda=`<div class="subsection" style="margin-bottom:28px;">
-    <div class="subsection-label" style="margin-bottom:12px;">Agenda de pagos <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:normal;">· los ≥ $${(UMBRAL_GRANDE/1e6).toFixed(0)}M van destacados</span></div>
+    <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <span>Agenda de pagos <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:normal;">· los ≥ $${(UMBRAL_GRANDE/1e6).toFixed(0)}M van destacados</span></span>
+      <span style="display:flex;gap:4px;">${vistaBtn('agenda','Cronológica')}${vistaBtn('arbol','Por fuente')}</span>
+    </div>
     ${filtros}
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${agendaH}</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${finVista==='arbol'?arbolH:agendaH}</div>
   </div>`;
 
   // ── Saldos por cuenta (renombrar / agregar cuentas / editar montos) ──
