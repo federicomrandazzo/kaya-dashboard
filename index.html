@@ -2075,7 +2075,7 @@ function renderFinanzas(){
   const kpiBtn=(key,html)=>`<div onclick="setFinKpiDet('${key}')" title="clic para ver el detalle" style="cursor:pointer;border-radius:8px;${finKpiDet===key?'outline:2px solid var(--accent);':''}">${html}</div>`;
   const verDet=k=>finKpiDet===k?' · cerrar ▴':' · ver detalle ▾';
   const kpis=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;">
-    ${pubKPI('Total disponible',pesos(disponible),`en cuentas ${pesos(reserva)} − objetivo ${pesos(PISO_RESERVA)}${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
+    ${pubKPI('Disponible operativo',pesos(disponible),`en cuentas ${pesos(reserva)} − ${pesos(PISO_RESERVA)} que viven en Reservas MP Ry${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
     ${kpiBtn('d10',pubKPI('A pagar 10 días',conPagos?pesos(pag10.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag10.length+' pagos'+verDet('d10'):sinRec,'var(--accent2)'))}
     ${kpiBtn('d30',pubKPI('A pagar 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos'+verDet('d30'):sinRec))}
     ${kpiBtn('g30',pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',conPagos?pesos(grandes30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?grandes30.length+' pagos'+verDet('g30'):sinRec,'var(--accent3)'))}
@@ -2112,31 +2112,31 @@ function renderFinanzas(){
     }
   }
 
-  // ── Curva de reserva proyectada (60 días, sin ingresos) ──
+  // ── Curva del disponible operativo (60 días, sin ingresos): cruce de $0 = se toca la reserva ──
   const NDIAS=60;
   const pts=[];
   for(let d=0;d<=NDIAS;d++){
     const fd=new Date(hoy.getTime()+d*86400000);
     const acum=pagos.filter(p=>p.fecha<=fd).reduce((s,p)=>s+p.monto,0);
-    pts.push({d,fd,res:reserva-acum});
+    pts.push({d,fd,res:disponible-acum});
   }
-  const cruce=pts.find(p=>p.res<PISO_RESERVA);
+  const cruce=pts.find(p=>p.res<0);
   const W=720,H=230,PL=58,PR=12,PT=16,PB=28,CW=W-PL-PR,CH=H-PT-PB;
-  const yMax=Math.max(reserva,PISO_RESERVA)*1.06;
-  const yMin=Math.min(Math.min(...pts.map(p=>p.res)),PISO_RESERVA*0.8);
+  const yMax=Math.max(disponible,1)*1.06;
+  const yMin=Math.min(Math.min(...pts.map(p=>p.res)),-yMax*0.06);
   const X=d=>PL+d/NDIAS*CW, Y=v=>PT+(yMax-v)/(yMax-yMin)*CH;
   let grid='';
   [0,.33,.66,1].forEach(f=>{ const v=yMin+f*(yMax-yMin), y=Y(v); grid+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e8dfc8" stroke-width="1"/><text x="${PL-6}" y="${(y+3.5).toFixed(1)}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(0)}M</text>`; });
-  const yPiso=Y(PISO_RESERVA);
-  grid+=`<line x1="${PL}" y1="${yPiso.toFixed(1)}" x2="${W-PR}" y2="${yPiso.toFixed(1)}" stroke="var(--accent3)" stroke-width="1.4" stroke-dasharray="6 4"/><text x="${W-PR}" y="${(yPiso-5).toFixed(1)}" text-anchor="end" fill="#c0392b" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">objetivo $${(PISO_RESERVA/1e6).toFixed(0)}M</text>`;
+  const yCero=Y(0);
+  grid+=`<line x1="${PL}" y1="${yCero.toFixed(1)}" x2="${W-PR}" y2="${yCero.toFixed(1)}" stroke="var(--accent3)" stroke-width="1.4" stroke-dasharray="6 4"/><text x="${W-PR}" y="${(yCero-5).toFixed(1)}" text-anchor="end" fill="#c0392b" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">$0 · acá se toca la reserva</text>`;
   let xLbl='';
   for(let d=0;d<=NDIAS;d+=10){ const fd=new Date(hoy.getTime()+d*86400000); xLbl+=`<text x="${X(d).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${d===0?'hoy':fF(fd)}</text>`; }
   const path='M '+pts.map(p=>`${X(p.d).toFixed(1)} ${Y(p.res).toFixed(1)}`).join(' L ');
   const cruceMark=cruce?`<circle cx="${X(cruce.d).toFixed(1)}" cy="${Y(cruce.res).toFixed(1)}" r="5" fill="var(--accent3)"/><text x="${X(cruce.d).toFixed(1)}" y="${(Y(cruce.res)-10).toFixed(1)}" text-anchor="middle" fill="#c0392b" font-size="10" font-family="Red Hat Display,sans-serif" font-weight="700">cruce ${fF(cruce.fd)}</text>`:'';
   const curva=`<div class="subsection" style="margin-bottom:28px;">
     <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
-      <span>Fondos proyectados · próximos 60 días · escenario sin ingresos</span>
-      <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:normal;">${cruce?`⚠ cruza el objetivo de reserva el ${DSEM[cruce.fd.getDay()]} ${fF(cruce.fd)}`:'no cruza el objetivo de reserva en 60 días'}</span>
+      <span>Disponible operativo proyectado · próximos 60 días · escenario sin ingresos</span>
+      <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:normal;">${cruce?`⚠ se toca la reserva el ${DSEM[cruce.fd.getDay()]} ${fF(cruce.fd)}`:'no se toca la reserva en 60 días'}</span>
     </div>
     <div class="linechart-wrap"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;">${grid}<path d="${path}" fill="none" stroke="#b89021" stroke-width="2.4"/>${cruceMark}${xLbl}</svg></div>
   </div>`;
@@ -2232,7 +2232,10 @@ function renderFinanzas(){
   const puedeGuardar=!!FIN.appsScript;
   const filas=cuentasRows.map(r=>{
     const comp=pagCorto.filter(p=>p.cuenta.toLowerCase()===r.cuenta.toLowerCase()).reduce((x,p)=>x+p.monto,0);
-    const sem=(!conPagos||comp===0)?'<span style="color:var(--muted);">—</span>':(r.saldo>=comp?'<span style="color:#27ae60;">● cubre</span>':`<span style="color:var(--accent3);">● faltan ${pesos(comp-r.saldo)}</span>`);
+    const esReservaRy=/^reservas?\s+mp\s+ry/i.test(r.cuenta);
+    const sem=esReservaRy
+      ? (r.saldo>=PISO_RESERVA?`<span style="color:#27ae60;">● objetivo ${pesos(PISO_RESERVA)} cubierto</span>`:`<span style="color:var(--accent3);">● bajo el objetivo ${pesos(PISO_RESERVA)}</span>`)
+      : (!conPagos||comp===0)?'<span style="color:var(--muted);">—</span>':(r.saldo>=comp?'<span style="color:#27ae60;">● cubre</span>':`<span style="color:var(--accent3);">● faltan ${pesos(comp-r.saldo)}</span>`);
     return `<tr data-fila="1">
       <td style="padding:7px 10px;"><input class="fin-cuenta-input v-select" value="${r.cuenta.replace(/"/g,'&quot;')}" ${puedeGuardar?'':'disabled'} style="width:170px;"></td>
       <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" value="${pesos(r.saldo)}" inputmode="numeric" onblur="this.value=pesos(num(this.value))" ${puedeGuardar?'':'disabled'} style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
