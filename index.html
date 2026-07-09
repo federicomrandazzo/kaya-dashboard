@@ -720,7 +720,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:''};
 let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -833,7 +833,8 @@ async function loadData() {
     DATA.edrData = parseCSV(edT).filter(r=>r['concepto']&&r['periodo']&&(r['importe eerr']||'').trim());
     DATA.semanal = parseCSV(swT).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
     DATA.finanzas = parseCSV(fnT).filter(r=>(r['vencimiento']||'').trim()&&(r['monto']||'').trim());
-    DATA.saldos = parseCSV(slT).filter(r=>(r['cuenta']||'').trim());
+    const _sl = parseSaldosCSV(slT);
+    DATA.saldos = _sl.rows; DATA.saldosFecha = _sl.fecha;
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -1933,14 +1934,29 @@ function renderSemComparativo(){
 // Pendiente: URLs CSV publicadas de las hojas recopilador y saldos + Web App de Apps Script.
 const FIN = {
   recopilador: '',  // URL CSV de la hoja recopilador (vencimiento|concepto|categoria|monto|cuenta)
-  saldos: '',       // URL CSV de la hoja saldos (cuenta|saldo|actualizado)
+  saldos: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ8ewAIAM0Suu4Kj1zf-9Hzr8ig7lWEJEIxxHN_lKDJlrMmGQYx98LHnGo61ClwVZwugS1iR94VgTCj/pub?gid=89645947&single=true&output=csv',
   appsScript: '',   // URL del Web App (apps-script-saldos.gs) para guardar saldos desde el dashboard
   token: 'kaya-fin',
 };
 const PISO_RESERVA = 30000000;
 const UMBRAL_GRANDE = 3000000;
-const FIN_CUENTAS = ['MP Ry','Reserva Ry','Galicia','MP Sofi','MP Vivi','EFT $','MAU'];
+const FIN_MAX_CUENTAS = 20; // el Apps Script escribe A8:B27 de la hoja saldos
 let finUmbral = 0, finCat = '';
+
+// La hoja saldos no es tabular: fila "fecha", fila "TOTAL" (fórmula) y
+// recién después el bloque cuenta|saldo (A8:B27). Parser a medida.
+function parseSaldosCSV(text){
+  const out={fecha:'',rows:[]};
+  let enCuentas=false;
+  text.split('\n').forEach(line=>{
+    const c=splitLine(line.replace(/\r$/,''));
+    const a=(c[0]||'').trim(), b=(c[1]||'').trim();
+    if(a.toLowerCase()==='fecha'){ out.fecha=b; return; }
+    if(a.toLowerCase()==='cuenta'){ enCuentas=true; return; }
+    if(enCuentas&&a&&a.toUpperCase()!=='TOTAL') out.rows.push({cuenta:a,saldo:b});
+  });
+  return out;
+}
 
 function finDate(s){
   s=(s||'').trim();
@@ -1961,28 +1977,50 @@ function finPagos(){
   })).filter(p=>p.fecha&&p.monto>0).sort((a,b)=>a.fecha-b.fecha);
 }
 function finSaldos(){
-  const out={};
-  DATA.saldos.forEach(r=>{ const c=(r['cuenta']||'').trim(); if(c) out[c]={saldo:num(r['saldo']),actualizado:(r['actualizado']||'').trim()}; });
+  let rows=DATA.saldos.map(r=>({cuenta:r.cuenta,saldo:num(r.saldo)}));
+  let fecha=DATA.saldosFecha||'';
   try{
     const cache=JSON.parse(localStorage.getItem('kayaSaldosCache')||'null');
-    if(cache&&Date.now()-cache.ts<30*60*1000){
-      Object.entries(cache.saldos).forEach(([c,s])=>{ out[c]={saldo:s,actualizado:'recién guardado'}; });
+    if(cache&&Date.now()-cache.ts<30*60*1000&&Array.isArray(cache.rows)){
+      rows=cache.rows.map(r=>({cuenta:r.cuenta,saldo:+r.saldo||0}));
+      fecha=(cache.fecha||fecha)+' (recién guardado)';
     }
   }catch(e){}
-  return out;
+  return {rows,fecha};
 }
 function setFinUmbral(u){ finUmbral=u; renderFinanzas(); }
 function setFinCat(c){ finCat=c; renderFinanzas(); }
+function finLeerFilas(){
+  return [...document.querySelectorAll('#fin-saldos-body tr[data-fila]')].map(tr=>({
+    cuenta:(tr.querySelector('.fin-cuenta-input').value||'').trim(),
+    saldo:num(tr.querySelector('.fin-saldo-input').value),
+  })).filter(r=>r.cuenta);
+}
+function addFinCuenta(){
+  const body=document.getElementById('fin-saldos-body');
+  const filas=body.querySelectorAll('tr[data-fila]').length;
+  const msg=document.getElementById('fin-save-msg');
+  if(filas>=FIN_MAX_CUENTAS){ msg.textContent='Máximo '+FIN_MAX_CUENTAS+' cuentas (rango A8:B27 de la hoja).'; msg.style.color='var(--accent3)'; return; }
+  const tr=document.createElement('tr');
+  tr.setAttribute('data-fila','1');
+  tr.innerHTML=`<td style="padding:7px 10px;"><input class="fin-cuenta-input v-select" value="" placeholder="nombre de la cuenta" style="width:160px;"></td>
+    <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" value="0" inputmode="numeric" style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
+    <td style="padding:7px 10px;text-align:right;font-size:12px;color:var(--muted);">—</td>
+    <td style="padding:7px 10px;text-align:right;font-size:11px;color:var(--muted);">—</td>`;
+  body.insertBefore(tr,document.getElementById('fin-total-row'));
+  tr.querySelector('.fin-cuenta-input').focus();
+}
 async function saveSaldos(){
-  const inputs=[...document.querySelectorAll('.fin-saldo-input')];
-  const saldos=inputs.map(i=>({cuenta:i.dataset.cuenta,saldo:num(i.value)}));
+  const saldos=finLeerFilas();
   const btn=document.getElementById('fin-save-btn'), msg=document.getElementById('fin-save-msg');
   btn.disabled=true; msg.textContent='Guardando…'; msg.style.color='var(--muted)';
   try{
     const res=await fetch(FIN.appsScript,{method:'POST',body:JSON.stringify({token:FIN.token,saldos})});
     const j=await res.json();
     if(!j.ok) throw new Error(j.error||'respuesta inválida');
-    localStorage.setItem('kayaSaldosCache',JSON.stringify({ts:Date.now(),saldos:Object.fromEntries(saldos.map(s=>[s.cuenta,s.saldo]))}));
+    const hoy=new Date();
+    const fechaLocal=`${hoy.getDate()}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+    localStorage.setItem('kayaSaldosCache',JSON.stringify({ts:Date.now(),fecha:fechaLocal,rows:saldos}));
     msg.textContent='Guardado ✓'; msg.style.color='#27ae60';
     setTimeout(()=>renderFinanzas(),900);
   }catch(e){
@@ -1993,21 +2031,21 @@ async function saveSaldos(){
 function renderFinanzas(){
   const el=document.getElementById('module-fin');
   el.style.display='block';
-  if(!FIN.recopilador||!FIN.saldos){
+  if(!FIN.recopilador&&!FIN.saldos){
     el.innerHTML=`<div style="max-width:560px;margin:60px auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:28px;text-align:center;">
       <div style="font-family:'Tenor Sans',serif;font-size:18px;margin-bottom:10px;">Módulo listo · falta conectar los datos</div>
       <div style="font-size:12px;color:var(--muted);line-height:1.8;">En el archivo de flujo de fondos, publicá como CSV la hoja <strong>recopilador</strong> y la hoja <strong>saldos</strong><br>(Archivo → Compartir → Publicar en la web → elegir la hoja → CSV)<br>y pasale los dos links a Claude para cablearlos.</div>
     </div>`;
     return;
   }
+  const conPagos=!!FIN.recopilador;
   const hoy=finHoy();
-  const pagos=finPagos();
+  const pagos=conPagos?finPagos():[];
   const en30=new Date(hoy.getTime()+30*86400000);
   const pag30=pagos.filter(p=>p.fecha<=en30);
   const grandes30=pag30.filter(p=>p.monto>=UMBRAL_GRANDE);
-  const saldos=finSaldos();
-  const cuentas=[...new Set([...FIN_CUENTAS,...Object.keys(saldos)])];
-  const reserva=cuentas.reduce((s,c)=>s+((saldos[c]&&saldos[c].saldo)||0),0);
+  const {rows:cuentasRows,fecha:saldosFecha}=finSaldos();
+  const reserva=cuentasRows.reduce((s,r)=>s+r.saldo,0);
   const proxGrande=pagos.find(p=>p.fecha>=hoy&&p.monto>=UMBRAL_GRANDE);
   const fF=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
   const DSEM=['dom','lun','mar','mié','jue','vie','sáb'];
@@ -2015,12 +2053,12 @@ function renderFinanzas(){
 
   // ── KPIs ──
   const resColor=reserva>=PISO_RESERVA*1.1?'#27ae60':reserva>=PISO_RESERVA?'#e67e22':'var(--accent3)';
-  const ultAct=Object.values(saldos).map(s=>s.actualizado).filter(Boolean)[0]||'';
+  const sinRec='falta conectar recopilador';
   const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
-    ${pubKPI('Reserva hoy',pesos(reserva),`piso ${pesos(PISO_RESERVA)}${ultAct?' · al '+ultAct:''}`,resColor)}
-    ${pubKPI('Pagos próximos 30 días',pesos(pag30.reduce((s,p)=>s+p.monto,0)),pag30.length+' pagos')}
-    ${pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',pesos(grandes30.reduce((s,p)=>s+p.monto,0)),grandes30.length+' pagos','var(--accent3)')}
-    ${pubKPI('Próximo pago grande',proxGrande?pesos(proxGrande.monto):'—',proxGrande?`${proxGrande.concepto} · ${DSEM[proxGrande.fecha.getDay()]} ${fF(proxGrande.fecha)}`:'sin pagos ≥3M cargados','var(--accent2)')}
+    ${pubKPI('Reserva hoy',pesos(reserva),`piso ${pesos(PISO_RESERVA)}${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
+    ${pubKPI('Pagos próximos 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos':sinRec)}
+    ${pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',conPagos?pesos(grandes30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?grandes30.length+' pagos':sinRec,'var(--accent3)')}
+    ${pubKPI('Próximo pago grande',proxGrande?pesos(proxGrande.monto):'—',proxGrande?`${proxGrande.concepto} · ${DSEM[proxGrande.fecha.getDay()]} ${fF(proxGrande.fecha)}`:conPagos?'sin pagos ≥3M cargados':sinRec,'var(--accent2)')}
   </div>`;
 
   // ── Curva de reserva proyectada (60 días, sin ingresos) ──
@@ -2096,48 +2134,47 @@ function renderFinanzas(){
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${agendaH}</div>
   </div>`;
 
-  // ── Saldos por cuenta ──
+  // ── Saldos por cuenta (renombrar / agregar cuentas / editar montos) ──
   const puedeGuardar=!!FIN.appsScript;
-  const filas=cuentas.map(c=>{
-    const s=saldos[c]||{saldo:0,actualizado:''};
-    const comp=pag30.filter(p=>p.cuenta.toLowerCase()===c.toLowerCase()).reduce((x,p)=>x+p.monto,0);
-    const sem=comp===0?'<span style="color:var(--muted);">—</span>':(s.saldo>=comp?'<span style="color:#27ae60;">● cubre</span>':`<span style="color:var(--accent3);">● faltan ${pesos(comp-s.saldo)}</span>`);
-    return `<tr>
-      <td style="padding:7px 10px;font-size:12px;">${c}</td>
-      <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" data-cuenta="${c}" value="${Math.round(s.saldo)}" inputmode="numeric" ${puedeGuardar?'':'disabled'} style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
-      <td style="padding:7px 10px;text-align:right;font-size:10px;color:var(--muted);">${s.actualizado||'—'}</td>
+  const filas=cuentasRows.map(r=>{
+    const comp=pag30.filter(p=>p.cuenta.toLowerCase()===r.cuenta.toLowerCase()).reduce((x,p)=>x+p.monto,0);
+    const sem=(!conPagos||comp===0)?'<span style="color:var(--muted);">—</span>':(r.saldo>=comp?'<span style="color:#27ae60;">● cubre</span>':`<span style="color:var(--accent3);">● faltan ${pesos(comp-r.saldo)}</span>`);
+    return `<tr data-fila="1">
+      <td style="padding:7px 10px;"><input class="fin-cuenta-input v-select" value="${r.cuenta.replace(/"/g,'&quot;')}" ${puedeGuardar?'':'disabled'} style="width:170px;"></td>
+      <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" value="${Math.round(r.saldo)}" inputmode="numeric" ${puedeGuardar?'':'disabled'} style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
       <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;">${comp?pesos(comp):'—'}</td>
       <td style="padding:7px 10px;text-align:right;font-size:11px;">${sem}</td>
     </tr>`;
   }).join('');
   const saldosT=`<div class="subsection">
-    <div class="subsection-label" style="margin-bottom:12px;">Saldos por cuenta</div>
+    <div class="subsection-label" style="margin-bottom:12px;">Saldos por cuenta <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:normal;">${saldosFecha?'· al '+saldosFecha:''}</span></div>
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
       <thead><tr style="border-bottom:2px solid #d4c5a0;">
         <th style="text-align:left;font-size:10px;padding:6px 10px;">Cuenta</th>
         <th style="text-align:right;font-size:10px;padding:6px 10px;">Saldo</th>
-        <th style="text-align:right;font-size:10px;padding:6px 10px;">Actualizado</th>
         <th style="text-align:right;font-size:10px;padding:6px 10px;">Comprometido 30d</th>
         <th style="text-align:right;font-size:10px;padding:6px 10px;">Estado</th>
       </tr></thead>
-      <tbody>${filas}
-        <tr style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;">
+      <tbody id="fin-saldos-body">${filas}
+        <tr id="fin-total-row" style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;">
           <td style="padding:7px 10px;">TOTAL RESERVA</td>
           <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${resColor};">${pesos(reserva)}</td>
-          <td></td>
-          <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;">${pesos(pag30.reduce((s,p)=>s+p.monto,0))}</td>
+          <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;">${conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—'}</td>
           <td></td>
         </tr>
       </tbody>
     </table></div>
-    <div style="display:flex;gap:12px;align-items:center;margin-top:12px;">
+    <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
       ${puedeGuardar
-        ? `<button id="fin-save-btn" onclick="saveSaldos()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:4px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;font-family:inherit;">Guardar saldos</button><span id="fin-save-msg" style="font-size:11px;"></span>`
-        : `<span style="font-size:11px;color:var(--muted);">Para editar saldos desde acá falta configurar el Apps Script (ver apps-script-saldos.gs).</span>`}
+        ? `<button onclick="addFinCuenta()" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 14px;border-radius:4px;font-size:11px;cursor:pointer;font-family:inherit;">+ Agregar cuenta</button>
+           <button id="fin-save-btn" onclick="saveSaldos()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:4px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;font-family:inherit;">Guardar saldos</button>
+           <span id="fin-save-msg" style="font-size:11px;"></span>`
+        : `<span style="font-size:11px;color:var(--muted);">Para editar saldos y cuentas desde acá falta desplegar el Apps Script (apps-script-saldos.gs del repo) y pasarle la URL del web app a Claude.</span>`}
     </div>
   </div>`;
 
-  el.innerHTML=kpis+curva+agenda+saldosT;
+  const avisoRec=`<div class="subsection" style="margin-bottom:28px;"><div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:22px;text-align:center;font-size:12px;color:var(--muted);">La curva de reserva y la agenda de pagos aparecen cuando se conecte la hoja <strong>recopilador</strong> (publicarla como CSV y pasar el link).</div></div>`;
+  el.innerHTML=kpis+(conPagos?curva+agenda:avisoRec)+saldosT;
 }
 
 // ── BOM DATA ─────────────────────────────────────────────────────

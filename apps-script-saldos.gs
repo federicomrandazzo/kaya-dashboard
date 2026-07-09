@@ -5,6 +5,13 @@
  * Recibe los saldos que Ry/Federico guardan desde el módulo Finanzas
  * y los escribe en la hoja "saldos".
  *
+ * Layout esperado de la hoja saldos (el real de Federico):
+ *   - una fila arriba con "fecha" en col A y la fecha en col B (se pisa con el día del guardado)
+ *   - la fila TOTAL con fórmula =SUM(B8:B27) — NO se toca
+ *   - encabezados "cuenta | saldo" en la fila 7
+ *   - las cuentas en A8:B27 (máx. 20) — este rango se reescribe completo al guardar,
+ *     lo que permite renombrar cuentas y agregar nuevas desde el dashboard
+ *
  * CÓMO INSTALARLO (una sola vez, ~3 minutos):
  * 1. Abrir el Google Sheets del flujo de fondos.
  * 2. Extensiones → Apps Script. Borrar lo que haya y pegar este archivo entero.
@@ -15,12 +22,12 @@
  * 5. Autorizar los permisos cuando lo pida.
  * 6. Copiar la URL que termina en /exec y pasársela a Claude para
  *    pegarla en FIN.appsScript del index.html del dashboard.
- *
- * La hoja "saldos" debe tener encabezados en la fila 1:  cuenta | saldo | actualizado
  */
 
 const TOKEN = 'kaya-fin';          // debe coincidir con FIN.token en index.html
 const HOJA_SALDOS = 'saldos';      // nombre exacto de la hoja de saldos
+const FILA_INICIO = 8;             // primera fila de cuentas (A8)
+const FILA_FIN = 27;               // última fila de cuentas (B27) — rango de la fórmula TOTAL
 
 function doPost(e) {
   try {
@@ -31,21 +38,26 @@ function doPost(e) {
     const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_SALDOS);
     if (!sh) return respuesta({ ok: false, error: 'no existe la hoja "' + HOJA_SALDOS + '"' });
 
-    const ahora = Utilities.formatDate(new Date(), 'America/Argentina/Cordoba', 'dd/MM/yyyy HH:mm');
-    const valores = sh.getDataRange().getValues(); // fila 1 = encabezados
+    // Reescribir el bloque de cuentas A8:B27 completo (permite renombrar y agregar)
+    const n = FILA_FIN - FILA_INICIO + 1;
+    const filas = [];
+    for (let i = 0; i < n; i++) {
+      const s = data.saldos[i];
+      filas.push(s && s.cuenta ? [String(s.cuenta), Number(s.saldo) || 0] : ['', '']);
+    }
+    sh.getRange(FILA_INICIO, 1, n, 2).setValues(filas);
 
-    data.saldos.forEach(function (s) {
-      if (!s.cuenta) return;
-      let fila = -1;
-      for (let i = 1; i < valores.length; i++) {
-        if (String(valores[i][0]).trim().toLowerCase() === String(s.cuenta).trim().toLowerCase()) { fila = i + 1; break; }
+    // Actualizar la celda de fecha (fila con "fecha" en col A, arriba del bloque)
+    const hoyStr = Utilities.formatDate(new Date(), 'America/Argentina/Cordoba', 'd/MM/yyyy');
+    const arriba = sh.getRange(1, 1, FILA_INICIO - 1, 1).getValues();
+    for (let i = 0; i < arriba.length; i++) {
+      if (String(arriba[i][0]).trim().toLowerCase() === 'fecha') {
+        sh.getRange(i + 1, 2).setValue(hoyStr);
+        break;
       }
-      if (fila < 0) { fila = sh.getLastRow() + 1; sh.getRange(fila, 1).setValue(s.cuenta); }
-      sh.getRange(fila, 2).setValue(Number(s.saldo) || 0);
-      sh.getRange(fila, 3).setValue(ahora);
-    });
+    }
 
-    return respuesta({ ok: true, actualizado: ahora });
+    return respuesta({ ok: true, fecha: hoyStr });
   } catch (err) {
     return respuesta({ ok: false, error: String(err) });
   }
