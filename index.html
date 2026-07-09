@@ -1972,6 +1972,8 @@ function finHoy(){ const d=new Date(); return new Date(d.getFullYear(),d.getMont
 const FIN_EXCLUIR=['01. SALDOS','05. PROVEEDORES','06. RETIROS'];
 let finVista='agenda';
 function setFinVista(v){ finVista=v; renderFinanzas(); }
+let finKpiDet='';
+function setFinKpiDet(k){ finKpiDet=finKpiDet===k?'':k; renderFinanzas(); }
 function finPagos(){
   return DATA.finanzas.filter(r=>{
     const f=(r['FUENTE']||'').trim();
@@ -2065,15 +2067,50 @@ function renderFinanzas(){
   const dKey=d=>d.toISOString().slice(0,10);
 
   // ── KPIs ──
-  const resColor=reserva>=PISO_RESERVA*1.1?'#27ae60':reserva>=PISO_RESERVA?'#e67e22':'var(--accent3)';
+  // "Total disponible" = fondos en cuentas − objetivo fijo de reserva ($30M).
+  // Ojo vocabulario: para Ry "reservas" es SU cuenta (Reservas MP Ry); acá no se usa esa palabra para el total.
+  const disponible=reserva-PISO_RESERVA;
+  const resColor=disponible>=PISO_RESERVA*0.1?'#27ae60':disponible>=0?'#e67e22':'var(--accent3)';
   const sinRec='falta conectar recopilador';
+  const kpiBtn=(key,html)=>`<div onclick="setFinKpiDet('${key}')" title="clic para ver el detalle" style="cursor:pointer;border-radius:8px;${finKpiDet===key?'outline:2px solid var(--accent);':''}">${html}</div>`;
+  const verDet=k=>finKpiDet===k?' · cerrar ▴':' · ver detalle ▾';
   const kpis=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;">
-    ${pubKPI('Reserva hoy',pesos(reserva),`piso ${pesos(PISO_RESERVA)}${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
-    ${pubKPI('A pagar 10 días',conPagos?pesos(pag10.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag10.length+' pagos':sinRec,'var(--accent2)')}
-    ${pubKPI('A pagar 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos':sinRec)}
-    ${pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',conPagos?pesos(grandes30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?grandes30.length+' pagos':sinRec,'var(--accent3)')}
+    ${pubKPI('Total disponible',pesos(disponible),`en cuentas ${pesos(reserva)} − objetivo ${pesos(PISO_RESERVA)}${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
+    ${kpiBtn('d10',pubKPI('A pagar 10 días',conPagos?pesos(pag10.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag10.length+' pagos'+verDet('d10'):sinRec,'var(--accent2)'))}
+    ${kpiBtn('d30',pubKPI('A pagar 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos'+verDet('d30'):sinRec))}
+    ${kpiBtn('g30',pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',conPagos?pesos(grandes30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?grandes30.length+' pagos'+verDet('g30'):sinRec,'var(--accent3)'))}
     ${pubKPI('Próximo pago grande',proxGrande?pesos(proxGrande.monto):'—',proxGrande?`${proxGrande.label} · ${DSEM[proxGrande.fecha.getDay()]} ${fF(proxGrande.fecha)}`:conPagos?'sin pagos ≥3M cargados':sinRec,'var(--accent2)')}
   </div>`;
+
+  // ── Detalle del KPI clickeado ──
+  let kpiDet='';
+  if(conPagos&&finKpiDet){
+    const sets={d10:{t:'A pagar · próximos 10 días',list:pag10},d30:{t:'A pagar · próximos 30 días',list:pag30},g30:{t:'Pagos grandes (≥$'+Math.round(UMBRAL_GRANDE/1e6)+'M) · próximos 30 días',list:grandes30}};
+    const s=sets[finKpiDet];
+    if(s){
+      const detRows=s.list.map(p=>{
+        const grande=p.monto>=UMBRAL_GRANDE, venc=p.fecha<hoy;
+        return `<tr style="border-bottom:1px solid #f0ead8;">
+          <td style="padding:6px 10px;font-size:11px;color:${venc?'var(--accent3)':'var(--muted)'};white-space:nowrap;">${venc?'vencido · ':''}${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</td>
+          <td style="padding:6px 10px;font-size:12px;">${p.label}</td>
+          <td style="padding:6px 10px;"><span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);">${p.fuente}</span></td>
+          <td style="padding:6px 10px;text-align:right;font-size:11px;color:var(--muted);">${p.cuenta||'—'}</td>
+          <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</td>
+        </tr>`;
+      }).join('');
+      kpiDet=`<div class="subsection" style="margin-bottom:28px;">
+        <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+          <span>${s.t} · ${s.list.length} pagos</span>
+          <span onclick="setFinKpiDet('')" style="cursor:pointer;color:var(--muted);text-transform:none;letter-spacing:normal;font-size:11px;">✕ cerrar</span>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+          ${s.list.length?`<table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;"><tbody>${detRows}
+            <tr style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;"><td colspan="4" style="padding:6px 10px;">TOTAL</td><td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;">${pesos(s.list.reduce((x,p)=>x+p.monto,0))}</td></tr>
+          </tbody></table>`:'<div class="empty">Sin pagos en este período.</div>'}
+        </div>
+      </div>`;
+    }
+  }
 
   // ── Curva de reserva proyectada (60 días, sin ingresos) ──
   const NDIAS=60;
@@ -2091,15 +2128,15 @@ function renderFinanzas(){
   let grid='';
   [0,.33,.66,1].forEach(f=>{ const v=yMin+f*(yMax-yMin), y=Y(v); grid+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e8dfc8" stroke-width="1"/><text x="${PL-6}" y="${(y+3.5).toFixed(1)}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(0)}M</text>`; });
   const yPiso=Y(PISO_RESERVA);
-  grid+=`<line x1="${PL}" y1="${yPiso.toFixed(1)}" x2="${W-PR}" y2="${yPiso.toFixed(1)}" stroke="var(--accent3)" stroke-width="1.4" stroke-dasharray="6 4"/><text x="${W-PR}" y="${(yPiso-5).toFixed(1)}" text-anchor="end" fill="#c0392b" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">piso $${(PISO_RESERVA/1e6).toFixed(0)}M</text>`;
+  grid+=`<line x1="${PL}" y1="${yPiso.toFixed(1)}" x2="${W-PR}" y2="${yPiso.toFixed(1)}" stroke="var(--accent3)" stroke-width="1.4" stroke-dasharray="6 4"/><text x="${W-PR}" y="${(yPiso-5).toFixed(1)}" text-anchor="end" fill="#c0392b" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">objetivo $${(PISO_RESERVA/1e6).toFixed(0)}M</text>`;
   let xLbl='';
   for(let d=0;d<=NDIAS;d+=10){ const fd=new Date(hoy.getTime()+d*86400000); xLbl+=`<text x="${X(d).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${d===0?'hoy':fF(fd)}</text>`; }
   const path='M '+pts.map(p=>`${X(p.d).toFixed(1)} ${Y(p.res).toFixed(1)}`).join(' L ');
   const cruceMark=cruce?`<circle cx="${X(cruce.d).toFixed(1)}" cy="${Y(cruce.res).toFixed(1)}" r="5" fill="var(--accent3)"/><text x="${X(cruce.d).toFixed(1)}" y="${(Y(cruce.res)-10).toFixed(1)}" text-anchor="middle" fill="#c0392b" font-size="10" font-family="Red Hat Display,sans-serif" font-weight="700">cruce ${fF(cruce.fd)}</text>`:'';
   const curva=`<div class="subsection" style="margin-bottom:28px;">
     <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
-      <span>Reserva proyectada · próximos 60 días · escenario sin ingresos</span>
-      <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:normal;">${cruce?`⚠ cruza el piso el ${DSEM[cruce.fd.getDay()]} ${fF(cruce.fd)}`:'no cruza el piso en 60 días'}</span>
+      <span>Fondos proyectados · próximos 60 días · escenario sin ingresos</span>
+      <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:normal;">${cruce?`⚠ cruza el objetivo de reserva el ${DSEM[cruce.fd.getDay()]} ${fF(cruce.fd)}`:'no cruza el objetivo de reserva en 60 días'}</span>
     </div>
     <div class="linechart-wrap"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;">${grid}<path d="${path}" fill="none" stroke="#b89021" stroke-width="2.4"/>${cruceMark}${xLbl}</svg></div>
   </div>`;
@@ -2214,7 +2251,7 @@ function renderFinanzas(){
       </tr></thead>
       <tbody id="fin-saldos-body">${filas}
         <tr id="fin-total-row" style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;">
-          <td style="padding:7px 10px;">TOTAL RESERVA</td>
+          <td style="padding:7px 10px;">TOTAL DISPONIBLE</td>
           <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${resColor};">${pesos(reserva)}</td>
           <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;">${conPagos?pesos(pagCorto.reduce((s,p)=>s+p.monto,0)):'—'}</td>
           <td></td>
@@ -2231,7 +2268,7 @@ function renderFinanzas(){
   </div>`;
 
   const avisoRec=`<div class="subsection" style="margin-bottom:28px;"><div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:22px;text-align:center;font-size:12px;color:var(--muted);">La curva de reserva y la agenda de pagos aparecen cuando se conecte la hoja <strong>recopilador</strong> (publicarla como CSV y pasar el link).</div></div>`;
-  el.innerHTML=kpis+saldosT+(conPagos?curva+agenda:avisoRec);
+  el.innerHTML=kpis+kpiDet+saldosT+(conPagos?curva+agenda:avisoRec);
 }
 
 // ── BOM DATA ─────────────────────────────────────────────────────
