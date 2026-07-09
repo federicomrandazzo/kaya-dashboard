@@ -2004,7 +2004,7 @@ function addFinCuenta(){
   const tr=document.createElement('tr');
   tr.setAttribute('data-fila','1');
   tr.innerHTML=`<td style="padding:7px 10px;"><input class="fin-cuenta-input v-select" value="" placeholder="nombre de la cuenta" style="width:160px;"></td>
-    <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" value="0" inputmode="numeric" style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
+    <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" value="$0" inputmode="numeric" onblur="this.value=pesos(num(this.value))" style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
     <td style="padding:7px 10px;text-align:right;font-size:12px;color:var(--muted);">—</td>
     <td style="padding:7px 10px;text-align:right;font-size:11px;color:var(--muted);">—</td>`;
   body.insertBefore(tr,document.getElementById('fin-total-row'));
@@ -2141,7 +2141,7 @@ function renderFinanzas(){
     const sem=(!conPagos||comp===0)?'<span style="color:var(--muted);">—</span>':(r.saldo>=comp?'<span style="color:#27ae60;">● cubre</span>':`<span style="color:var(--accent3);">● faltan ${pesos(comp-r.saldo)}</span>`);
     return `<tr data-fila="1">
       <td style="padding:7px 10px;"><input class="fin-cuenta-input v-select" value="${r.cuenta.replace(/"/g,'&quot;')}" ${puedeGuardar?'':'disabled'} style="width:170px;"></td>
-      <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" value="${Math.round(r.saldo)}" inputmode="numeric" ${puedeGuardar?'':'disabled'} style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
+      <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" value="${pesos(r.saldo)}" inputmode="numeric" onblur="this.value=pesos(num(this.value))" ${puedeGuardar?'':'disabled'} style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
       <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;">${comp?pesos(comp):'—'}</td>
       <td style="padding:7px 10px;text-align:right;font-size:11px;">${sem}</td>
     </tr>`;
