@@ -2189,9 +2189,12 @@ function renderFinanzas(){
   </div>`;
 
   // ── Saldos por cuenta (renombrar / agregar cuentas / editar montos) ──
+  // Comprometido corto: vencidos + semana en curso + la que viene (hasta el domingo próximo)
+  const finProxSem=new Date(mondayOf(hoy).getTime()+13*86400000);
+  const pagCorto=pagos.filter(p=>p.fecha<=finProxSem);
   const puedeGuardar=!!FIN.appsScript;
   const filas=cuentasRows.map(r=>{
-    const comp=pag30.filter(p=>p.cuenta.toLowerCase()===r.cuenta.toLowerCase()).reduce((x,p)=>x+p.monto,0);
+    const comp=pagCorto.filter(p=>p.cuenta.toLowerCase()===r.cuenta.toLowerCase()).reduce((x,p)=>x+p.monto,0);
     const sem=(!conPagos||comp===0)?'<span style="color:var(--muted);">—</span>':(r.saldo>=comp?'<span style="color:#27ae60;">● cubre</span>':`<span style="color:var(--accent3);">● faltan ${pesos(comp-r.saldo)}</span>`);
     return `<tr data-fila="1">
       <td style="padding:7px 10px;"><input class="fin-cuenta-input v-select" value="${r.cuenta.replace(/"/g,'&quot;')}" ${puedeGuardar?'':'disabled'} style="width:170px;"></td>
@@ -2206,14 +2209,14 @@ function renderFinanzas(){
       <thead><tr style="border-bottom:2px solid #d4c5a0;">
         <th style="text-align:left;font-size:10px;padding:6px 10px;">Cuenta</th>
         <th style="text-align:right;font-size:10px;padding:6px 10px;">Saldo</th>
-        <th style="text-align:right;font-size:10px;padding:6px 10px;">Comprometido 30d</th>
+        <th style="text-align:right;font-size:10px;padding:6px 10px;">Comprometido hasta ${fF(finProxSem)}</th>
         <th style="text-align:right;font-size:10px;padding:6px 10px;">Estado</th>
       </tr></thead>
       <tbody id="fin-saldos-body">${filas}
         <tr id="fin-total-row" style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;">
           <td style="padding:7px 10px;">TOTAL RESERVA</td>
           <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${resColor};">${pesos(reserva)}</td>
-          <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;">${conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—'}</td>
+          <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;">${conPagos?pesos(pagCorto.reduce((s,p)=>s+p.monto,0)):'—'}</td>
           <td></td>
         </tr>
       </tbody>
