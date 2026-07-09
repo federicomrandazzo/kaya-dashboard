@@ -2129,17 +2129,19 @@ function renderFinanzas(){
       <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</span>
     </div>`;
   };
+  const NSA='finag';
   let agendaH='';
   if(vencidos.length){
-    agendaH+=`<div class="tr l0 nc" style="color:var(--accent3);"><span class="tl" style="font-weight:600;">VENCIDOS / IMPAGOS</span><span class="tv" style="color:var(--accent3);">${pesos(vencidos.reduce((s,p)=>s+p.monto,0))}</span></div>`;
-    agendaH+=vencidos.map(pRow).join('');
+    agendaH+=TR(NSA,'venc',0,`<span style="color:var(--accent3);">VENCIDOS / IMPAGOS</span>`,`${vencidos.length} pagos`,`<span style="color:var(--accent3);">${pesos(vencidos.reduce((s,p)=>s+p.monto,0))}</span>`,true,false);
+    agendaH+=TC(NSA,'venc',vencidos.map(pRow).join(''),false);
   }
   const semanas={};
   futuros.forEach(p=>{ const k=dKey(mondayOf(p.fecha)); if(!semanas[k])semanas[k]=[]; semanas[k].push(p); });
   Object.keys(semanas).sort().forEach(k=>{
     const ps=semanas[k]; const lun=finDate(k)||new Date(k);
-    agendaH+=`<div class="tr l0 nc"><span class="tl" style="font-weight:600;">Semana del ${fF(lun)}</span><span class="tv">${pesos(ps.reduce((s,p)=>s+p.monto,0))}</span></div>`;
-    agendaH+=ps.map(pRow).join('');
+    const key='s-'+k.replace(/\W+/g,'-');
+    agendaH+=TR(NSA,key,0,`Semana del ${fF(lun)}`,`${ps.length} pagos`,pesos(ps.reduce((s,p)=>s+p.monto,0)),true,false);
+    agendaH+=TC(NSA,key,ps.map(pRow).join(''),false);
   });
   if(!agendaH) agendaH='<div class="empty">Sin pagos que cumplan el filtro.</div>';
 
@@ -2226,7 +2228,7 @@ function renderFinanzas(){
   </div>`;
 
   const avisoRec=`<div class="subsection" style="margin-bottom:28px;"><div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:22px;text-align:center;font-size:12px;color:var(--muted);">La curva de reserva y la agenda de pagos aparecen cuando se conecte la hoja <strong>recopilador</strong> (publicarla como CSV y pasar el link).</div></div>`;
-  el.innerHTML=kpis+(conPagos?curva+agenda:avisoRec)+saldosT;
+  el.innerHTML=kpis+saldosT+(conPagos?curva+agenda:avisoRec);
 }
 
 // ── BOM DATA ─────────────────────────────────────────────────────
