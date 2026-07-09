@@ -832,7 +832,19 @@ async function loadData() {
     DATA.publicidad = parseCSV(pbT.split('\n').slice(1).join('\n')).filter(r=>r['Fecha']&&(r['VENTA TN']||'').trim()&&num(r['VENTA TN'])>0);
     DATA.edrData = parseCSV(edT).filter(r=>r['concepto']&&r['periodo']&&(r['importe eerr']||'').trim());
     DATA.semanal = parseCSV(swT).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
-    DATA.finanzas = parseCSV(fnT.split('\n').slice(1).join('\n')).filter(r=>(r['FUENTE']||'').trim()&&(r['IMPORTE']||'').trim());
+    // base de datos: parse propio para rastrear _fila (nº de fila real en la hoja — lo necesita "marcar pagado")
+    DATA.finanzas = (()=>{
+      const lines=fnT.split('\n');
+      const headers=splitLine((lines[1]||'').replace(/\r$/,'')).map(h=>h.trim());
+      const out=[];
+      for(let i=2;i<lines.length;i++){
+        const line=(lines[i]||'').replace(/\r$/,''); if(!line.trim()) continue;
+        const vals=splitLine(line), obj={_fila:i+1};
+        headers.forEach((h,idx)=>{ if(h) obj[h]=(vals[idx]||'').trim(); });
+        if((obj['FUENTE']||'').trim()&&(obj['IMPORTE']||'').trim()) out.push(obj);
+      }
+      return out;
+    })();
     const _sl = parseSaldosCSV(slT);
     DATA.saldos = _sl.rows; DATA.saldosFecha = _sl.fecha;
     bomCache = null;
@@ -1974,10 +1986,21 @@ let finVista='agenda';
 function setFinVista(v){ finVista=v; renderFinanzas(); }
 let finKpiDet='';
 function setFinKpiDet(k){ finKpiDet=finKpiDet===k?'':k; renderFinanzas(); }
+let finTab='tablero';
+function setFinTab(t){ finTab=t; renderFinanzas(); }
+// Pagos marcados desde el dashboard: cache local 30 min para puentear el lag del CSV publicado
+function finPagadosLocal(){
+  try{ const c=JSON.parse(localStorage.getItem('kayaPagadosCache')||'null'); if(c&&Date.now()-c.ts<30*60*1000) return new Set(c.filas); }catch(e){}
+  return new Set();
+}
 function finPagos(){
+  const pagadosLocal=finPagadosLocal();
   return DATA.finanzas.filter(r=>{
     const f=(r['FUENTE']||'').trim();
     if(!f||FIN_EXCLUIR.includes(f)) return false;
+    if(pagadosLocal.has(r._fila)) return false;
+    const pagadoKey=Object.keys(r).find(k=>/pagado/i.test(k));
+    if(pagadoKey&&(r[pagadoKey]||'').trim()) return false;
     return (r['COMPUTABLE']||'').trim().toUpperCase()==='SI';
   }).map(r=>{
     const fuente=(r['FUENTE']||'').trim().replace(/^\d+\s*\.\s*/,'');
@@ -1986,7 +2009,7 @@ function finPagos(){
     // gastos fijos: PROVEEDOR es el ítem y CONCEPTO la categoría; cheques: al revés (CONCEPTO=proveedor, PROVEEDOR=nº)
     const label=esCheque?[conc,prov?'cheque '+prov:''].filter(Boolean).join(' · '):[prov,conc].filter(Boolean).join(' · ');
     const detalle=esCheque?(prov?'cheque '+prov:conc):(prov||conc);
-    return {fecha:finDate(r['FECHA ESTIMADA']),fuente,concepto:esCheque?conc:(conc||'(sin concepto)'),detalle:detalle||'(sin detalle)',label:label||'(sin detalle)',monto:Math.abs(num(r['IMPORTE'])),cuenta:(r['CUENTA']||'').trim()};
+    return {fila:r._fila,fuenteRaw:(r['FUENTE']||'').trim(),concRaw:conc,fecha:finDate(r['FECHA ESTIMADA']),fuente,concepto:esCheque?conc:(conc||'(sin concepto)'),detalle:detalle||'(sin detalle)',label:label||'(sin detalle)',monto:Math.abs(num(r['IMPORTE'])),cuenta:(r['CUENTA']||'').trim()};
   }).filter(p=>p.fecha&&p.monto>0).sort((a,b)=>a.fecha-b.fecha);
 }
 function finSaldos(){
@@ -2038,6 +2061,32 @@ async function saveSaldos(){
     setTimeout(()=>renderFinanzas(),900);
   }catch(e){
     msg.textContent='Error al guardar ('+e.message+')'; msg.style.color='var(--accent3)'; btn.disabled=false;
+  }
+}
+
+async function guardarPagados(){
+  const checks=[...document.querySelectorAll('.fin-pag-check:checked')];
+  const btn=document.getElementById('fin-pagar-btn'), msg=document.getElementById('fin-pagar-msg');
+  if(!checks.length){ msg.textContent='No hay gastos tildados.'; msg.style.color='var(--muted)'; return; }
+  const sel=checks.map(c=>{ const tr=c.closest('tr'); return {
+    fila:+tr.dataset.fila,
+    fuente:tr.dataset.fuente,
+    concepto:tr.dataset.concepto,
+    fecha:(tr.querySelector('.fin-pag-fecha').value||'').trim(),
+  };});
+  btn.disabled=true; msg.textContent='Guardando…'; msg.style.color='var(--muted)';
+  try{
+    const res=await fetch(FIN.appsScript,{method:'POST',body:JSON.stringify({token:FIN.token,accion:'pagar',pagos:sel})});
+    const j=await res.json();
+    if(!j.ok) throw new Error(j.error||'respuesta inválida');
+    const prev=finPagadosLocal();
+    (j.marcadas||sel.map(s=>s.fila)).forEach(f=>prev.add(f));
+    localStorage.setItem('kayaPagadosCache',JSON.stringify({ts:Date.now(),filas:[...prev]}));
+    msg.textContent=`${(j.marcadas||sel.map(s=>s.fila)).length} gasto(s) marcados como pagados ✓${j.rechazadas&&j.rechazadas.length?` · ${j.rechazadas.length} no coincidieron (recargá y reintentá)`:''}`;
+    msg.style.color='#27ae60';
+    setTimeout(()=>renderFinanzas(),1200);
+  }catch(e){
+    msg.textContent='Error al guardar ('+e.message+'). ¿Está actualizado el Apps Script?'; msg.style.color='var(--accent3)'; btn.disabled=false;
   }
 }
 
@@ -2271,7 +2320,50 @@ function renderFinanzas(){
   </div>`;
 
   const avisoRec=`<div class="subsection" style="margin-bottom:28px;"><div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:22px;text-align:center;font-size:12px;color:var(--muted);">La curva de reserva y la agenda de pagos aparecen cuando se conecte la hoja <strong>recopilador</strong> (publicarla como CSV y pasar el link).</div></div>`;
-  el.innerHTML=kpis+kpiDet+saldosT+(conPagos?curva+agenda:avisoRec);
+  // ── Pestañas del módulo ──
+  const finTabs=`<div class="tabs" style="margin-bottom:22px;">
+    <div class="tab ${finTab==='tablero'?'active':''}" onclick="setFinTab('tablero')">Tablero de control</div>
+    <div class="tab ${finTab==='pagar'?'active':''}" onclick="setFinTab('pagar')">Lista de gastos por pagar</div>
+  </div>`;
+
+  if(finTab==='pagar'){
+    const listaRows=pagos.map(p=>{
+      const grande=p.monto>=UMBRAL_GRANDE, venc=p.fecha<hoy;
+      return `<tr style="border-bottom:1px solid #f0ead8;${venc?'background:#fdf6f4;':''}" data-fila="${p.fila}" data-fuente="${p.fuenteRaw.replace(/"/g,'&quot;')}" data-concepto="${p.concRaw.replace(/"/g,'&quot;')}">
+        <td style="padding:7px 10px;text-align:center;width:36px;"><input type="checkbox" class="fin-pag-check" onchange="const f=this.closest('tr').querySelector('.fin-pag-fecha'); f.disabled=!this.checked;" style="width:15px;height:15px;accent-color:#b89021;cursor:pointer;"></td>
+        <td style="padding:7px 10px;font-size:11px;white-space:nowrap;color:${venc?'var(--accent3)':'var(--muted)'};">${venc?'vencido · ':''}${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</td>
+        <td style="padding:7px 10px;font-size:12px;">${p.label} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.fuente}</span></td>
+        <td style="padding:7px 10px;text-align:right;font-size:11px;color:var(--muted);">${p.cuenta||'—'}</td>
+        <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</td>
+        <td style="padding:7px 10px;text-align:right;"><input class="fin-pag-fecha v-select" placeholder="dd/mm/aaaa" disabled style="width:110px;font-size:11px;text-align:center;"></td>
+      </tr>`;
+    }).join('');
+    el.innerHTML=finTabs+`<div class="subsection">
+      <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+        <span>Gastos por pagar · del más vencido al más lejano · ${pagos.length}</span>
+        <span style="text-transform:none;letter-spacing:normal;font-size:10px;color:var(--muted);">tildá lo pagado (fecha opcional) y guardá</span>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+        ${pagos.length?`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+          <thead><tr style="border-bottom:2px solid #d4c5a0;">
+            <th style="padding:6px 10px;"></th>
+            <th style="text-align:left;font-size:10px;padding:6px 10px;">Vence</th>
+            <th style="text-align:left;font-size:10px;padding:6px 10px;">Gasto</th>
+            <th style="text-align:right;font-size:10px;padding:6px 10px;">Cuenta</th>
+            <th style="text-align:right;font-size:10px;padding:6px 10px;">Monto</th>
+            <th style="text-align:right;font-size:10px;padding:6px 10px;">Fecha de pago</th>
+          </tr></thead><tbody>${listaRows}</tbody></table></div>`:'<div class="empty">No hay gastos impagos cargados.</div>'}
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+        <button id="fin-pagar-btn" onclick="guardarPagados()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:4px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;font-family:inherit;">Guardar pagados</button>
+        <span id="fin-pagar-msg" style="font-size:11px;"></span>
+        <span style="font-size:10px;color:var(--muted);">Al guardar se escribe «pagado por dashboard» en la base de datos y el gasto sale del flujo.</span>
+      </div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML=finTabs+kpis+kpiDet+saldosT+(conPagos?curva+agenda:avisoRec);
 }
 
 // ── BOM DATA ─────────────────────────────────────────────────────
