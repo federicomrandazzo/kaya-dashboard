@@ -581,7 +581,7 @@
     <div class="nav-item" onclick="showModule('kh')" id="nav-kh">
       <span class="nav-icon">⬡</span> Operaciones
     </div>
-    <div class="nav-item" id="nav-finanzas" style="opacity:0.4;cursor:not-allowed;" title="Próximamente">
+    <div class="nav-item" id="nav-fin" onclick="showModule('fin')">
       <span class="nav-icon">◈</span> Finanzas
     </div>
     <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
@@ -630,6 +630,7 @@
     <div id="module-stock" style="display:none;"></div>
     <div id="module-ventas" style="display:none;"></div>
     <div id="module-semanal" style="display:none;"></div>
+    <div id="module-fin" style="display:none;"></div>
     <div id="module-pub" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
     <div id="module-edr" style="display:none;"></div>
@@ -650,7 +651,7 @@ const AUTH_USERS = {
   'c8e1f9cd6180f58768de818aeb6dd3811fbfa80ba0d208c1b081bcbe61c10fff': {role:'house',  label:'House'},
 };
 const ROLE_MODULES = {
-  admin:  ['ventas','semanal','pub','stock','proyeccion','kh','edr'],
+  admin:  ['ventas','semanal','pub','stock','proyeccion','kh','fin','edr'],
   ventas: ['ventas','semanal','pub','stock','proyeccion'],
   house:  ['stock','proyeccion','kh'],
 };
@@ -672,9 +673,8 @@ function startApp(u){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('sidebar').style.display='flex';
   document.getElementById('main').style.display='flex';
-  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',edr:'nav-edr'};
+  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',fin:'nav-fin',edr:'nav-edr'};
   Object.entries(NAVMAP).forEach(([m,id])=>{ const el=document.getElementById(id); if(el) el.style.display=roleAllows(m)?'flex':'none'; });
-  const fin=document.getElementById('nav-finanzas'); if(fin) fin.style.display=u.role==='admin'?'flex':'none';
   document.getElementById('user-label').textContent=u.label;
   currentModule=roleAllows('ventas')?'ventas':'stock';
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
@@ -720,7 +720,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[]};
 let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -800,12 +800,13 @@ async function loadData() {
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
+  document.getElementById('module-fin').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
   document.getElementById('module-pub').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
@@ -817,6 +818,8 @@ async function loadData() {
       roleAllows('pub')?fetch(URLS.publicidad).then(r=>r.text()):Promise.resolve(''),
       roleAllows('edr')?fetch(URLS.edrData).then(r=>r.text()):Promise.resolve(''),
       roleAllows('semanal')?fetch(URLS.semanal).then(r=>r.text()):Promise.resolve(''),
+      (roleAllows('fin')&&FIN.recopilador)?fetch(FIN.recopilador).then(r=>r.text()):Promise.resolve(''),
+      (roleAllows('fin')&&FIN.saldos)?fetch(FIN.saldos).then(r=>r.text()):Promise.resolve(''),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -829,6 +832,8 @@ async function loadData() {
     DATA.publicidad = parseCSV(pbT.split('\n').slice(1).join('\n')).filter(r=>r['Fecha']&&(r['VENTA TN']||'').trim()&&num(r['VENTA TN'])>0);
     DATA.edrData = parseCSV(edT).filter(r=>r['concepto']&&r['periodo']&&(r['importe eerr']||'').trim());
     DATA.semanal = parseCSV(swT).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
+    DATA.finanzas = parseCSV(fnT).filter(r=>(r['vencimiento']||'').trim()&&(r['monto']||'').trim());
+    DATA.saldos = parseCSV(slT).filter(r=>(r['cuenta']||'').trim());
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -851,10 +856,11 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Semanal':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':mod==='pub'?'Publicidad':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':mod==='pub'?'Publicidad':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
+  document.getElementById('module-fin').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
@@ -873,6 +879,7 @@ function renderCurrentModule(){
   if(currentModule==='stock')      renderStock();
   if(currentModule==='ventas')     renderVentasModule();
   if(currentModule==='semanal')    renderSemanal();
+  if(currentModule==='fin')        renderFinanzas();
   if(currentModule==='proyeccion') renderProyeccion();
   if(currentModule==='edr')        renderEDR();
   if(currentModule==='kh')         renderKayaHouse();
@@ -1919,6 +1926,218 @@ function renderSemComparativo(){
     <thead><tr style="border-bottom:2px solid #d4c5a0;"><th style="text-align:left;font-size:10px;padding:6px 8px;">Línea / Rubro / Producto</th>${cols.map(w=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${semRange(w)}</th>`).join('')}${showTot?`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Total</th>`:''}</tr></thead>
     <tbody>${rows}${totRow}</tbody></table></div>`;
   return pills+`<div style="font-size:10px;color:var(--muted);margin-bottom:12px;">Ventas ($) por semana. Tocá una línea o rubro para desplegar.</div>`+table;
+}
+
+// ── FINANZAS ─────────────────────────────────────────────────────
+// Conexión al archivo de flujo de fondos (distinto del doc principal).
+// Pendiente: URLs CSV publicadas de las hojas recopilador y saldos + Web App de Apps Script.
+const FIN = {
+  recopilador: '',  // URL CSV de la hoja recopilador (vencimiento|concepto|categoria|monto|cuenta)
+  saldos: '',       // URL CSV de la hoja saldos (cuenta|saldo|actualizado)
+  appsScript: '',   // URL del Web App (apps-script-saldos.gs) para guardar saldos desde el dashboard
+  token: 'kaya-fin',
+};
+const PISO_RESERVA = 30000000;
+const UMBRAL_GRANDE = 3000000;
+const FIN_CUENTAS = ['MP Ry','Reserva Ry','Galicia','MP Sofi','MP Vivi','EFT $','MAU'];
+let finUmbral = 0, finCat = '';
+
+function finDate(s){
+  s=(s||'').trim();
+  let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(m){ const y=+m[3]<100?2000+ +m[3]:+m[3]; return new Date(y,+m[2]-1,+m[1]); }
+  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return new Date(+m[1],+m[2]-1,+m[3]);
+  return null;
+}
+function finHoy(){ const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+function finPagos(){
+  return DATA.finanzas.map(r=>({
+    fecha:finDate(r['vencimiento']),
+    concepto:(r['concepto']||'').trim()||'(sin concepto)',
+    categoria:(r['categoria']||'Otro').trim()||'Otro',
+    monto:Math.abs(num(r['monto'])),
+    cuenta:(r['cuenta']||'').trim(),
+  })).filter(p=>p.fecha&&p.monto>0).sort((a,b)=>a.fecha-b.fecha);
+}
+function finSaldos(){
+  const out={};
+  DATA.saldos.forEach(r=>{ const c=(r['cuenta']||'').trim(); if(c) out[c]={saldo:num(r['saldo']),actualizado:(r['actualizado']||'').trim()}; });
+  try{
+    const cache=JSON.parse(localStorage.getItem('kayaSaldosCache')||'null');
+    if(cache&&Date.now()-cache.ts<30*60*1000){
+      Object.entries(cache.saldos).forEach(([c,s])=>{ out[c]={saldo:s,actualizado:'recién guardado'}; });
+    }
+  }catch(e){}
+  return out;
+}
+function setFinUmbral(u){ finUmbral=u; renderFinanzas(); }
+function setFinCat(c){ finCat=c; renderFinanzas(); }
+async function saveSaldos(){
+  const inputs=[...document.querySelectorAll('.fin-saldo-input')];
+  const saldos=inputs.map(i=>({cuenta:i.dataset.cuenta,saldo:num(i.value)}));
+  const btn=document.getElementById('fin-save-btn'), msg=document.getElementById('fin-save-msg');
+  btn.disabled=true; msg.textContent='Guardando…'; msg.style.color='var(--muted)';
+  try{
+    const res=await fetch(FIN.appsScript,{method:'POST',body:JSON.stringify({token:FIN.token,saldos})});
+    const j=await res.json();
+    if(!j.ok) throw new Error(j.error||'respuesta inválida');
+    localStorage.setItem('kayaSaldosCache',JSON.stringify({ts:Date.now(),saldos:Object.fromEntries(saldos.map(s=>[s.cuenta,s.saldo]))}));
+    msg.textContent='Guardado ✓'; msg.style.color='#27ae60';
+    setTimeout(()=>renderFinanzas(),900);
+  }catch(e){
+    msg.textContent='Error al guardar ('+e.message+')'; msg.style.color='var(--accent3)'; btn.disabled=false;
+  }
+}
+
+function renderFinanzas(){
+  const el=document.getElementById('module-fin');
+  el.style.display='block';
+  if(!FIN.recopilador||!FIN.saldos){
+    el.innerHTML=`<div style="max-width:560px;margin:60px auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:28px;text-align:center;">
+      <div style="font-family:'Tenor Sans',serif;font-size:18px;margin-bottom:10px;">Módulo listo · falta conectar los datos</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.8;">En el archivo de flujo de fondos, publicá como CSV la hoja <strong>recopilador</strong> y la hoja <strong>saldos</strong><br>(Archivo → Compartir → Publicar en la web → elegir la hoja → CSV)<br>y pasale los dos links a Claude para cablearlos.</div>
+    </div>`;
+    return;
+  }
+  const hoy=finHoy();
+  const pagos=finPagos();
+  const en30=new Date(hoy.getTime()+30*86400000);
+  const pag30=pagos.filter(p=>p.fecha<=en30);
+  const grandes30=pag30.filter(p=>p.monto>=UMBRAL_GRANDE);
+  const saldos=finSaldos();
+  const cuentas=[...new Set([...FIN_CUENTAS,...Object.keys(saldos)])];
+  const reserva=cuentas.reduce((s,c)=>s+((saldos[c]&&saldos[c].saldo)||0),0);
+  const proxGrande=pagos.find(p=>p.fecha>=hoy&&p.monto>=UMBRAL_GRANDE);
+  const fF=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+  const DSEM=['dom','lun','mar','mié','jue','vie','sáb'];
+  const dKey=d=>d.toISOString().slice(0,10);
+
+  // ── KPIs ──
+  const resColor=reserva>=PISO_RESERVA*1.1?'#27ae60':reserva>=PISO_RESERVA?'#e67e22':'var(--accent3)';
+  const ultAct=Object.values(saldos).map(s=>s.actualizado).filter(Boolean)[0]||'';
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+    ${pubKPI('Reserva hoy',pesos(reserva),`piso ${pesos(PISO_RESERVA)}${ultAct?' · al '+ultAct:''}`,resColor)}
+    ${pubKPI('Pagos próximos 30 días',pesos(pag30.reduce((s,p)=>s+p.monto,0)),pag30.length+' pagos')}
+    ${pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',pesos(grandes30.reduce((s,p)=>s+p.monto,0)),grandes30.length+' pagos','var(--accent3)')}
+    ${pubKPI('Próximo pago grande',proxGrande?pesos(proxGrande.monto):'—',proxGrande?`${proxGrande.concepto} · ${DSEM[proxGrande.fecha.getDay()]} ${fF(proxGrande.fecha)}`:'sin pagos ≥3M cargados','var(--accent2)')}
+  </div>`;
+
+  // ── Curva de reserva proyectada (60 días, sin ingresos) ──
+  const NDIAS=60;
+  const pts=[];
+  for(let d=0;d<=NDIAS;d++){
+    const fd=new Date(hoy.getTime()+d*86400000);
+    const acum=pagos.filter(p=>p.fecha<=fd).reduce((s,p)=>s+p.monto,0);
+    pts.push({d,fd,res:reserva-acum});
+  }
+  const cruce=pts.find(p=>p.res<PISO_RESERVA);
+  const W=720,H=230,PL=58,PR=12,PT=16,PB=28,CW=W-PL-PR,CH=H-PT-PB;
+  const yMax=Math.max(reserva,PISO_RESERVA)*1.06;
+  const yMin=Math.min(Math.min(...pts.map(p=>p.res)),PISO_RESERVA*0.8);
+  const X=d=>PL+d/NDIAS*CW, Y=v=>PT+(yMax-v)/(yMax-yMin)*CH;
+  let grid='';
+  [0,.33,.66,1].forEach(f=>{ const v=yMin+f*(yMax-yMin), y=Y(v); grid+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e8dfc8" stroke-width="1"/><text x="${PL-6}" y="${(y+3.5).toFixed(1)}" text-anchor="end" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">$${(v/1e6).toFixed(0)}M</text>`; });
+  const yPiso=Y(PISO_RESERVA);
+  grid+=`<line x1="${PL}" y1="${yPiso.toFixed(1)}" x2="${W-PR}" y2="${yPiso.toFixed(1)}" stroke="var(--accent3)" stroke-width="1.4" stroke-dasharray="6 4"/><text x="${W-PR}" y="${(yPiso-5).toFixed(1)}" text-anchor="end" fill="#c0392b" font-size="9" font-family="Red Hat Display,sans-serif" font-weight="600">piso $${(PISO_RESERVA/1e6).toFixed(0)}M</text>`;
+  let xLbl='';
+  for(let d=0;d<=NDIAS;d+=10){ const fd=new Date(hoy.getTime()+d*86400000); xLbl+=`<text x="${X(d).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="#9a8a6a" font-size="9" font-family="Red Hat Display,sans-serif">${d===0?'hoy':fF(fd)}</text>`; }
+  const path='M '+pts.map(p=>`${X(p.d).toFixed(1)} ${Y(p.res).toFixed(1)}`).join(' L ');
+  const cruceMark=cruce?`<circle cx="${X(cruce.d).toFixed(1)}" cy="${Y(cruce.res).toFixed(1)}" r="5" fill="var(--accent3)"/><text x="${X(cruce.d).toFixed(1)}" y="${(Y(cruce.res)-10).toFixed(1)}" text-anchor="middle" fill="#c0392b" font-size="10" font-family="Red Hat Display,sans-serif" font-weight="700">cruce ${fF(cruce.fd)}</text>`:'';
+  const curva=`<div class="subsection" style="margin-bottom:28px;">
+    <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+      <span>Reserva proyectada · próximos 60 días · escenario sin ingresos</span>
+      <span style="font-size:10px;color:var(--muted);text-transform:none;letter-spacing:normal;">${cruce?`⚠ cruza el piso el ${DSEM[cruce.fd.getDay()]} ${fF(cruce.fd)}`:'no cruza el piso en 60 días'}</span>
+    </div>
+    <div class="linechart-wrap"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;">${grid}<path d="${path}" fill="none" stroke="#b89021" stroke-width="2.4"/>${cruceMark}${xLbl}</svg></div>
+  </div>`;
+
+  // ── Agenda de pagos ──
+  const cats=[...new Set(pagos.map(p=>p.categoria))].sort();
+  const umbrales=[[0,'Todos'],[3000000,'≥ $3M'],[5000000,'≥ $5M']];
+  const filtros=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+    ${umbrales.map(([u,l])=>`<button onclick="setFinUmbral(${u})" style="padding:3px 12px;border-radius:20px;border:1px solid ${finUmbral===u?'var(--accent)':'var(--border)'};background:${finUmbral===u?'var(--accent)':'transparent'};color:${finUmbral===u?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${l}</button>`).join('')}
+    <span style="width:1px;height:16px;background:var(--border);margin:0 4px;"></span>
+    <button onclick="setFinCat('')" style="padding:3px 12px;border-radius:20px;border:1px solid ${!finCat?'var(--accent)':'var(--border)'};background:${!finCat?'var(--accent)':'transparent'};color:${!finCat?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">Todas</button>
+    ${cats.map(c=>`<button onclick="setFinCat('${c.replace(/'/g,"\\'")}')" style="padding:3px 12px;border-radius:20px;border:1px solid ${finCat===c?'var(--accent)':'var(--border)'};background:${finCat===c?'var(--accent)':'transparent'};color:${finCat===c?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${c}</button>`).join('')}
+  </div>`;
+  const grandesPorDia={};
+  pagos.forEach(p=>{ if(p.monto>=UMBRAL_GRANDE){ const k=dKey(p.fecha); grandesPorDia[k]=(grandesPorDia[k]||0)+1; } });
+  const list=pagos.filter(p=>p.monto>=finUmbral&&(!finCat||p.categoria===finCat));
+  const vencidos=list.filter(p=>p.fecha<hoy);
+  const futuros=list.filter(p=>p.fecha>=hoy);
+  const mondayOf=d=>{ const x=new Date(d); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; };
+  const pRow=p=>{
+    const grande=p.monto>=UMBRAL_GRANDE;
+    const cluster=grande&&grandesPorDia[dKey(p.fecha)]>=2;
+    return `<div class="tr nc" style="${grande?'background:#fdf3f1;':''}">
+      <span style="min-width:86px;font-size:11px;color:var(--muted);flex-shrink:0;">${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</span>
+      <span class="tl">${p.concepto} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.categoria}</span>${cluster?`<span style="font-size:9px;color:var(--accent3);margin-left:8px;font-weight:600;">⚠ ${grandesPorDia[dKey(p.fecha)]} grandes ese día</span>`:''}</span>
+      <span style="min-width:80px;text-align:right;font-size:10px;color:var(--muted);margin-right:14px;">${p.cuenta||'—'}</span>
+      <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</span>
+    </div>`;
+  };
+  let agendaH='';
+  if(vencidos.length){
+    agendaH+=`<div class="tr l0 nc" style="color:var(--accent3);"><span class="tl" style="font-weight:600;">VENCIDOS / IMPAGOS</span><span class="tv" style="color:var(--accent3);">${pesos(vencidos.reduce((s,p)=>s+p.monto,0))}</span></div>`;
+    agendaH+=vencidos.map(pRow).join('');
+  }
+  const semanas={};
+  futuros.forEach(p=>{ const k=dKey(mondayOf(p.fecha)); if(!semanas[k])semanas[k]=[]; semanas[k].push(p); });
+  Object.keys(semanas).sort().forEach(k=>{
+    const ps=semanas[k]; const lun=finDate(k)||new Date(k);
+    agendaH+=`<div class="tr l0 nc"><span class="tl" style="font-weight:600;">Semana del ${fF(lun)}</span><span class="tv">${pesos(ps.reduce((s,p)=>s+p.monto,0))}</span></div>`;
+    agendaH+=ps.map(pRow).join('');
+  });
+  if(!agendaH) agendaH='<div class="empty">Sin pagos que cumplan el filtro.</div>';
+  const agenda=`<div class="subsection" style="margin-bottom:28px;">
+    <div class="subsection-label" style="margin-bottom:12px;">Agenda de pagos <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:normal;">· los ≥ $${(UMBRAL_GRANDE/1e6).toFixed(0)}M van destacados</span></div>
+    ${filtros}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${agendaH}</div>
+  </div>`;
+
+  // ── Saldos por cuenta ──
+  const puedeGuardar=!!FIN.appsScript;
+  const filas=cuentas.map(c=>{
+    const s=saldos[c]||{saldo:0,actualizado:''};
+    const comp=pag30.filter(p=>p.cuenta.toLowerCase()===c.toLowerCase()).reduce((x,p)=>x+p.monto,0);
+    const sem=comp===0?'<span style="color:var(--muted);">—</span>':(s.saldo>=comp?'<span style="color:#27ae60;">● cubre</span>':`<span style="color:var(--accent3);">● faltan ${pesos(comp-s.saldo)}</span>`);
+    return `<tr>
+      <td style="padding:7px 10px;font-size:12px;">${c}</td>
+      <td style="padding:7px 10px;text-align:right;"><input class="fin-saldo-input v-select" data-cuenta="${c}" value="${Math.round(s.saldo)}" inputmode="numeric" ${puedeGuardar?'':'disabled'} style="width:130px;text-align:right;font-variant-numeric:tabular-nums;"></td>
+      <td style="padding:7px 10px;text-align:right;font-size:10px;color:var(--muted);">${s.actualizado||'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;">${comp?pesos(comp):'—'}</td>
+      <td style="padding:7px 10px;text-align:right;font-size:11px;">${sem}</td>
+    </tr>`;
+  }).join('');
+  const saldosT=`<div class="subsection">
+    <div class="subsection-label" style="margin-bottom:12px;">Saldos por cuenta</div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">
+        <th style="text-align:left;font-size:10px;padding:6px 10px;">Cuenta</th>
+        <th style="text-align:right;font-size:10px;padding:6px 10px;">Saldo</th>
+        <th style="text-align:right;font-size:10px;padding:6px 10px;">Actualizado</th>
+        <th style="text-align:right;font-size:10px;padding:6px 10px;">Comprometido 30d</th>
+        <th style="text-align:right;font-size:10px;padding:6px 10px;">Estado</th>
+      </tr></thead>
+      <tbody>${filas}
+        <tr style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;">
+          <td style="padding:7px 10px;">TOTAL RESERVA</td>
+          <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${resColor};">${pesos(reserva)}</td>
+          <td></td>
+          <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;">${pesos(pag30.reduce((s,p)=>s+p.monto,0))}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table></div>
+    <div style="display:flex;gap:12px;align-items:center;margin-top:12px;">
+      ${puedeGuardar
+        ? `<button id="fin-save-btn" onclick="saveSaldos()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:4px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;font-family:inherit;">Guardar saldos</button><span id="fin-save-msg" style="font-size:11px;"></span>`
+        : `<span style="font-size:11px;color:var(--muted);">Para editar saldos desde acá falta configurar el Apps Script (ver apps-script-saldos.gs).</span>`}
+    </div>
+  </div>`;
+
+  el.innerHTML=kpis+curva+agenda+saldosT;
 }
 
 // ── BOM DATA ─────────────────────────────────────────────────────
