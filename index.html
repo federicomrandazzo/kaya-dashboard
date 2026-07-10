@@ -567,7 +567,7 @@
       <span class="nav-icon">◉</span> Ventas
     </div>
     <div class="nav-item" onclick="showModule('semanal')" id="nav-semanal">
-      <span class="nav-icon">▦</span> Semanal
+      <span class="nav-icon">▦</span> Ventas Semanal
     </div>
     <div class="nav-item" onclick="showModule('pub')" id="nav-pub">
       <span class="nav-icon">◈</span> Publicidad
@@ -652,7 +652,7 @@ const AUTH_USERS = {
 };
 const ROLE_MODULES = {
   admin:  ['ventas','semanal','pub','stock','proyeccion','kh','fin','edr'],
-  ventas: ['ventas','semanal','pub','stock','proyeccion'],
+  ventas: ['semanal','pub','stock','proyeccion'],
   house:  ['stock','proyeccion','kh'],
 };
 let USER = null;
@@ -676,10 +676,10 @@ function startApp(u){
   const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',fin:'nav-fin',edr:'nav-edr'};
   Object.entries(NAVMAP).forEach(([m,id])=>{ const el=document.getElementById(id); if(el) el.style.display=roleAllows(m)?'flex':'none'; });
   document.getElementById('user-label').textContent=u.label;
-  currentModule=roleAllows('ventas')?'ventas':'stock';
+  currentModule=roleAllows('ventas')?'ventas':roleAllows('semanal')?'semanal':'stock';
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+currentModule); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=currentModule==='ventas'?'Ventas':'Stock';
+  document.getElementById('topbar-title').textContent=currentModule==='ventas'?'Ventas':currentModule==='semanal'?'Ventas Semanal':'Stock';
   loadData();
 }
 
@@ -869,7 +869,7 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':mod==='pub'?'Publicidad':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':mod==='pub'?'Publicidad':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
@@ -1697,16 +1697,18 @@ function semRange(s){ const [y,m,d]=s.split('-').map(Number); const end=new Date
 function semShort(s){ const [y,m,d]=s.split('-').map(Number); return `${d} ${SEM_MES[m]}`; }
 function semAgg(sem){ let venta=0,costo=0,qty=0; DATA.semanal.filter(r=>r['semana']===sem).forEach(r=>{ venta+=num(r['importe_neto']); costo+=num(r['costo_total']); qty+=num(r['qty']); }); return {venta,costo,qty,margen:venta-costo}; }
 
-function setSemTab(t){ semTab=t; renderSemanal(); }
+function setSemTab(t){ if(semTabAllowed(t)) semTab=t; renderSemanal(); }
+// El rol ventas (Santi) solo ve el Comparativo; margen y gráficos (llevan costos) son de admin
+function semTabAllowed(t){ return (USER&&USER.role==='admin')||t==='comp'; }
 function renderSemanal(){
   const el=document.getElementById('module-semanal');
   el.style.display='block';
   if(!DATA.semanal||!DATA.semanal.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos semanales. Verificá que la hoja esté publicada.</div>'; return; }
-  const tabs=`<div class="v-tabs" style="margin-bottom:22px;">
-    <div class="v-tab ${semTab==='margen'?'active':''}" onclick="setSemTab('margen')">Margen semanal</div>
-    <div class="v-tab ${semTab==='lineas'?'active':''}" onclick="setSemTab('lineas')">Gráficos de línea</div>
-    <div class="v-tab ${semTab==='comp'?'active':''}" onclick="setSemTab('comp')">Comparativo ventas</div>
-  </div>`;
+  if(!semTabAllowed(semTab)) semTab='comp';
+  const tabDefs=[['margen','Margen semanal'],['lineas','Gráficos de línea'],['comp','Comparativo ventas']].filter(([t])=>semTabAllowed(t));
+  const tabs=tabDefs.length>1?`<div class="v-tabs" style="margin-bottom:22px;">
+    ${tabDefs.map(([t,l])=>`<div class="v-tab ${semTab===t?'active':''}" onclick="setSemTab('${t}')">${l}</div>`).join('')}
+  </div>`:'';
   el.innerHTML=tabs+`<div id="sem-tabc">${semTab==='lineas'?renderSemLineas():semTab==='comp'?renderSemComparativo():renderSemMargen()}</div>`;
 }
 function renderSemMargen(){
