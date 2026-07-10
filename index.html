@@ -1698,18 +1698,75 @@ function semShort(s){ const [y,m,d]=s.split('-').map(Number); return `${d} ${SEM
 function semAgg(sem){ let venta=0,costo=0,qty=0; DATA.semanal.filter(r=>r['semana']===sem).forEach(r=>{ venta+=num(r['importe_neto']); costo+=num(r['costo_total']); qty+=num(r['qty']); }); return {venta,costo,qty,margen:venta-costo}; }
 
 function setSemTab(t){ if(semTabAllowed(t)) semTab=t; renderSemanal(); }
-// El rol ventas (Santi) solo ve el Comparativo; margen y gráficos (llevan costos) son de admin
-function semTabAllowed(t){ return (USER&&USER.role==='admin')||t==='comp'; }
+// El rol ventas (Santi) ve los comparativos; margen y gráficos (llevan costos) son de admin
+function semTabAllowed(t){ return (USER&&USER.role==='admin')||t==='comp'||t==='diario'; }
 function renderSemanal(){
   const el=document.getElementById('module-semanal');
   el.style.display='block';
   if(!DATA.semanal||!DATA.semanal.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos semanales. Verificá que la hoja esté publicada.</div>'; return; }
   if(!semTabAllowed(semTab)) semTab='comp';
-  const tabDefs=[['margen','Margen semanal'],['lineas','Gráficos de línea'],['comp','Comparativo ventas']].filter(([t])=>semTabAllowed(t));
+  const tabDefs=[['margen','Margen semanal'],['lineas','Gráficos de línea'],['comp','Comparativo semanal'],['diario','Comparativo diario']].filter(([t])=>semTabAllowed(t));
   const tabs=tabDefs.length>1?`<div class="v-tabs" style="margin-bottom:22px;">
     ${tabDefs.map(([t,l])=>`<div class="v-tab ${semTab===t?'active':''}" onclick="setSemTab('${t}')">${l}</div>`).join('')}
   </div>`:'';
-  el.innerHTML=tabs+`<div id="sem-tabc">${semTab==='lineas'?renderSemLineas():semTab==='comp'?renderSemComparativo():renderSemMargen()}</div>`;
+  el.innerHTML=tabs+`<div id="sem-tabc">${semTab==='lineas'?renderSemLineas():semTab==='comp'?renderSemComparativo():semTab==='diario'?renderSemDiario():renderSemMargen()}</div>`;
+}
+
+// ── Comparativo diario (venta por día, hasta 7 días; fuente: tracker diario de publicidad) ──
+let semDiasSel=[], semDiasCleared=false;
+function semDiasData(){
+  const out={};
+  DATA.publicidad.forEach(r=>{
+    const p=(r['Fecha']||'').trim().split('/'); if(p.length<3) return;
+    const k=`${p[2]}-${String(+p[1]).padStart(2,'0')}-${String(+p[0]).padStart(2,'0')}`;
+    const v=num(r['VENTA TN']); if(v<=0) return;
+    out[k]={venta:v, pedidos:num(r['Q PEDIDOS'])||num(r['PEDIDOS TN'])||0};
+  });
+  return out;
+}
+function toggleSemDia(k){
+  if(semDiasSel.includes(k)){ semDiasSel=semDiasSel.filter(x=>x!==k); semDiasCleared=true; }
+  else { if(semDiasSel.length>=7) return; semDiasSel=[...semDiasSel,k].sort(); }
+  renderSemanal();
+}
+function semUlt7(){ semDiasSel=[]; semDiasCleared=false; renderSemanal(); }
+function renderSemDiario(){
+  const data=semDiasData();
+  const keys=Object.keys(data).sort();
+  if(!keys.length) return '<div class="empty">Sin datos diarios (se alimenta de la hoja de publicidad).</div>';
+  if(!semDiasCleared&&!semDiasSel.length) semDiasSel=keys.slice(-7);
+  semDiasSel=semDiasSel.filter(k=>data[k]);
+  const opciones=keys.slice(-14);
+  const fmtD=k=>{ const[y,m,d]=k.split('-').map(Number); const dt=new Date(y,m-1,d); return ['dom','lun','mar','mié','jue','vie','sáb'][dt.getDay()]+' '+String(d).padStart(2,'0')+'/'+String(m).padStart(2,'0'); };
+  const pills=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;align-items:center;">
+    <span style="font-size:11px;color:var(--muted);margin-right:2px;">Días (1 a 7):</span>
+    ${opciones.map(k=>{const act=semDiasSel.includes(k);return`<button onclick="toggleSemDia('${k}')" style="padding:3px 10px;border-radius:20px;border:1px solid ${act?'var(--accent)':'#d0c8b8'};background:${act?'var(--accent)':'transparent'};color:${act?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${fmtD(k)}</button>`;}).join('')}
+    <button onclick="semUlt7()" style="padding:3px 12px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;margin-left:4px;">Últimos 7</button>
+  </div>`;
+  const cols=[...semDiasSel].sort();
+  if(!cols.length) return pills+'<div class="empty" style="padding:44px 0;">Elegí al menos un día.</div>';
+  const showTot=cols.length>1;
+  const totV=cols.reduce((s,k)=>s+data[k].venta,0);
+  const totP=cols.reduce((s,k)=>s+data[k].pedidos,0);
+  const cell=(v,extra)=>`<td style="text-align:right;padding:6px 8px;font-variant-numeric:tabular-nums;${extra||''}">${v}</td>`;
+  const fila=(lbl,fn,fnTot,color)=>`<tr style="border-bottom:1px solid #f0ead8;">
+    <td style="padding:6px 8px;font-size:12px;">${lbl}</td>
+    ${cols.map(k=>cell(fn(data[k]),color?'color:'+color+';':'')).join('')}
+    ${showTot?cell(fnTot(),'font-weight:700;border-left:1px solid #e8dfc8;'+(color?'color:'+color+';':'')):''}
+  </tr>`;
+  const table=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;min-width:${160+cols.length*100}px;">
+    <thead><tr style="border-bottom:2px solid #d4c5a0;">
+      <th style="text-align:left;font-size:10px;padding:6px 8px;"></th>
+      ${cols.map(k=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${fmtD(k)}</th>`).join('')}
+      ${showTot?`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Total</th>`:''}
+    </tr></thead>
+    <tbody>
+      ${fila('Venta',d=>pesos(d.venta),()=>pesos(totV),'var(--accent)')}
+      ${fila('Pedidos',d=>Math.round(d.pedidos).toLocaleString('es-AR'),()=>Math.round(totP).toLocaleString('es-AR'))}
+      ${fila('Ticket promedio',d=>d.pedidos>0?pesos(d.venta/d.pedidos):'—',()=>totP>0?pesos(totV/totP):'—')}
+    </tbody>
+  </table></div>`;
+  return pills+`<div style="font-size:10px;color:var(--muted);margin-bottom:12px;">Venta del día según el tracker diario de publicidad (venta de Tienda Nube).</div>`+table;
 }
 function renderSemMargen(){
   const NS='sem';
