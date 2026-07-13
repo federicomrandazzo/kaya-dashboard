@@ -1836,7 +1836,32 @@ function semSeriesDefs(){
   defs.forEach((d,i)=>{ d.color=d.total?'#1a1a1a':`hsl(${(i*61)%360} 60% 46%)`; });
   return defs;
 }
-function semApplyPreset(p){ semLinePreset=p; const kinds=SEM_PRESETS[p]||['total']; semLineHidden=new Set(semSeriesDefs().filter(d=>!kinds.includes(d.kind)).map(d=>d.name)); renderSemanal(); }
+// Semanas del gráfico: por defecto las últimas 10, seleccionables hacia atrás
+let semLineWeeksSel=[];
+function semLineWeeks(){ const all=semWeeks(); const sel=semLineWeeksSel.filter(w=>all.includes(w)); return sel.length?sel.sort():all.slice(-10); }
+function toggleSemLineWeek(w){
+  let sel=semLineWeeks();
+  if(sel.includes(w)){ if(sel.length<=2) return; sel=sel.filter(x=>x!==w); }
+  else sel=[...sel,w].sort();
+  semLineWeeksSel=sel; renderSemanal();
+}
+function semLineUlt10(){ semLineWeeksSel=[]; renderSemanal(); }
+// Visibles = series del preset, pero solo el TOP 7 por venta (el resto queda destildado, clickeable)
+function semComputeHidden(p){
+  const kinds=SEM_PRESETS[p]||['total'];
+  const defs=semSeriesDefs();
+  const weeks=semLineWeeks();
+  const tot=d=>DATA.semanal.filter(r=>weeks.includes((r['semana']||'').trim())&&d.match(r)).reduce((s,r)=>s+num(r['importe_neto']),0);
+  const enPreset=defs.filter(d=>kinds.includes(d.kind)&&!d.total)
+    .map(d=>({d,t:tot(d)})).sort((a,b)=>b.t-a.t);
+  const top=new Set(enPreset.slice(0,7).map(x=>x.d.name));
+  semLineHidden=new Set(defs.filter(d=>{
+    if(d.total) return !kinds.includes('total');
+    if(!kinds.includes(d.kind)) return true;
+    return !top.has(d.name);
+  }).map(d=>d.name));
+}
+function semApplyPreset(p){ semLinePreset=p; semComputeHidden(p); renderSemanal(); }
 function semSeriesValues(defs, field, weeks){
   return defs.map(d=>({name:d.name,color:d.color,total:d.total,kind:d.kind,values:weeks.map(w=>DATA.semanal.filter(r=>r['semana']===w&&d.match(r)).reduce((s,r)=>s+num(r[field]),0))}));
 }
@@ -1858,26 +1883,51 @@ function semLineChart(series, weeks, isPct, dropTotal){
   vis.forEach(s=>{ const pts=s.values.map((v,i)=>({x:xOf(i),y:yOf(v)})); if(!pts.length) return; let d=`M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`; for(let k=1;k<pts.length;k++){ const p0=pts[k-1],p1=pts[k],cx=((p0.x+p1.x)/2).toFixed(1); d+=` C ${cx} ${p0.y.toFixed(1)} ${cx} ${p1.y.toFixed(1)} ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`; } pth+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.total?3:1.5}" opacity="${s.total?1:0.85}"/>`; if(s.total) pts.forEach(p=>pth+=`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${s.color}"/>`); });
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;">${g}${pth}</svg>`;
 }
-function semLineLegend(series){
+function semLineLegend(ventas){
   const kinds=SEM_PRESETS[semLinePreset]||['total'];
-  return `<div style="display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:10px;">${series.map((s,i)=>{ if(!kinds.includes(s.kind)) return ''; const off=semLineHidden.has(s.name); return `<span onclick="toggleSemLine(${i})" style="display:flex;align-items:center;gap:5px;font-size:10px;color:${off?'#cabf9f':'var(--muted)'};cursor:pointer;${off?'text-decoration:line-through;':''}"><span style="width:12px;height:${s.total?'4':'3'}px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0;"></span>${s.name}</span>`; }).join('')}</div>`;
+  const items=ventas.map((s,i)=>({s,i,tot:s.values.reduce((a,b)=>a+b,0)}))
+    .filter(x=>kinds.includes(x.s.kind))
+    .sort((a,b)=>(b.s.total?1:0)-(a.s.total?1:0)||b.tot-a.tot);
+  const visibles=items.filter(x=>!semLineHidden.has(x.s.name)).length;
+  return `<div style="width:250px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;max-height:560px;overflow-y:auto;">
+    <div style="font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Referencias · mayor a menor <span style="float:right;">${visibles} en el gráfico</span></div>
+    ${items.map(x=>{
+      const off=semLineHidden.has(x.s.name);
+      return `<div onclick="toggleSemLine(${x.i})" style="display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;${off?'opacity:0.45;':''}">
+        <span style="width:14px;height:${x.s.total?'4':'3'}px;border-radius:2px;background:${x.s.color};flex-shrink:0;"></span>
+        <span style="flex:1;font-size:10px;color:var(--text);${off?'text-decoration:line-through;':''}white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${x.s.name}</span>
+        <span style="font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;">$${(x.tot/1e6).toFixed(1)}M</span>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 function renderSemLineas(){
-  const weeks=semWeeks();
+  const allWeeks=semWeeks();
+  const weeks=semLineWeeks();
+  if(!semLineInit){ semComputeHidden(semLinePreset); semLineInit=true; }
   const defs=semSeriesDefs();
-  if(!semLineInit){ const kinds=SEM_PRESETS[semLinePreset]||['total']; semLineHidden=new Set(defs.filter(d=>!kinds.includes(d.kind)).map(d=>d.name)); semLineInit=true; }
   const ventas=semSeriesValues(defs,'importe_neto',weeks);
   const ratio=semSeriesRatio(defs,weeks);
+  const weekPills=`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+    <span style="font-size:11px;color:var(--muted);margin-right:2px;">Semanas:</span>
+    ${allWeeks.map(w=>{const act=weeks.includes(w);return`<button onclick="toggleSemLineWeek('${w}')" style="padding:3px 9px;border-radius:20px;border:1px solid ${act?'var(--accent)':'#d0c8b8'};background:${act?'var(--accent)':'transparent'};color:${act?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${semShort(w)}</button>`;}).join('')}
+    <button onclick="semLineUlt10()" style="padding:3px 11px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;margin-left:4px;">Últimas 10</button>
+  </div>`;
   const presets=[['total','Total'],['linea','Por línea'],['negra','Negra'],['blanca','Blanca'],['kits','Kits']];
-  const btnRow=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${presets.map(([k,l])=>`<button onclick="semApplyPreset('${k}')" style="padding:5px 12px;border-radius:4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:1px solid ${semLinePreset===k?'var(--accent)':'var(--border)'};background:${semLinePreset===k?'var(--accent)':'transparent'};color:${semLinePreset===k?'#fff':'var(--muted)'};font-family:inherit;">${l}</button>`).join('')}</div>`;
-  return btnRow+`<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Elegí una vista con los botones y afiná con la leyenda (tocá para ocultar o mostrar). La línea negra gruesa es el total del negocio.</div>
-    <div class="subsection" style="margin-bottom:30px;">
-      <div class="subsection-label" style="margin-bottom:12px;">Ventas por semana ($)</div>
-      <div class="linechart-wrap">${semLineChart(ventas,weeks,false,['negra','blanca','kits'].includes(semLinePreset))}${semLineLegend(ventas)}</div>
-    </div>
-    <div class="subsection">
-      <div class="subsection-label" style="margin-bottom:12px;">Costo / venta por semana (%) · ratio de costo de cada serie</div>
-      <div class="linechart-wrap">${semLineChart(ratio,weeks,true)}${semLineLegend(ratio)}</div>
+  const btnRow=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${presets.map(([k,l])=>`<button onclick="semApplyPreset('${k}')" style="padding:5px 12px;border-radius:4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:1px solid ${semLinePreset===k?'var(--accent)':'var(--border)'};background:${semLinePreset===k?'var(--accent)':'transparent'};color:${semLinePreset===k?'#fff':'var(--muted)'};font-family:inherit;">${l}</button>`).join('')}</div>`;
+  return weekPills+btnRow+`<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">El gráfico muestra el top 7 de la vista elegida; en las referencias podés prender y apagar cualquier serie. La línea negra gruesa es el total del negocio.</div>
+    <div style="display:flex;gap:16px;align-items:flex-start;">
+      <div style="flex:1;min-width:0;">
+        <div class="subsection" style="margin-bottom:24px;">
+          <div class="subsection-label" style="margin-bottom:12px;">Ventas por semana ($)</div>
+          <div class="linechart-wrap">${semLineChart(ventas,weeks,false,['negra','blanca','kits'].includes(semLinePreset))}</div>
+        </div>
+        <div class="subsection" style="margin-bottom:0;">
+          <div class="subsection-label" style="margin-bottom:12px;">Costo / venta por semana (%) · ratio de costo de cada serie</div>
+          <div class="linechart-wrap">${semLineChart(ratio,weeks,true)}</div>
+        </div>
+      </div>
+      ${semLineLegend(ventas)}
     </div>`;
 }
 
