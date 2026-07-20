@@ -697,6 +697,7 @@ const URLS = {
   asistencias:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQeSGNkWldvyD9d3r_yBTm0TWAuxtpAwzB7WMjLJsOyeHd8_DVa96WvfCXdIg8DschcnZ4pODh31xVX/pub?gid=1137230020&single=true&output=csv',
   pedidos:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcbDTtZqDIScLeubq7MzURi9gEGInUaMqw5Ds1P-CezU2_nBezYgOq29ib8HBpfIen3nUDfMd3DDv9/pub?gid=2143737438&single=true&output=csv',
   publicidad:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTSPDtSKc612ZTMDlBF-s0JBLj7CWh-VKT2tuXwgg9_QKET6g0tSzrbNFuXOPrf3gLTzzCznIL3Zx1R/pub?gid=0&single=true&output=csv',
+  meli:         'https://docs.google.com/spreadsheets/d/e/2PACX-1vTSPDtSKc612ZTMDlBF-s0JBLj7CWh-VKT2tuXwgg9_QKET6g0tSzrbNFuXOPrf3gLTzzCznIL3Zx1R/pub?gid=1786682465&single=true&output=csv',
 };
 
 const SKU_MAP = {
@@ -720,7 +721,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:''};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:'',meli:[]};
 let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -806,7 +807,7 @@ async function loadData() {
   document.getElementById('module-kh').style.display='none';
   document.getElementById('module-pub').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT] = await Promise.all([
       fetch(URLS.dux).then(r=>r.text()),
       fetch(URLS.tn).then(r=>r.text()),
       fetch(URLS.compuestos).then(r=>r.text()),
@@ -820,6 +821,7 @@ async function loadData() {
       roleAllows('semanal')?fetch(URLS.semanal).then(r=>r.text()):Promise.resolve(''),
       (roleAllows('fin')&&FIN.recopilador)?fetch(FIN.recopilador).then(r=>r.text()):Promise.resolve(''),
       (roleAllows('fin')&&FIN.saldos)?fetch(FIN.saldos).then(r=>r.text()):Promise.resolve(''),
+      (roleAllows('semanal')||roleAllows('pub'))?fetch(URLS.meli).then(r=>r.text()):Promise.resolve(''),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -847,6 +849,7 @@ async function loadData() {
     })();
     const _sl = parseSaldosCSV(slT);
     DATA.saldos = _sl.rows; DATA.saldosFecha = _sl.fecha;
+    DATA.meli = parseCSV(mlT).filter(r=>(r['Fecha']||'').trim());
     bomCache = null;
     const now=new Date();
     const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
@@ -1698,18 +1701,62 @@ function semShort(s){ const [y,m,d]=s.split('-').map(Number); return `${d} ${SEM
 function semAgg(sem){ let venta=0,costo=0,qty=0; DATA.semanal.filter(r=>r['semana']===sem).forEach(r=>{ venta+=num(r['importe_neto']); costo+=num(r['costo_total']); qty+=num(r['qty']); }); return {venta,costo,qty,margen:venta-costo}; }
 
 function setSemTab(t){ if(semTabAllowed(t)) semTab=t; renderSemanal(); }
-// El rol ventas (Santi) solo ve el Comparativo semanal; margen y gráficos (llevan costos) son de admin
-function semTabAllowed(t){ return (USER&&USER.role==='admin')||t==='comp'; }
+// El rol ventas (Santi) ve Comparativo TN y Venta MELI; margen y gráficos (llevan costos) son de admin
+function semTabAllowed(t){ return (USER&&USER.role==='admin')||t==='comp'||t==='meli'; }
+// Canal Mercado Libre: hoja diaria que carga Santi (Fecha dd/mm SIN año → se infiere
+// arrancando en 2026 y sumando un año cuando el mes retrocede). Solo días con movimiento.
+function meliDias(){
+  const out=[]; let year=2026, prevM=null;
+  DATA.meli.forEach(r=>{
+    const m=(r['Fecha']||'').trim().match(/^(\d{1,2})\/(\d{1,2})/); if(!m) return;
+    const d=+m[1], mo=+m[2];
+    if(prevM!==null&&mo<prevM) year++;
+    prevM=mo;
+    const venta=num(r['Venta en $']), pedidos=num(r['Cantidad de pedidos']), gasto=num(r['Gasto en publicidad']);
+    if(venta<=0&&pedidos<=0&&gasto<=0) return;
+    out.push({fecha:new Date(year,mo-1,d), venta, pedidos, gasto});
+  });
+  return out.sort((a,b)=>a.fecha-b.fecha);
+}
+function renderSemMeli(){
+  const dias=meliDias();
+  if(!dias.length) return '<div class="empty" style="padding:44px 0;">Sin datos de Mercado Libre todavía.</div>';
+  const monday=d=>{ const x=new Date(d); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; };
+  const sem={};
+  dias.forEach(d=>{ const k=monday(d.fecha).toISOString().slice(0,10); if(!sem[k])sem[k]={venta:0,pedidos:0}; sem[k].venta+=d.venta; sem[k].pedidos+=d.pedidos; });
+  const keys=Object.keys(sem).sort();
+  const fmtSem=k=>{ const[y,m,dd]=k.split('-').map(Number); const ini=new Date(y,m-1,dd), fin=new Date(y,m-1,dd+6); const p=n=>String(n).padStart(2,'0'); return `${p(ini.getDate())}/${p(ini.getMonth()+1)}–${p(fin.getDate())}/${p(fin.getMonth()+1)}`; };
+  const totV=keys.reduce((s,k)=>s+sem[k].venta,0), totP=keys.reduce((s,k)=>s+sem[k].pedidos,0);
+  const rows=keys.map(k=>`<tr style="border-bottom:1px solid #f0ead8;">
+    <td style="padding:7px 10px;font-size:12px;">Semana del ${fmtSem(k)}</td>
+    <td style="text-align:right;padding:7px 10px;font-variant-numeric:tabular-nums;">${Math.round(sem[k].pedidos).toLocaleString('es-AR')}</td>
+    <td style="text-align:right;padding:7px 10px;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:500;">${pesos(sem[k].venta)}</td>
+  </tr>`).join('');
+  return `<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Canal Mercado Libre · carga diaria de Santi · la última semana puede estar incompleta · detalle por producto: próximamente.</div>
+    <div style="overflow-x:auto;max-width:620px;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+    <thead><tr style="border-bottom:2px solid #d4c5a0;">
+      <th style="text-align:left;font-size:10px;padding:6px 10px;">Semana</th>
+      <th style="text-align:right;font-size:10px;padding:6px 10px;">Pedidos</th>
+      <th style="text-align:right;font-size:10px;padding:6px 10px;">Venta</th>
+    </tr></thead>
+    <tbody>${rows}
+      <tr style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;">
+        <td style="padding:7px 10px;">TOTAL</td>
+        <td style="text-align:right;padding:7px 10px;font-variant-numeric:tabular-nums;">${Math.round(totP).toLocaleString('es-AR')}</td>
+        <td style="text-align:right;padding:7px 10px;font-variant-numeric:tabular-nums;color:var(--accent);">${pesos(totV)}</td>
+      </tr>
+    </tbody></table></div>`;
+}
 function renderSemanal(){
   const el=document.getElementById('module-semanal');
   el.style.display='block';
   if(!DATA.semanal||!DATA.semanal.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos semanales. Verificá que la hoja esté publicada.</div>'; return; }
   if(!semTabAllowed(semTab)) semTab='comp';
-  const tabDefs=[['margen','Margen semanal'],['lineas','Gráficos de línea'],['comp','Comparativo semanal']].filter(([t])=>semTabAllowed(t));
+  const tabDefs=[['margen','Margen semanal'],['lineas','Gráficos de línea'],['comp','Comparativo semanal TN'],['meli','Venta MELI']].filter(([t])=>semTabAllowed(t));
   const tabs=tabDefs.length>1?`<div class="v-tabs" style="margin-bottom:22px;">
     ${tabDefs.map(([t,l])=>`<div class="v-tab ${semTab===t?'active':''}" onclick="setSemTab('${t}')">${l}</div>`).join('')}
   </div>`:'';
-  el.innerHTML=tabs+`<div id="sem-tabc">${semTab==='lineas'?renderSemLineas():semTab==='comp'?renderSemComparativo():renderSemMargen()}</div>`;
+  el.innerHTML=tabs+`<div id="sem-tabc">${semTab==='lineas'?renderSemLineas():semTab==='comp'?renderSemComparativo():semTab==='meli'?renderSemMeli():renderSemMargen()}</div>`;
 }
 
 function renderSemMargen(){
@@ -3767,6 +3814,48 @@ function renderPubContent(){
   if(!el) return;
   if(pubTab==='analisis')    el.innerHTML=renderPubAnalisis();
   if(pubTab==='comparativo') el.innerHTML=renderPubComparativo();
+  if(pubTab==='meli')        el.innerHTML=renderPubMeli();
+}
+
+// ── PUBLICIDAD · MELI: venta vs gasto publicitario del canal ─────
+function renderPubMeli(){
+  const dias=meliDias();
+  if(!dias.length) return '<div class="empty" style="padding:44px 0;">Sin datos de Mercado Libre todavía.</div>';
+  const totV=dias.reduce((s,d)=>s+d.venta,0), totP=dias.reduce((s,d)=>s+d.pedidos,0), totG=dias.reduce((s,d)=>s+d.gasto,0);
+  const roas=totG>0?totV/totG:0, cpa=totP>0?totG/totP:0;
+  const fF=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;">
+    ${pubKPI('Venta MELI',pesos(totV),dias.length+' días con datos','var(--accent)')}
+    ${pubKPI('Pedidos',Math.round(totP).toLocaleString('es-AR'),totP>0?'ticket '+pesos(totV/totP):'')}
+    ${pubKPI('Gasto publicidad',pesos(totG),totV>0?(totG/totV*100).toFixed(1)+'% de la venta':'','var(--accent2)')}
+    ${pubKPI('ROAS',roas.toFixed(2),'venta / gasto',roas>=3?'#27ae60':'#e67e22')}
+    ${pubKPI('CPA',pesos(cpa),'gasto / pedido')}
+  </div>`;
+  const W=720,H=250,PL=58,PR=58,PT=16,PB=28,CW=W-PL-PR,CH=H-PT-PB;
+  const maxV=Math.max(...dias.map(d=>d.venta),1);
+  const maxG=Math.max(...dias.map(d=>d.gasto),1);
+  const X=i=>PL+(dias.length<2?CW/2:i/(dias.length-1)*CW);
+  const YV=v=>PT+CH-(v/maxV)*CH, YG=v=>PT+CH-(v/maxG)*CH;
+  let grid='';
+  [0,.5,1].forEach(f=>{ const y=PT+CH-f*CH; grid+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="#e8dfc8" stroke-width="1"/>
+    <text x="${PL-6}" y="${(y+3.5).toFixed(1)}" text-anchor="end" fill="#c0392b" font-size="8.5" font-family="Red Hat Display,sans-serif">$${(f*maxV/1e3).toFixed(0)}k</text>
+    <text x="${W-PR+6}" y="${(y+3.5).toFixed(1)}" text-anchor="start" fill="#8b6914" font-size="8.5" font-family="Red Hat Display,sans-serif">$${(f*maxG/1e3).toFixed(0)}k</text>`; });
+  const paso=Math.max(1,Math.ceil(dias.length/9));
+  let xLbl='';
+  dias.forEach((d,i)=>{ if(i%paso===0||i===dias.length-1) xLbl+=`<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="#9a8a6a" font-size="8.5" font-family="Red Hat Display,sans-serif">${fF(d.fecha)}</text>`; });
+  const pathV='M '+dias.map((d,i)=>`${X(i).toFixed(1)} ${YV(d.venta).toFixed(1)}`).join(' L ');
+  const pathG='M '+dias.map((d,i)=>`${X(i).toFixed(1)} ${YG(d.gasto).toFixed(1)}`).join(' L ');
+  const chart=`<div class="subsection">
+    <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+      <span>Venta MELI vs gasto en publicidad · por día</span>
+      <span style="display:flex;gap:14px;text-transform:none;letter-spacing:normal;">
+        <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:12px;height:3px;border-radius:2px;background:#c0392b;display:inline-block;"></span>Venta (eje izq.)</span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);"><span style="width:12px;height:3px;border-radius:2px;background:#b89021;display:inline-block;"></span>Gasto (eje der.)</span>
+      </span>
+    </div>
+    <div class="linechart-wrap"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;">${grid}${xLbl}<path d="${pathG}" fill="none" stroke="#b89021" stroke-width="2"/><path d="${pathV}" fill="none" stroke="#c0392b" stroke-width="2.2"/></svg></div>
+  </div>`;
+  return `<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Canal Mercado Libre · todo el período cargado · ROAS y CPA calculados acá (venta ÷ gasto y gasto ÷ pedido).</div>`+kpis+chart;
 }
 function renderPublicidad(){
   const el=document.getElementById('module-pub');
@@ -3778,6 +3867,7 @@ function renderPublicidad(){
     <div class="tabs">
       <div class="tab ${pubTab==='analisis'?'active':''}" onclick="setPubTab('analisis')">Análisis</div>
       <div class="tab ${pubTab==='comparativo'?'active':''}" onclick="setPubTab('comparativo')">Comparativo</div>
+      <div class="tab ${pubTab==='meli'?'active':''}" onclick="setPubTab('meli')">MELI</div>
     </div>
     <div id="pub-tab-content"></div>`;
   renderPubContent();
