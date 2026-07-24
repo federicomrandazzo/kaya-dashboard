@@ -694,6 +694,7 @@ const URLS = {
   edrData:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=260416352&single=true&output=csv`,
   semanal:    `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1038423384&single=true&output=csv`,
   produccion:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
+  cajas:        'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1281380437&single=true&output=csv',
   asistencias:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQeSGNkWldvyD9d3r_yBTm0TWAuxtpAwzB7WMjLJsOyeHd8_DVa96WvfCXdIg8DschcnZ4pODh31xVX/pub?gid=1137230020&single=true&output=csv',
   pedidos:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcbDTtZqDIScLeubq7MzURi9gEGInUaMqw5Ds1P-CezU2_nBezYgOq29ib8HBpfIen3nUDfMd3DDv9/pub?gid=2143737438&single=true&output=csv',
   publicidad:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTSPDtSKc612ZTMDlBF-s0JBLj7CWh-VKT2tuXwgg9_QKET6g0tSzrbNFuXOPrf3gLTzzCznIL3Zx1R/pub?gid=0&single=true&output=csv',
@@ -721,7 +722,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:'',meli:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],cajas:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:'',meli:[]};
 let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -796,6 +797,13 @@ function TC(ns,key,content,def){
 }
 
 // ── FETCH ───────────────────────────────────────────────────────
+// Timeout por fuente: si una hoja publicada no responde (pasa a veces con Google),
+// esa fuente queda vacía pero el resto del dashboard carga igual.
+function fetchCSV(url, ms=15000){
+  const ctl = new AbortController();
+  const t = setTimeout(()=>ctl.abort(), ms);
+  return fetch(url, {signal: ctl.signal}).then(r=>r.text()).catch(()=>'').finally(()=>clearTimeout(t));
+}
 async function loadData() {
   document.getElementById('loading').style.display='flex';
   document.getElementById('module-stock').style.display='none';
@@ -807,21 +815,22 @@ async function loadData() {
   document.getElementById('module-kh').style.display='none';
   document.getElementById('module-pub').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT] = await Promise.all([
-      fetch(URLS.dux).then(r=>r.text()),
-      fetch(URLS.tn).then(r=>r.text()),
-      fetch(URLS.compuestos).then(r=>r.text()),
-      fetch(URLS.ventas).then(r=>r.text()),
-      fetch(URLS.ordenes).then(r=>r.text()),
-      fetch(URLS.produccion).then(r=>r.text()),
-      fetch(URLS.asistencias).then(r=>r.text()),
-      fetch(URLS.pedidos).then(r=>r.text()),
-      roleAllows('pub')?fetch(URLS.publicidad).then(r=>r.text()):Promise.resolve(''),
-      roleAllows('edr')?fetch(URLS.edrData).then(r=>r.text()):Promise.resolve(''),
-      roleAllows('semanal')?fetch(URLS.semanal).then(r=>r.text()):Promise.resolve(''),
-      (roleAllows('fin')&&FIN.recopilador)?fetch(FIN.recopilador).then(r=>r.text()):Promise.resolve(''),
-      (roleAllows('fin')&&FIN.saldos)?fetch(FIN.saldos).then(r=>r.text()):Promise.resolve(''),
-      (roleAllows('semanal')||roleAllows('pub'))?fetch(URLS.meli).then(r=>r.text()):Promise.resolve(''),
+    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT,cjT] = await Promise.all([
+      fetchCSV(URLS.dux),
+      fetchCSV(URLS.tn),
+      fetchCSV(URLS.compuestos),
+      fetchCSV(URLS.ventas),
+      fetchCSV(URLS.ordenes),
+      fetchCSV(URLS.produccion),
+      fetchCSV(URLS.asistencias),
+      fetchCSV(URLS.pedidos),
+      roleAllows('pub')?fetchCSV(URLS.publicidad):Promise.resolve(''),
+      roleAllows('edr')?fetchCSV(URLS.edrData):Promise.resolve(''),
+      roleAllows('semanal')?fetchCSV(URLS.semanal):Promise.resolve(''),
+      (roleAllows('fin')&&FIN.recopilador)?fetchCSV(FIN.recopilador):Promise.resolve(''),
+      (roleAllows('fin')&&FIN.saldos)?fetchCSV(FIN.saldos):Promise.resolve(''),
+      (roleAllows('semanal')||roleAllows('pub'))?fetchCSV(URLS.meli):Promise.resolve(''),
+      fetchCSV(URLS.cajas),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -829,6 +838,7 @@ async function loadData() {
     DATA.ventas  = parseCSV(vT).filter(r=>r['periodo']&&r['periodo'].trim());
     DATA.ordenes = parseCSV(oT).filter(r=>r['periodo']&&r['periodo'].trim());
     DATA.produccion  = parseCSV(pT).filter(r=>r['fecha']&&r['cantidad']);
+    DATA.cajas       = parseCSV(cjT).filter(r=>r['fecha']&&r['cantidad']);
     DATA.asistencias = parseCSV(aT).filter(r=>r['Fecha']&&r['Nombre']);
     DATA.pedidos = parseCSV(pdT).filter(r=>(r['armado?']||'').trim().toUpperCase()==='SI' && num(r['año'])>1900);
     DATA.publicidad = parseCSV(pbT.split('\n').slice(1).join('\n')).filter(r=>r['Fecha']&&(r['VENTA TN']||'').trim()&&num(r['VENTA TN'])>0);
@@ -2976,7 +2986,7 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
 
 // ── KAYA HOUSE ───────────────────────────────────────────────────
 let khTab = 'produccion';
-let khPeriodo = 'todo';
+let khMes = {produccion:'todo', cajas:'todo'};   // filtro de mes de las vistas mensuales
 let khPedPeriodo = 'todo';
 
 function formatMes(ym) {
@@ -2996,6 +3006,8 @@ function renderKayaHouse() {
     <div class="tabs">
       <div class="tab ${khTab==='produccion'?'active':''}" onclick="setKHTab('produccion')">Producción</div>
       <div class="tab ${khTab==='proddiaria'?'active':''}" onclick="setKHTab('proddiaria')">Producción diaria</div>
+      <div class="tab ${khTab==='cajas'?'active':''}" onclick="setKHTab('cajas')">Cajas</div>
+      <div class="tab ${khTab==='cajasdiaria'?'active':''}" onclick="setKHTab('cajasdiaria')">Cajas diaria</div>
       <div class="tab ${khTab==='asistencias'?'active':''}" onclick="setKHTab('asistencias')">Asistencias</div>
       <div class="tab ${khTab==='pedidos'?'active':''}" onclick="setKHTab('pedidos')">Pedidos</div>
     </div>
@@ -3013,8 +3025,10 @@ function setKHTab(tab) {
 function renderKHContent() {
   const el = document.getElementById('kh-tab-content');
   if (!el) return;
-  if (khTab === 'produccion')   el.innerHTML = renderProduccion();
-  if (khTab === 'proddiaria')   el.innerHTML = renderProdDiaria();
+  if (khTab === 'produccion')   el.innerHTML = renderProduccion('produccion');
+  if (khTab === 'proddiaria')   el.innerHTML = renderProdDiaria('produccion');
+  if (khTab === 'cajas')        el.innerHTML = renderProduccion('cajas');
+  if (khTab === 'cajasdiaria')  el.innerHTML = renderProdDiaria('cajas');
   if (khTab === 'asistencias')  el.innerHTML = renderAsistencias();
   if (khTab === 'pedidos')      el.innerHTML = renderPedidos();
 }
@@ -3167,10 +3181,14 @@ function renderAsistencias() {
     </div>`;
 }
 
-function renderProduccion() {
+function renderProduccion(key) {
+  const src = DATA[key]||[];
+  if (!src.length) return '<div class="empty" style="padding:40px 0;">Sin datos.</div>';
+  const per = khMes[key];
+  const esCajas = key==='cajas';
   // Monthly aggregates over ALL data (for charts, always full picture)
   const byMonth = {};
-  DATA.produccion.forEach(r => {
+  src.forEach(r => {
     const m = (r['fecha']||'').substring(0,7); if (!m) return;
     if (!byMonth[m]) byMonth[m] = {total:0, dias:new Set()};
     byMonth[m].total += num(r['cantidad']);
@@ -3179,9 +3197,9 @@ function renderProduccion() {
   const mKeys = Object.keys(byMonth).sort();
 
   // Filtered rows for KPIs + tables
-  const rows = khPeriodo==='todo'
-    ? DATA.produccion
-    : DATA.produccion.filter(r=>(r['fecha']||'').startsWith(khPeriodo));
+  const rows = per==='todo'
+    ? src
+    : src.filter(r=>(r['fecha']||'').startsWith(per));
 
   const totalUds  = rows.reduce((s,r)=>s+num(r['cantidad']),0);
   const diasUnicos = new Set(rows.map(r=>r['fecha'])).size;
@@ -3190,10 +3208,10 @@ function renderProduccion() {
   // ── Chart 1: filter bars (producción total por mes) ──
   const maxTotal = Math.max(...mKeys.map(m=>byMonth[m].total), 1);
   const filterBars = mKeys.map(m => {
-    const isSel  = khPeriodo === m;
+    const isSel  = per === m;
     const pct    = Math.round(byMonth[m].total/maxTotal*100);
     const lbl    = byMonth[m].total>=1000 ? (byMonth[m].total/1000).toFixed(1)+'k' : byMonth[m].total;
-    const click  = isSel ? `khPeriodo='todo';renderKHContent();` : `khPeriodo='${m}';renderKHContent();`;
+    const click  = isSel ? `khMes['${key}']='todo';renderKHContent();` : `khMes['${key}']='${m}';renderKHContent();`;
     const accent = '#b89021', border = '#e0cfa0', surf2 = '#f4e8c8', muted = '#9a8a6a';
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end;cursor:pointer;" onclick="${click}">
       <div style="font-size:8px;color:${isSel?accent:muted};font-family:'Red Hat Display',sans-serif;">${lbl}</div>
@@ -3220,7 +3238,7 @@ function renderProduccion() {
     const x      = PL + i*bw + bw*0.12;
     const bwA    = bw*0.76;
     const y      = PT+PH-bh;
-    const isSel  = khPeriodo === m;
+    const isSel  = per === m;
     svgBars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bwA.toFixed(1)}" height="${bh.toFixed(1)}" rx="2"
       fill="${isSel?'#b89021':'#f4e8c8'}" stroke="${isSel?'#b89021':'#e0cfa0'}" stroke-width="1"/>
       <text x="${(x+bwA/2).toFixed(1)}" y="${(y-4).toFixed(1)}" text-anchor="middle" fill="${isSel?'#b89021':'#9a8a6a'}" font-size="8" font-family="Red Hat Display,sans-serif" font-weight="${isSel?'600':'400'}">${Math.round(prom)}</text>`;
@@ -3236,13 +3254,13 @@ function renderProduccion() {
     byProd[prod].total += num(r['cantidad']);
     byProd[prod].medidas[med] = (byProd[prod].medidas[med]||0) + num(r['cantidad']);
   });
-  const allMed = [...new Set(DATA.produccion.map(r=>(r['medida']||'').trim()))].filter(Boolean)
+  const allMed = [...new Set(src.map(r=>(r['medida']||'').trim()))].filter(Boolean)
     .sort((a,b)=>parseInt(a)-parseInt(b));
 
   const prodTop  = Object.entries(byProd).sort((a,b)=>b[1].total-a[1].total)[0];
-  const periodoLabel = khPeriodo==='todo' ? 'Todo el período' : formatMes(khPeriodo);
-  const resetLink = khPeriodo!=='todo'
-    ? ` · <span onclick="khPeriodo='todo';renderKHContent();" style="cursor:pointer;text-decoration:underline;color:#9a8a6a;">ver todo</span>`
+  const periodoLabel = per==='todo' ? 'Todo el período' : formatMes(per);
+  const resetLink = per!=='todo'
+    ? ` · <span onclick="khMes['${key}']='todo';renderKHContent();" style="cursor:pointer;text-decoration:underline;color:#9a8a6a;">ver todo</span>`
     : '';
 
   // Dos tablas: negra (50/100) y blanca (resto de medidas: 30/60/125)
@@ -3269,16 +3287,16 @@ function renderProduccion() {
   return `
     <div class="v-chart-wrap" style="margin-bottom:24px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <div class="v-chart-title" style="margin:0;">Producción total por mes · clic para filtrar</div>
+        <div class="v-chart-title" style="margin:0;">${esCajas?'Cajas armadas':'Producción total'} por mes · clic para filtrar</div>
         <div style="font-size:10px;color:var(--accent);letter-spacing:0.06em;">${periodoLabel}${resetLink}</div>
       </div>
       <div style="display:flex;align-items:flex-end;gap:3px;height:100px;padding-bottom:30px;">${filterBars}</div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
-      <div class="v-kpi"><div class="v-kpi-label">Unidades producidas</div><div class="v-kpi-val" style="color:var(--accent);">${Math.round(totalUds).toLocaleString('es-AR')}</div><div class="v-kpi-sub">${diasUnicos} días de producción</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">${esCajas?'Cajas armadas':'Unidades producidas'}</div><div class="v-kpi-val" style="color:var(--accent);">${Math.round(totalUds).toLocaleString('es-AR')}</div><div class="v-kpi-sub">${diasUnicos} días de ${esCajas?'armado':'producción'}</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Promedio diario</div><div class="v-kpi-val">${promDia.toFixed(0)}</div><div class="v-kpi-sub">uds / día trabajado</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Producto top</div><div class="v-kpi-val" style="font-size:14px;">${prodTop?prodTop[0]:'—'}</div><div class="v-kpi-sub">${prodTop?Math.round(prodTop[1].total).toLocaleString('es-AR')+' uds':''}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">${esCajas?'Caja top':'Producto top'}</div><div class="v-kpi-val" style="font-size:14px;">${prodTop?prodTop[0]:'—'}</div><div class="v-kpi-sub">${prodTop?Math.round(prodTop[1].total).toLocaleString('es-AR')+' uds':''}</div></div>
     </div>
 
     <div class="v-chart-wrap" style="margin-bottom:28px;">
@@ -3288,44 +3306,47 @@ function renderProduccion() {
       </svg>
     </div>
 
-    ${prodTable('Línea Negra', medNegra)}
-    ${prodTable('Línea Blanca', medBlanca)}`;
+    ${prodTable(esCajas?'Caja Negra':'Línea Negra', medNegra)}
+    ${prodTable(esCajas?'Caja Blanca':'Línea Blanca', medBlanca)}`;
 }
 
-// ── PRODUCCIÓN DIARIA ────────────────────────────────────────────
-let khDiaMes = null;   // 'yyyy-mm' seleccionado (null = último mes con datos)
-let khDiaSel = null;   // null = todo el mes; Set de fechas 'yyyy-mm-dd' si hay días elegidos
+// ── PRODUCCIÓN / CAJAS DIARIA ────────────────────────────────────
+// Estado por vista: mes 'yyyy-mm' (null = último con datos) y sel (null = todo el mes; Set de fechas)
+let khDia = {produccion:{mes:null, sel:null}, cajas:{mes:null, sel:null}};
 
-function setKHDiaMes(m){ khDiaMes = m; khDiaSel = null; renderKHContent(); }
-function toggleKHDia(d){
-  if (!khDiaSel) khDiaSel = new Set();
-  if (khDiaSel.has(d)) khDiaSel.delete(d); else khDiaSel.add(d);
-  if (!khDiaSel.size) khDiaSel = null;
+function setKHDiaMes(key,m){ khDia[key].mes = m; khDia[key].sel = null; renderKHContent(); }
+function toggleKHDia(key,d){
+  const st = khDia[key];
+  if (!st.sel) st.sel = new Set();
+  if (st.sel.has(d)) st.sel.delete(d); else st.sel.add(d);
+  if (!st.sel.size) st.sel = null;
   renderKHContent();
 }
 
-function renderProdDiaria(){
-  const meses = [...new Set(DATA.produccion.map(r=>(r['fecha']||'').substring(0,7)))].filter(Boolean).sort();
-  if (!meses.length) return '<div class="empty" style="padding:40px 0;">Sin datos de producción.</div>';
-  if (!khDiaMes || !meses.includes(khDiaMes)) khDiaMes = meses[meses.length-1];
+function renderProdDiaria(key){
+  const src = DATA[key]||[];
+  const st = khDia[key];
+  const meses = [...new Set(src.map(r=>(r['fecha']||'').substring(0,7)))].filter(Boolean).sort();
+  if (!meses.length) return '<div class="empty" style="padding:40px 0;">Sin datos.</div>';
+  if (!st.mes || !meses.includes(st.mes)) st.mes = meses[meses.length-1];
 
-  const dias = [...new Set(DATA.produccion.filter(r=>(r['fecha']||'').startsWith(khDiaMes)).map(r=>r['fecha']))].sort();
-  if (khDiaSel){ khDiaSel = new Set([...khDiaSel].filter(d=>dias.includes(d))); if(!khDiaSel.size) khDiaSel = null; }
+  const dias = [...new Set(src.filter(r=>(r['fecha']||'').startsWith(st.mes)).map(r=>r['fecha']))].sort();
+  if (st.sel){ st.sel = new Set([...st.sel].filter(d=>dias.includes(d))); if(!st.sel.size) st.sel = null; }
 
-  const activos = khDiaSel ? khDiaSel : new Set(dias);
-  const rows = DATA.produccion.filter(r=>activos.has(r['fecha']));
+  const activos = st.sel ? st.sel : new Set(dias);
+  const rows = src.filter(r=>activos.has(r['fecha']));
 
   const DOW = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const chip = d=>{
-    const sel = !!(khDiaSel && khDiaSel.has(d));
+    const sel = !!(st.sel && st.sel.has(d));
     const dt = new Date(d+'T00:00:00');
-    return `<div onclick="toggleKHDia('${d}')" style="cursor:pointer;padding:5px 9px;border-radius:6px;border:1px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'var(--surface)'};color:${sel?'#fff':'var(--text)'};text-align:center;min-width:48px;transition:all 0.15s;"
+    return `<div onclick="toggleKHDia('${key}','${d}')" style="cursor:pointer;padding:5px 9px;border-radius:6px;border:1px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'var(--surface)'};color:${sel?'#fff':'var(--text)'};text-align:center;min-width:48px;transition:all 0.15s;"
       onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
       <div style="font-size:8px;letter-spacing:0.08em;text-transform:uppercase;color:${sel?'#fff':'var(--muted)'};">${DOW[dt.getDay()]}</div>
       <div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;">${parseInt(d.substring(8,10))}</div>
     </div>`;
   };
-  const chipTodos = `<div onclick="khDiaSel=null;renderKHContent();" style="cursor:pointer;padding:5px 12px;border-radius:6px;border:1px solid ${!khDiaSel?'var(--accent)':'var(--border)'};background:${!khDiaSel?'var(--accent)':'var(--surface)'};color:${!khDiaSel?'#fff':'var(--text)'};font-size:11px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">Todo el mes</div>`;
+  const chipTodos = `<div onclick="khDia['${key}'].sel=null;renderKHContent();" style="cursor:pointer;padding:5px 12px;border-radius:6px;border:1px solid ${!st.sel?'var(--accent)':'var(--border)'};background:${!st.sel?'var(--accent)':'var(--surface)'};color:${!st.sel?'#fff':'var(--text)'};font-size:11px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">Todo el mes</div>`;
 
   const agg = {};
   rows.forEach(r=>{
@@ -3341,21 +3362,22 @@ function renderProdDiaria(){
     ? `<tr style="background:var(--surface2);"><td style="font-weight:600;">TOTAL</td><td></td><td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${Math.round(total).toLocaleString('es-AR')}</td></tr>`
     : `<tr><td colspan="3" style="text-align:center;color:var(--muted);">Sin producción en los días elegidos</td></tr>`;
 
-  const nSel = khDiaSel ? khDiaSel.size : 0;
-  const selLabel = khDiaSel
+  const esCajas = key==='cajas';
+  const nSel = st.sel ? st.sel.size : 0;
+  const selLabel = st.sel
     ? `${nSel} día${nSel>1?'s':''} elegido${nSel>1?'s':''}`
-    : `todo ${formatMes(khDiaMes)} · ${dias.length} días con producción`;
+    : `todo ${formatMes(st.mes)} · ${dias.length} días con ${esCajas?'armado':'producción'}`;
 
   return `
     <div class="v-chart-wrap" style="margin-bottom:20px;">
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
-        <div class="v-chart-title" style="margin:0;">Producción diaria</div>
-        <select class="v-select" onchange="setKHDiaMes(this.value)">
-          ${meses.map(m=>`<option value="${m}" ${m===khDiaMes?'selected':''}>${formatMes(m)}</option>`).join('')}
+        <div class="v-chart-title" style="margin:0;">${esCajas?'Armado de cajas diario':'Producción diaria'}</div>
+        <select class="v-select" onchange="setKHDiaMes('${key}',this.value)">
+          ${meses.map(m=>`<option value="${m}" ${m===st.mes?'selected':''}>${formatMes(m)}</option>`).join('')}
         </select>
         <div style="font-size:10px;color:var(--muted);">Mostrando: <span style="color:var(--accent);">${selLabel}</span></div>
       </div>
-      <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Días con producción · clic para elegir uno o varios</div>
+      <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Días con ${esCajas?'armado':'producción'} · clic para elegir uno o varios</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">${chipTodos}${dias.map(chip).join('')}</div>
     </div>
 
