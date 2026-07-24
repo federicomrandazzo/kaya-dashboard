@@ -2995,6 +2995,7 @@ function renderKayaHouse() {
   el.innerHTML = `
     <div class="tabs">
       <div class="tab ${khTab==='produccion'?'active':''}" onclick="setKHTab('produccion')">Producción</div>
+      <div class="tab ${khTab==='proddiaria'?'active':''}" onclick="setKHTab('proddiaria')">Producción diaria</div>
       <div class="tab ${khTab==='asistencias'?'active':''}" onclick="setKHTab('asistencias')">Asistencias</div>
       <div class="tab ${khTab==='pedidos'?'active':''}" onclick="setKHTab('pedidos')">Pedidos</div>
     </div>
@@ -3013,6 +3014,7 @@ function renderKHContent() {
   const el = document.getElementById('kh-tab-content');
   if (!el) return;
   if (khTab === 'produccion')   el.innerHTML = renderProduccion();
+  if (khTab === 'proddiaria')   el.innerHTML = renderProdDiaria();
   if (khTab === 'asistencias')  el.innerHTML = renderAsistencias();
   if (khTab === 'pedidos')      el.innerHTML = renderPedidos();
 }
@@ -3288,6 +3290,82 @@ function renderProduccion() {
 
     ${prodTable('Línea Negra', medNegra)}
     ${prodTable('Línea Blanca', medBlanca)}`;
+}
+
+// ── PRODUCCIÓN DIARIA ────────────────────────────────────────────
+let khDiaMes = null;   // 'yyyy-mm' seleccionado (null = último mes con datos)
+let khDiaSel = null;   // null = todo el mes; Set de fechas 'yyyy-mm-dd' si hay días elegidos
+
+function setKHDiaMes(m){ khDiaMes = m; khDiaSel = null; renderKHContent(); }
+function toggleKHDia(d){
+  if (!khDiaSel) khDiaSel = new Set();
+  if (khDiaSel.has(d)) khDiaSel.delete(d); else khDiaSel.add(d);
+  if (!khDiaSel.size) khDiaSel = null;
+  renderKHContent();
+}
+
+function renderProdDiaria(){
+  const meses = [...new Set(DATA.produccion.map(r=>(r['fecha']||'').substring(0,7)))].filter(Boolean).sort();
+  if (!meses.length) return '<div class="empty" style="padding:40px 0;">Sin datos de producción.</div>';
+  if (!khDiaMes || !meses.includes(khDiaMes)) khDiaMes = meses[meses.length-1];
+
+  const dias = [...new Set(DATA.produccion.filter(r=>(r['fecha']||'').startsWith(khDiaMes)).map(r=>r['fecha']))].sort();
+  if (khDiaSel){ khDiaSel = new Set([...khDiaSel].filter(d=>dias.includes(d))); if(!khDiaSel.size) khDiaSel = null; }
+
+  const activos = khDiaSel ? khDiaSel : new Set(dias);
+  const rows = DATA.produccion.filter(r=>activos.has(r['fecha']));
+
+  const DOW = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const chip = d=>{
+    const sel = !!(khDiaSel && khDiaSel.has(d));
+    const dt = new Date(d+'T00:00:00');
+    return `<div onclick="toggleKHDia('${d}')" style="cursor:pointer;padding:5px 9px;border-radius:6px;border:1px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'var(--surface)'};color:${sel?'#fff':'var(--text)'};text-align:center;min-width:48px;transition:all 0.15s;"
+      onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+      <div style="font-size:8px;letter-spacing:0.08em;text-transform:uppercase;color:${sel?'#fff':'var(--muted)'};">${DOW[dt.getDay()]}</div>
+      <div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;">${parseInt(d.substring(8,10))}</div>
+    </div>`;
+  };
+  const chipTodos = `<div onclick="khDiaSel=null;renderKHContent();" style="cursor:pointer;padding:5px 12px;border-radius:6px;border:1px solid ${!khDiaSel?'var(--accent)':'var(--border)'};background:${!khDiaSel?'var(--accent)':'var(--surface)'};color:${!khDiaSel?'#fff':'var(--text)'};font-size:11px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">Todo el mes</div>`;
+
+  const agg = {};
+  rows.forEach(r=>{
+    const k = (r['producto']||'').trim()+'|'+(r['medida']||'').trim();
+    agg[k] = (agg[k]||0) + num(r['cantidad']);
+  });
+  const items = Object.entries(agg).map(([k,cant])=>{ const [prod,med]=k.split('|'); return {prod,med,cant}; })
+    .sort((a,b)=> a.prod===b.prod ? parseInt(a.med)-parseInt(b.med) : a.prod.localeCompare(b.prod));
+  const total = items.reduce((s,x)=>s+x.cant,0);
+
+  const filas = items.map(x=>`<tr><td>${x.prod}</td><td style="text-align:right;color:var(--muted);">${x.med}</td><td style="text-align:right;font-variant-numeric:tabular-nums;">${Math.round(x.cant).toLocaleString('es-AR')}</td></tr>`).join('');
+  const totRow = items.length
+    ? `<tr style="background:var(--surface2);"><td style="font-weight:600;">TOTAL</td><td></td><td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${Math.round(total).toLocaleString('es-AR')}</td></tr>`
+    : `<tr><td colspan="3" style="text-align:center;color:var(--muted);">Sin producción en los días elegidos</td></tr>`;
+
+  const nSel = khDiaSel ? khDiaSel.size : 0;
+  const selLabel = khDiaSel
+    ? `${nSel} día${nSel>1?'s':''} elegido${nSel>1?'s':''}`
+    : `todo ${formatMes(khDiaMes)} · ${dias.length} días con producción`;
+
+  return `
+    <div class="v-chart-wrap" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
+        <div class="v-chart-title" style="margin:0;">Producción diaria</div>
+        <select class="v-select" onchange="setKHDiaMes(this.value)">
+          ${meses.map(m=>`<option value="${m}" ${m===khDiaMes?'selected':''}>${formatMes(m)}</option>`).join('')}
+        </select>
+        <div style="font-size:10px;color:var(--muted);">Mostrando: <span style="color:var(--accent);">${selLabel}</span></div>
+      </div>
+      <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Días con producción · clic para elegir uno o varios</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${chipTodos}${dias.map(chip).join('')}</div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Detalle · producto y presentación</div>
+      <table class="data-table">
+        <thead><tr><th>Producto</th><th style="text-align:right;">Presentación</th><th style="text-align:right;">Cantidad</th></tr></thead>
+        <tbody>${filas}${totRow}</tbody>
+      </table>
+    </div>`;
 }
 
 // ── PEDIDOS ──────────────────────────────────────────────────────
