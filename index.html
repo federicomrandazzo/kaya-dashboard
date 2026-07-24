@@ -682,7 +682,7 @@ async function doLogin(){
 }
 function logout(){ localStorage.removeItem('kayaAuth'); location.reload(); }
 // Registro de accesos en Google Sheet vía Apps Script (URL vacía = apagado)
-const LOG_URL='';
+const LOG_URL='https://script.google.com/macros/s/AKfycbxdnIM_GYqa_5dlaxwCFa7mC7VdLGKzmYyHF-jLxXEz5pN97ku34vNazyYFgV8iDPMr/exec';
 function registrarAcceso(evento){
   if(!LOG_URL||!USER) return;
   const disp=/Mobi|Android/i.test(navigator.userAgent)?'celular':'computadora';
