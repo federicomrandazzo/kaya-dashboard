@@ -646,7 +646,8 @@
 // ── AUTH ────────────────────────────────────────────────────────
 // Solo se guardan hashes SHA-256 de las contraseñas, nunca el texto plano.
 const AUTH_USERS = {
-  '496e1024976c46529563591cf710a3f23ee88f280ec01790f7fb66e1dbc76b33': {role:'admin',  label:'Admin'},
+  '878f96264ece1c85973dfa3b39dec9a7dc4cf6f08168ff5a183389a36b1bb9d0': {role:'admin',  label:'Federico'},
+  '496e1024976c46529563591cf710a3f23ee88f280ec01790f7fb66e1dbc76b33': {role:'admin',  label:'Ry'},
   '88181564dd39240afed2778078fc527f1a13d7a27a508027cc41edccfd30d697': {role:'ventas', label:'Ventas'},
   'ca392825f45dafa307b9f83524d8cd9c51022c0938507df7186ffc1a168d5cf0': {role:'house',  label:'House'},
   '79f575e1bd80d7dc478fa0dc204ad665696a8c6f56d74af1ea764750436dad95': {role:'cajas',  label:'Cajas'},
@@ -677,8 +678,19 @@ async function doLogin(){
   if(!u){ document.getElementById('login-err').style.display='block'; return; }
   localStorage.setItem('kayaAuth',h);
   startApp(u);
+  registrarAcceso('ingreso con clave');
 }
 function logout(){ localStorage.removeItem('kayaAuth'); location.reload(); }
+// Registro de accesos en Google Sheet vía Apps Script (URL vacía = apagado)
+const LOG_URL='';
+function registrarAcceso(evento){
+  if(!LOG_URL||!USER) return;
+  const disp=/Mobi|Android/i.test(navigator.userAgent)?'celular':'computadora';
+  try{
+    fetch(LOG_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'perfil='+encodeURIComponent(USER.label)+'&evento='+encodeURIComponent(evento)+'&dispositivo='+encodeURIComponent(disp)});
+  }catch(e){}
+}
 function startApp(u){
   USER=u;
   document.getElementById('login-screen').style.display='none';
@@ -3982,7 +3994,7 @@ function renderPublicidad(){
 (function(){
   const h=localStorage.getItem('kayaAuth');
   const u=h?AUTH_USERS[h]:null;
-  if(u) startApp(u);
+  if(u){ startApp(u); setTimeout(()=>registrarAcceso('sesión recordada'),3000); }
   else { document.getElementById('login-screen').style.display='flex'; const i=document.getElementById('login-pass'); if(i) setTimeout(()=>i.focus(),50); }
 })();
 
