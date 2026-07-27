@@ -457,6 +457,10 @@
   .v-kpi-sub { font-size:10px;color:var(--muted);margin-top:3px; }
   .v-kpi-delta-pos { color:var(--accent);font-size:11px; }
   .v-kpi-delta-neg { color:var(--accent3);font-size:11px; }
+  /* KPIs de Finanzas: 6 tarjetas en la fila, versión compacta */
+  .fin-kpis .v-kpi { padding:10px 12px; }
+  .fin-kpis .v-kpi-val { font-size:15px; }
+  .fin-kpis .v-kpi-sub { font-size:9px; }
 
   .v-section { margin-bottom:32px; }
   .v-section-title { font-family:'DM Serif Display',serif;font-size:15px;font-weight:400;margin-bottom:16px; }
@@ -2259,6 +2263,9 @@ function renderFinanzas(){
   const pagos=conPagos?finPagos():[];
   const en10=new Date(hoy.getTime()+10*86400000);
   const en30=new Date(hoy.getTime()+30*86400000);
+  // Esta semana: de hoy al domingo (la ventana se achica a medida que avanza la semana)
+  const domSem=new Date(hoy.getTime()+(6-((hoy.getDay()+6)%7))*86400000);
+  const pagSem=pagos.filter(p=>p.fecha>=hoy&&p.fecha<=domSem);
   const pag10=pagos.filter(p=>p.fecha<=en10);
   const pag30=pagos.filter(p=>p.fecha<=en30);
   const grandes30=pag30.filter(p=>p.monto>=UMBRAL_GRANDE);
@@ -2277,8 +2284,9 @@ function renderFinanzas(){
   const sinRec='falta conectar recopilador';
   const kpiBtn=(key,html)=>`<div onclick="setFinKpiDet('${key}')" title="clic para ver el detalle" style="cursor:pointer;border-radius:8px;${finKpiDet===key?'outline:2px solid var(--accent);':''}">${html}</div>`;
   const verDet=k=>finKpiDet===k?' · cerrar ▴':' · ver detalle ▾';
-  const kpis=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;">
+  const kpis=`<div class="fin-kpis" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:24px;">
     ${pubKPI('Disponible operativo',pesos(disponible),`en cuentas ${pesos(reserva)} − ${pesos(PISO_RESERVA)} que viven en Reservas MP Ry${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
+    ${kpiBtn('dsem',pubKPI('A pagar esta semana',conPagos?pesos(pagSem.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pagSem.length+' pagos · hasta el dom '+fF(domSem)+verDet('dsem'):sinRec,'var(--accent2)'))}
     ${kpiBtn('d10',pubKPI('A pagar 10 días',conPagos?pesos(pag10.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag10.length+' pagos'+verDet('d10'):sinRec,'var(--accent2)'))}
     ${kpiBtn('d30',pubKPI('A pagar 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos'+verDet('d30'):sinRec))}
     ${kpiBtn('g30',pubKPI('Grandes (≥'+Math.round(UMBRAL_GRANDE/1e6)+'M) en 30 días',conPagos?pesos(grandes30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?grandes30.length+' pagos'+verDet('g30'):sinRec,'var(--accent3)'))}
@@ -2288,7 +2296,7 @@ function renderFinanzas(){
   // ── Detalle del KPI clickeado ──
   let kpiDet='';
   if(conPagos&&finKpiDet){
-    const sets={d10:{t:'A pagar · próximos 10 días',list:pag10},d30:{t:'A pagar · próximos 30 días',list:pag30},g30:{t:'Pagos grandes (≥$'+Math.round(UMBRAL_GRANDE/1e6)+'M) · próximos 30 días',list:grandes30}};
+    const sets={dsem:{t:'A pagar · esta semana (hasta el dom '+fF(domSem)+')',list:pagSem},d10:{t:'A pagar · próximos 10 días',list:pag10},d30:{t:'A pagar · próximos 30 días',list:pag30},g30:{t:'Pagos grandes (≥$'+Math.round(UMBRAL_GRANDE/1e6)+'M) · próximos 30 días',list:grandes30}};
     const s=sets[finKpiDet];
     if(s){
       const detRows=s.list.map(p=>{
