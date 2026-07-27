@@ -695,24 +695,31 @@ function registrarAcceso(evento){
       body:'perfil='+encodeURIComponent(USER.label)+'&evento='+encodeURIComponent(evento)+'&dispositivo='+encodeURIComponent(disp)});
   }catch(e){}
 }
-// Registro de salida con duración de la sesión. Se dispara al cerrar la pestaña o
-// mandarla a segundo plano (pagehide/visibilitychange) — sendBeacon sobrevive al cierre.
-// Si el usuario vuelve y se va otra vez, se registra otra salida: la ÚLTIMA es el total real.
-const SES_T0 = Date.now();
-let ultimaSalida = 0;
+// Registro de salida con minutos DE USO REAL: el reloj corre solo mientras la pestaña
+// está visible (se pausa en segundo plano y se reanuda al volver). Cada vez que la
+// pestaña se oculta o se cierra se registra 'salida · N min de uso' con el acumulado —
+// la ÚLTIMA salida de la sesión es el tiempo total de uso. sendBeacon sobrevive al cierre.
+let usoMs = 0, visibleDesde = Date.now(), ultimaSalida = 0;
+function minutosUso(){
+  let ms = usoMs;
+  if(document.visibilityState==='visible') ms += Date.now() - visibleDesde;
+  return Math.max(1, Math.round(ms/60000));
+}
 function registrarSalida(){
   if(!LOG_URL||!USER) return;
   const ahora = Date.now();
   if(ahora - ultimaSalida < 30000) return;   // evita filas duplicadas del mismo cierre
   ultimaSalida = ahora;
-  const min = Math.max(1, Math.round((ahora - SES_T0)/60000));
   const disp=/Mobi|Android/i.test(navigator.userAgent)?'celular':'computadora';
-  const body = new URLSearchParams({perfil:USER.label, evento:'salida · '+min+' min', dispositivo:disp});
+  const body = new URLSearchParams({perfil:USER.label, evento:'salida · '+minutosUso()+' min de uso', dispositivo:disp});
   if(navigator.sendBeacon){ try{ navigator.sendBeacon(LOG_URL, body); return; }catch(e){} }
   try{ fetch(LOG_URL,{method:'POST',mode:'no-cors',keepalive:true,body}); }catch(e){}
 }
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='hidden'){ usoMs += Date.now() - visibleDesde; registrarSalida(); }
+  else { visibleDesde = Date.now(); }
+});
 window.addEventListener('pagehide', registrarSalida);
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') registrarSalida(); });
 function startApp(u){
   USER=u;
   document.getElementById('login-screen').style.display='none';
