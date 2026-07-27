@@ -2128,7 +2128,7 @@ function finPagadosLocal(){
 }
 function finPagos(){
   const pagadosLocal=finPagadosLocal();
-  return DATA.finanzas.filter(r=>{
+  const items=DATA.finanzas.filter(r=>{
     const f=(r['FUENTE']||'').trim();
     if(!f||FIN_EXCLUIR.includes(f)) return false;
     if(pagadosLocal.has(r._fila)) return false;
@@ -2143,7 +2143,23 @@ function finPagos(){
     const label=esCheque?[conc,prov?'cheque '+prov:''].filter(Boolean).join(' · '):[prov,conc].filter(Boolean).join(' · ');
     const detalle=esCheque?(prov?'cheque '+prov:conc):(prov||conc);
     return {fila:r._fila,fuenteRaw:(r['FUENTE']||'').trim(),concRaw:conc,fecha:finDate(r['FECHA ESTIMADA']),fuente,concepto:esCheque?conc:(conc||'(sin concepto)'),detalle:detalle||'(sin detalle)',label:label||'(sin detalle)',monto:Math.abs(num(r['IMPORTE'])),cuenta:(r['CUENTA']||'').trim()};
-  }).filter(p=>p.fecha&&p.monto>0).sort((a,b)=>a.fecha-b.fecha);
+  }).filter(p=>p.fecha&&p.monto>0);
+  // Sueldos agrupados: una línea por cuenta de pago (EFT / MP Ry) y vencimiento (pedido de Federico, jul 2026).
+  // fila queda "674,676,…" para que la Lista de pagos marque todas las filas de la hoja juntas.
+  const gruposSueldos={}, out=[];
+  items.forEach(p=>{
+    if(!/laboral/i.test(p.concRaw)){ out.push(p); return; }
+    const k=(p.cuenta||'?')+'|'+p.fecha.getTime();
+    if(!gruposSueldos[k]){ gruposSueldos[k]={...p,monto:0,filas:[],personas:0}; out.push(gruposSueldos[k]); }
+    const g=gruposSueldos[k];
+    g.monto+=p.monto; g.filas.push(p.fila); g.personas++;
+  });
+  Object.values(gruposSueldos).forEach(g=>{
+    g.detalle=`Sueldos por ${g.cuenta||'(sin cuenta)'} · ${g.personas} ${g.personas===1?'pago':'pagos'}`;
+    g.label=g.detalle;
+    g.fila=g.filas.join(',');
+  });
+  return out.sort((a,b)=>a.fecha-b.fecha);
 }
 function finSaldos(){
   let rows=DATA.saldos.map(r=>({cuenta:r.cuenta,saldo:num(r.saldo)}));
@@ -2201,12 +2217,17 @@ async function guardarPagados(){
   const checks=[...document.querySelectorAll('.fin-pag-check:checked')];
   const btn=document.getElementById('fin-pagar-btn'), msg=document.getElementById('fin-pagar-msg');
   if(!checks.length){ msg.textContent='No hay gastos tildados.'; msg.style.color='var(--muted)'; return; }
-  const sel=checks.map(c=>{ const tr=c.closest('tr'); return {
-    fila:+tr.dataset.fila,
-    fuente:tr.dataset.fuente,
-    concepto:tr.dataset.concepto,
-    fecha:(tr.querySelector('.fin-pag-fecha').value||'').trim(),
-  };});
+  // data-fila puede traer varias filas ("674,676,…") cuando la línea es un grupo (sueldos)
+  const sel=checks.flatMap(c=>{
+    const tr=c.closest('tr');
+    const fecha=(tr.querySelector('.fin-pag-fecha').value||'').trim();
+    return String(tr.dataset.fila).split(',').map(f=>({
+      fila:+f,
+      fuente:tr.dataset.fuente,
+      concepto:tr.dataset.concepto,
+      fecha,
+    }));
+  });
   btn.disabled=true; msg.textContent='Guardando…'; msg.style.color='var(--muted)';
   try{
     const res=await fetch(FIN.appsScript,{method:'POST',body:JSON.stringify({token:FIN.token,accion:'pagar',pagos:sel})});
