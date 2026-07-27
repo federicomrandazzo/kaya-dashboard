@@ -2263,9 +2263,9 @@ function renderFinanzas(){
   const pagos=conPagos?finPagos():[];
   const en10=new Date(hoy.getTime()+10*86400000);
   const en30=new Date(hoy.getTime()+30*86400000);
-  // Esta semana: de hoy al domingo (la ventana se achica a medida que avanza la semana)
+  // Esta semana: hasta el domingo, vencidos incluidos (la ventana se achica a medida que avanza la semana)
   const domSem=new Date(hoy.getTime()+(6-((hoy.getDay()+6)%7))*86400000);
-  const pagSem=pagos.filter(p=>p.fecha>=hoy&&p.fecha<=domSem);
+  const pagSem=pagos.filter(p=>p.fecha<=domSem);
   const pag10=pagos.filter(p=>p.fecha<=en10);
   const pag30=pagos.filter(p=>p.fecha<=en30);
   const grandes30=pag30.filter(p=>p.monto>=UMBRAL_GRANDE);
