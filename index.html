@@ -2767,17 +2767,15 @@ function calcProyeccion(silent) {
     }
   });
 
+  // stockTN indexado por SKU de TN, su equivalente DUX (SKU_MAP es TN→DUX) y la variante sin guión.
+  // Set para no sumar dos veces cuando el equivalente DUX coincide con la variante sin guión.
   const stockTN = {};
-  const TN_TO_COMP = {};
-  Object.entries(SKU_MAP).forEach(([comp, tn]) => { TN_TO_COMP[tn] = comp; });
   DATA.tn.forEach(r => {
     const sk = (r['SKU'] || '').trim(); if (!sk) return;
     const qty = num(r['Stock']);
-    stockTN[sk] = (stockTN[sk] || 0) + qty;
-    const comp = TN_TO_COMP[sk];
-    if (comp) stockTN[comp] = (stockTN[comp] || 0) + qty;
-    const norm = sk.replace(/-(\d)/g, '$1');
-    if (norm !== sk) stockTN[norm] = (stockTN[norm] || 0) + qty;
+    const keys = new Set([sk, sk.replace(/-(\d)/g, '$1')]);
+    if (SKU_MAP[sk]) keys.add(SKU_MAP[sk]);
+    keys.forEach(k => { stockTN[k] = (stockTN[k] || 0) + qty; });
   });
 
   // stockArmado: lts ya embotellados por insumo (stock TN × receta)
@@ -2810,15 +2808,13 @@ function calcProyeccion(silent) {
   });
 
   // Rubro TN: propagar categoría del padre a variantes via buildTNProducts
-  // Indexar por SKU de TN Y por SKU de DUX (via SKU_MAP inverso)
+  // Indexar por SKU de TN Y por SKU de DUX (SKU_MAP es TN→DUX)
   const rubroTN = {};
-  const SKU_MAP_INV = {};
-  Object.entries(SKU_MAP).forEach(([dux, tn]) => { SKU_MAP_INV[tn] = dux; });
   buildTNProducts().forEach(p => {
     const rb = isKit(p) ? 'KITS' : isNegra(p) ? 'LÍNEA NEGRA' : 'LÍNEA BLANCA';
     p.variantes.forEach(v => {
       rubroTN[v.sku] = rb;
-      const duxSku = SKU_MAP_INV[v.sku];
+      const duxSku = SKU_MAP[v.sku];
       if (duxSku) rubroTN[duxSku] = rb;
     });
   });
