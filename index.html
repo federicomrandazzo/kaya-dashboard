@@ -684,7 +684,7 @@ async function doLogin(){
   startApp(u);
   registrarAcceso('ingreso con clave');
 }
-function logout(){ localStorage.removeItem('kayaAuth'); location.reload(); }
+function logout(){ registrarSalida(); localStorage.removeItem('kayaAuth'); location.reload(); }
 // Registro de accesos en Google Sheet vía Apps Script (URL vacía = apagado)
 const LOG_URL='https://script.google.com/macros/s/AKfycbxdnIM_GYqa_5dlaxwCFa7mC7VdLGKzmYyHF-jLxXEz5pN97ku34vNazyYFgV8iDPMr/exec';
 function registrarAcceso(evento){
@@ -695,6 +695,24 @@ function registrarAcceso(evento){
       body:'perfil='+encodeURIComponent(USER.label)+'&evento='+encodeURIComponent(evento)+'&dispositivo='+encodeURIComponent(disp)});
   }catch(e){}
 }
+// Registro de salida con duración de la sesión. Se dispara al cerrar la pestaña o
+// mandarla a segundo plano (pagehide/visibilitychange) — sendBeacon sobrevive al cierre.
+// Si el usuario vuelve y se va otra vez, se registra otra salida: la ÚLTIMA es el total real.
+const SES_T0 = Date.now();
+let ultimaSalida = 0;
+function registrarSalida(){
+  if(!LOG_URL||!USER) return;
+  const ahora = Date.now();
+  if(ahora - ultimaSalida < 30000) return;   // evita filas duplicadas del mismo cierre
+  ultimaSalida = ahora;
+  const min = Math.max(1, Math.round((ahora - SES_T0)/60000));
+  const disp=/Mobi|Android/i.test(navigator.userAgent)?'celular':'computadora';
+  const body = new URLSearchParams({perfil:USER.label, evento:'salida · '+min+' min', dispositivo:disp});
+  if(navigator.sendBeacon){ try{ navigator.sendBeacon(LOG_URL, body); return; }catch(e){} }
+  try{ fetch(LOG_URL,{method:'POST',mode:'no-cors',keepalive:true,body}); }catch(e){}
+}
+window.addEventListener('pagehide', registrarSalida);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') registrarSalida(); });
 function startApp(u){
   USER=u;
   document.getElementById('login-screen').style.display='none';
