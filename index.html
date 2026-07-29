@@ -660,7 +660,7 @@ const AUTH_USERS = {
 const ROLE_MODULES = {
   admin:  ['ventas','semanal','pub','stock','proyeccion','kh','fin','edr'],
   ventas: ['semanal','pub','stock','proyeccion'],
-  house:  ['stock','proyeccion','kh'],
+  house:  ['stock','proyeccion','kh','ventas'],
   cajas:  ['kh'],
   lab:    ['kh'],
 };
@@ -669,6 +669,12 @@ const ROLE_KH_TABS = {
   cajas: ['cajas','cajasdiaria'],
   lab:   ['produccion','proddiaria'],
 };
+// Solapas del módulo Ventas visibles por rol (si el rol no figura, ve todas).
+// house: solo consumos, sin General/Por Línea ni cifras de venta en $.
+const ROLE_V_TABS = {
+  house: ['cprod','cins'],
+};
+function vTabs(){ return (USER && ROLE_V_TABS[USER.role]) || ['general','linea','cprod','cins']; }
 let USER = null;
 function roleAllows(mod){ return !!(USER && ROLE_MODULES[USER.role] && ROLE_MODULES[USER.role].includes(mod)); }
 function khTabs(){ return (USER && ROLE_KH_TABS[USER.role]) || ['produccion','proddiaria','cajas','cajasdiaria','asistencias','pedidos']; }
@@ -728,10 +734,11 @@ function startApp(u){
   const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',fin:'nav-fin',edr:'nav-edr'};
   Object.entries(NAVMAP).forEach(([m,id])=>{ const el=document.getElementById(id); if(el) el.style.display=roleAllows(m)?'flex':'none'; });
   document.getElementById('user-label').textContent=u.label;
-  currentModule=roleAllows('ventas')?'ventas':roleAllows('semanal')?'semanal':roleAllows('stock')?'stock':'kh';
+  currentModule=(ROLE_MODULES[u.role]&&ROLE_MODULES[u.role][0])||'stock';
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+currentModule); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=currentModule==='ventas'?'Ventas':currentModule==='semanal'?'Ventas Semanal':currentModule==='stock'?'Stock':'Operaciones';
+  const TITULOS={ventas:'Ventas',semanal:'Ventas Semanal',pub:'Publicidad',stock:'Stock',proyeccion:'Proyección',kh:'Operaciones',fin:'Finanzas',edr:'Estado de Resultados'};
+  document.getElementById('topbar-title').textContent=TITULOS[currentModule]||'Stock';
   loadData();
 }
 
@@ -1524,16 +1531,21 @@ function renderVentasModule(){
   if(!vPeriodo1) vPeriodo1=periodos[periodos.length-1];
   if(!vPeriodo2) vPeriodo2=periodos.length>1?periodos[periodos.length-2]:'';
 
+  const tabsV=vTabs();
+  if(!tabsV.includes(vTab)) vTab=tabsV[0];
+  const VLBL={general:'General', linea:'Por Línea', cprod:'Consumo Productos', cins:'Consumo Insumos'};
+  const conVenta=tabsV.includes('general');   // roles restringidos a consumos: sin métrica $ ni sticky bar de venta
+
   el.innerHTML=`
     <div id="kpi-anchor-ventas" style="height:1px;margin-top:-1px;"></div>
     <div class="v-filters" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-      <span class="v-filter-label">Métrica</span>
+      ${conVenta?`<span class="v-filter-label">Métrica</span>
       <div class="v-metric-toggle">
         <button class="v-metric-btn ${vMetrica==='ars'?'active':''}" onclick="setMetrica('ars')">ARS</button>
         <button class="v-metric-btn ${vMetrica==='usd'?'active':''}" onclick="setMetrica('usd')">USD</button>
         <button class="v-metric-btn ${vMetrica==='axi'?'active':''}" onclick="setMetrica('axi')">AXI</button>
-      </div>
-      <span class="v-filter-label" style="margin-left:8px;">Período</span>
+      </div>`:''}
+      <span class="v-filter-label" ${conVenta?'style="margin-left:8px;"':''}>Período</span>
       <select class="v-select" onchange="setP1(this.value)">
         ${periodos.map(p=>`<option value="${p}" ${p===vPeriodo1?'selected':''}>${p}</option>`).join('')}
       </select>
@@ -1544,15 +1556,12 @@ function renderVentasModule(){
       </select>
     </div>
     <div class="v-tabs">
-      <div class="v-tab ${vTab==='general'?'active':''}" onclick="setVTab('general')">General</div>
-      <div class="v-tab ${vTab==='linea'?'active':''}" onclick="setVTab('linea')">Por Línea</div>
-      <div class="v-tab ${vTab==='cprod'?'active':''}" onclick="setVTab('cprod')">Consumo Productos</div>
-      <div class="v-tab ${vTab==='cins'?'active':''}" onclick="setVTab('cins')">Consumo Insumos</div>
+      ${tabsV.map(t=>`<div class="v-tab ${vTab===t?'active':''}" onclick="setVTab('${t}')">${VLBL[t]}</div>`).join('')}
     </div>
     <div id="v-tab-content"></div>`;
-  updateVentasStickyBar();
+  if(conVenta){ updateVentasStickyBar(); setupStickyObs('ventas'); }
+  else { const b=document.getElementById('sbar-ventas'); if(b) b.classList.remove('vis'); }
   renderVTab();
-  setupStickyObs('ventas');
 }
 
 function setMetrica(m){ vMetrica=m; renderVentasModule(); }
@@ -1561,6 +1570,7 @@ function setP2(p){ vPeriodo2=p; renderVTab(); }
 function setVTab(t){ vTab=t; document.querySelectorAll('.v-tab').forEach(x=>x.classList.remove('active')); event.target.classList.add('active'); renderVTab(); }
 function renderVTab(){
   const el=document.getElementById('v-tab-content'); if(!el) return;
+  if(!vTabs().includes(vTab)) vTab=vTabs()[0];
   if(vTab==='general') el.innerHTML=renderGeneral();
   if(vTab==='linea')   el.innerHTML=renderPorLinea();
   if(vTab==='cprod'){ el.innerHTML=loadingSpinner(); setTimeout(()=>{ el.innerHTML=renderConsumoProductos(); },50); }
