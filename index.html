@@ -3070,6 +3070,7 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
 // ── KAYA HOUSE ───────────────────────────────────────────────────
 let khTab = 'produccion';
 let khMes = {produccion:'todo', cajas:'todo'};   // filtro de mes de las vistas mensuales
+let asistDesde = '', asistHasta = '';            // filtro de fechas de asistencias
 let khPedPeriodo = 'todo';
 
 function formatMes(ym) {
@@ -3118,9 +3119,65 @@ function normMotivo(m) {
   return m.trim() || 'Otro';
 }
 
+function asistQBtn(label, type, active) {
+  return `<button ${active?_QBT:_QBG} onclick="asistSetQuick('${type}')">${label}</button>`;
+}
+function asistSetQuick(type) {
+  const today=new Date(), tStr=pubDateStr(today);
+  let desde,hasta;
+  if(type==='este-mes'){
+    desde=pubDateStr(new Date(today.getFullYear(),today.getMonth(),1)); hasta=tStr;
+  } else if(type==='mes-pasado'){
+    desde=pubDateStr(new Date(today.getFullYear(),today.getMonth()-1,1));
+    hasta=pubDateStr(new Date(today.getFullYear(),today.getMonth(),0));
+  } else if(type==='esta-semana'){
+    const day=today.getDay(), diff=day===0?-6:1-day;
+    const mon=new Date(today); mon.setDate(today.getDate()+diff);
+    desde=pubDateStr(mon); hasta=tStr;
+  } else if(type==='semana-pasada'){
+    const day=today.getDay(), diff=day===0?-6:1-day;
+    const mon=new Date(today); mon.setDate(today.getDate()+diff-7);
+    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    desde=pubDateStr(mon); hasta=pubDateStr(sun);
+  }
+  asistDesde=desde; asistHasta=hasta; renderKHContent();
+}
+function asistSetD(v){ asistDesde=v; renderKHContent(); }
+function asistSetH(v){ asistHasta=v; renderKHContent(); }
+function asistClear(){ asistDesde=''; asistHasta=''; renderKHContent(); }
+function asistParseDate(r) {
+  const raw=(r['Fecha']||'').trim(); if(!raw) return null;
+  const p=raw.split('/'); if(p.length<2) return null;
+  const dt=new Date(new Date().getFullYear(), +p[1]-1, +p[0]);
+  return isNaN(dt) ? null : dt;
+}
+function asistFilterRows(desde, hasta) {
+  return DATA.asistencias.filter(r=>{
+    const dt=asistParseDate(r); if(!dt) return false;
+    const ds=pubDateStr(dt);
+    if(desde&&ds<desde) return false;
+    if(hasta&&ds>hasta) return false;
+    return true;
+  });
+}
+
 function renderAsistencias() {
-  const rows = DATA.asistencias;
-  if (!rows.length) return '<div class="empty" style="padding:60px 0;">Sin datos de asistencias.</div>';
+  if (!DATA.asistencias.length) return '<div class="empty" style="padding:60px 0;">Sin datos de asistencias.</div>';
+
+  const qa = pubQuickActive(asistDesde, asistHasta);
+  const filterBar = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
+      ${asistQBtn('Este mes','este-mes',qa==='este-mes')}
+      ${asistQBtn('Mes pasado','mes-pasado',qa==='mes-pasado')}
+      ${asistQBtn('Esta semana','esta-semana',qa==='esta-semana')}
+      ${asistQBtn('Semana pasada','semana-pasada',qa==='semana-pasada')}
+      ${pubDateInput(asistDesde,'asistSetD','Desde')}
+      ${pubDateInput(asistHasta,'asistSetH','Hasta')}
+      ${(asistDesde||asistHasta) ? `<span onclick="asistClear()" style="cursor:pointer;text-decoration:underline;color:var(--muted);font-size:10px;">limpiar</span>` : ''}
+    </div>`;
+
+  const rows = asistFilterRows(asistDesde, asistHasta);
+  if (!rows.length) return filterBar + '<div class="empty" style="padding:60px 0;">Sin novedades en el rango seleccionado.</div>';
 
   const data = rows.map(r => ({
     fecha:      (r['Fecha']||'').trim(),
@@ -3224,7 +3281,7 @@ function renderAsistencias() {
     <td style="font-size:11px;color:var(--muted);">${r.comentario}</td>
   </tr>`).join('');
 
-  return `
+  return filterBar + `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
       <div class="v-kpi"><div class="v-kpi-label">Total novedades</div><div class="v-kpi-val">${total}</div><div class="v-kpi-sub">registros cargados</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Inasistencias</div><div class="v-kpi-val" style="color:var(--accent3);">${inasist}</div><div class="v-kpi-sub">no vinieron o enfermedad</div></div>
