@@ -3070,7 +3070,7 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
 // ── KAYA HOUSE ───────────────────────────────────────────────────
 let khTab = 'produccion';
 let khMes = {produccion:'todo', cajas:'todo'};   // filtro de mes de las vistas mensuales
-let asistDesde = '', asistHasta = '', asistEmp = '';  // filtro de fechas y empleado de asistencias
+let asistDesde = '', asistHasta = '', asistEmp = '', asistTipo = '';  // filtros de la pestaña asistencias
 let khPedPeriodo = 'todo';
 
 function formatMes(ym) {
@@ -3118,6 +3118,15 @@ function normMotivo(m) {
   if (v.includes('enferm')) return 'Enfermedad';
   return m.trim() || 'Otro';
 }
+// "Llegada tarde" y "Se retira antes" son puntualidad (naranja); el resto son ausencias (rojo)
+function motivoCategoria(m) {
+  return (m === 'Llegada tarde' || m === 'Se retira antes') ? 'naranja' : 'rojo';
+}
+// Tomi Hoss y Tomi Lee son personas distintas; unifica variantes de mayúscula de "Tomi Lee"
+function normNombre(n) {
+  const v = (n||'').trim();
+  return v.toLowerCase()==='tomi lee' ? 'Tomi Lee' : v;
+}
 
 function asistQBtn(label, type, active) {
   return `<button ${active?_QBT:_QBG} onclick="asistSetQuick('${type}')">${label}</button>`;
@@ -3145,7 +3154,8 @@ function asistSetQuick(type) {
 function asistSetD(v){ asistDesde=v; renderKHContent(); }
 function asistSetH(v){ asistHasta=v; renderKHContent(); }
 function asistSetEmp(v){ asistEmp=v; renderKHContent(); }
-function asistClear(){ asistDesde=''; asistHasta=''; asistEmp=''; renderKHContent(); }
+function asistSetTipo(v){ asistTipo=v; renderKHContent(); }
+function asistClear(){ asistDesde=''; asistHasta=''; asistEmp=''; asistTipo=''; renderKHContent(); }
 function asistParseDate(r) {
   const raw=(r['Fecha']||'').trim(); if(!raw) return null;
   const p=raw.split('/'); if(p.length<2) return null;
@@ -3153,15 +3163,16 @@ function asistParseDate(r) {
   return isNaN(dt) ? null : dt;
 }
 function asistEmpleados() {
-  return [...new Set(DATA.asistencias.map(r=>(r['Nombre']||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  return [...new Set(DATA.asistencias.map(r=>normNombre(r['Nombre'])).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
 }
-function asistFilterRows(desde, hasta, emp) {
+function asistFilterRows(desde, hasta, emp, tipo) {
   return DATA.asistencias.filter(r=>{
     const dt=asistParseDate(r); if(!dt) return false;
     const ds=pubDateStr(dt);
     if(desde&&ds<desde) return false;
     if(hasta&&ds>hasta) return false;
-    if(emp&&(r['Nombre']||'').trim()!==emp) return false;
+    if(emp&&normNombre(r['Nombre'])!==emp) return false;
+    if(tipo&&motivoCategoria(normMotivo(r['Motivo']||''))!==tipo) return false;
     return true;
   });
 }
@@ -3184,28 +3195,36 @@ function renderAsistencias() {
         <option value="">Todos</option>
         ${empOptions}
       </select>
-      ${(asistDesde||asistHasta||asistEmp) ? `<span onclick="asistClear()" style="cursor:pointer;text-decoration:underline;color:var(--muted);font-size:10px;">limpiar</span>` : ''}
+      <span style="font-size:10px;color:var(--muted);letter-spacing:0.05em;">Tipo</span>
+      <button ${asistTipo===''?_QBT:_QBG} onclick="asistSetTipo('')">Todos</button>
+      <button style="background:${asistTipo==='rojo'?'var(--accent3)':'transparent'};color:${asistTipo==='rojo'?'#fff':'var(--accent3)'};border:1px solid var(--accent3);border-radius:4px;padding:4px 10px;font-size:10px;font-family:'Red Hat Display',sans-serif;letter-spacing:0.05em;cursor:pointer;white-space:nowrap;" onclick="asistSetTipo('rojo')">Faltas</button>
+      <button style="background:${asistTipo==='naranja'?'var(--accent2)':'transparent'};color:${asistTipo==='naranja'?'#fff':'var(--accent2)'};border:1px solid var(--accent2);border-radius:4px;padding:4px 10px;font-size:10px;font-family:'Red Hat Display',sans-serif;letter-spacing:0.05em;cursor:pointer;white-space:nowrap;" onclick="asistSetTipo('naranja')">Llegadas / retiros</button>
+      ${(asistDesde||asistHasta||asistEmp||asistTipo) ? `<span onclick="asistClear()" style="cursor:pointer;text-decoration:underline;color:var(--muted);font-size:10px;">limpiar</span>` : ''}
     </div>`;
 
-  const rows = asistFilterRows(asistDesde, asistHasta, asistEmp);
+  const rows = asistFilterRows(asistDesde, asistHasta, asistEmp, asistTipo);
   if (!rows.length) return filterBar + '<div class="empty" style="padding:60px 0;">Sin novedades para el filtro seleccionado.</div>';
 
-  const data = rows.map(r => ({
-    fecha:      (r['Fecha']||'').trim(),
-    nombre:     (r['Nombre']||'').trim(),
-    motivo:     normMotivo(r['Motivo']||''),
-    comentario: (r['Comentario']||'').trim(),
-  }));
+  const data = rows.map(r => {
+    const motivo = normMotivo(r['Motivo']||'');
+    return {
+      fecha:      (r['Fecha']||'').trim(),
+      nombre:     normNombre(r['Nombre']),
+      motivo,
+      categoria:  motivoCategoria(motivo),
+      comentario: (r['Comentario']||'').trim(),
+    };
+  });
 
   const total     = data.length;
-  const inasist   = data.filter(r => r.motivo !== 'Llegada tarde').length;
-  const tardanzas = data.filter(r => r.motivo === 'Llegada tarde').length;
+  const inasist   = data.filter(r => r.categoria === 'rojo').length;
+  const tardanzas = data.filter(r => r.categoria === 'naranja').length;
 
   // ── Daily aggregates for chart ──
   const byDia = {};
   data.forEach(r => {
     if (!byDia[r.fecha]) byDia[r.fecha] = {faltas:0, tardanzas:0};
-    if (r.motivo === 'Llegada tarde') byDia[r.fecha].tardanzas++;
+    if (r.categoria === 'naranja') byDia[r.fecha].tardanzas++;
     else byDia[r.fecha].faltas++;
   });
   const dias = Object.keys(byDia).sort((a,b) => {
@@ -3254,7 +3273,7 @@ function renderAsistencias() {
     <circle cx="10" cy="9" r="4" fill="#c0392b"/>
     <text x="18" y="13" fill="#1a1a1a" font-size="9" font-family="Red Hat Display,sans-serif">Faltas</text>
     <circle cx="62" cy="9" r="4" fill="#d97706"/>
-    <text x="70" y="13" fill="#1a1a1a" font-size="9" font-family="Red Hat Display,sans-serif">Tardanzas</text>
+    <text x="70" y="13" fill="#1a1a1a" font-size="9" font-family="Red Hat Display,sans-serif">Llegadas / retiros</text>
     <g transform="translate(0,16)">
       ${svgGrid}
       ${makeLine(fPts,'#c0392b')}${makeLine(tPts,'#d97706')}
@@ -3268,7 +3287,7 @@ function renderAsistencias() {
   const byEmp={};
   data.forEach(r=>{
     if(!byEmp[r.nombre]) byEmp[r.nombre]={inasist:0,tarde:0,total:0};
-    if(r.motivo==='Llegada tarde') byEmp[r.nombre].tarde++;
+    if(r.categoria==='naranja') byEmp[r.nombre].tarde++;
     else byEmp[r.nombre].inasist++;
     byEmp[r.nombre].total++;
   });
@@ -3284,19 +3303,18 @@ function renderAsistencias() {
     const [da,ma]=a.fecha.split('/').map(Number),[db,mb]=b.fecha.split('/').map(Number);
     return (mb*100+db)-(ma*100+da);
   });
-  const motivoColor=m=>m==='Llegada tarde'?'var(--accent2)':'var(--accent3)';
   const detailRows=sorted.map(r=>`<tr>
     <td style="font-variant-numeric:tabular-nums;color:var(--muted);">${r.fecha}</td>
     <td>${r.nombre}</td>
-    <td style="color:${motivoColor(r.motivo)};">${r.motivo}</td>
+    <td style="color:${r.categoria==='naranja'?'var(--accent2)':'var(--accent3)'};">${r.motivo}</td>
     <td style="font-size:11px;color:var(--muted);">${r.comentario}</td>
   </tr>`).join('');
 
   return filterBar + `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
       <div class="v-kpi"><div class="v-kpi-label">Total novedades</div><div class="v-kpi-val">${total}</div><div class="v-kpi-sub">registros cargados</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Inasistencias</div><div class="v-kpi-val" style="color:var(--accent3);">${inasist}</div><div class="v-kpi-sub">no vinieron o enfermedad</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Llegadas tarde</div><div class="v-kpi-val" style="color:var(--accent2);">${tardanzas}</div><div class="v-kpi-sub">registros de tardanza</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Faltas</div><div class="v-kpi-val" style="color:var(--accent3);">${inasist}</div><div class="v-kpi-sub">no vinieron o enfermedad</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Llegadas / retiros</div><div class="v-kpi-val" style="color:var(--accent2);">${tardanzas}</div><div class="v-kpi-sub">llegadas tarde y retiros antes</div></div>
     </div>
 
     <div class="v-chart-wrap" style="margin-bottom:28px;">
@@ -3309,8 +3327,8 @@ function renderAsistencias() {
       <table class="data-table">
         <thead><tr>
           <th>Empleado</th>
-          <th style="text-align:right;">Inasistencias</th>
-          <th style="text-align:right;">Tardanzas</th>
+          <th style="text-align:right;">Faltas</th>
+          <th style="text-align:right;">Llegadas / retiros</th>
           <th style="text-align:right;">Total</th>
         </tr></thead>
         <tbody>${empRows}</tbody>
