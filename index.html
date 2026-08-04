@@ -3070,7 +3070,7 @@ function renderProyTabla(titulo, items, stockMap, rubroMap, unD, costoDUX, mostr
 // ── KAYA HOUSE ───────────────────────────────────────────────────
 let khTab = 'produccion';
 let khMes = {produccion:'todo', cajas:'todo'};   // filtro de mes de las vistas mensuales
-let asistDesde = '', asistHasta = '';            // filtro de fechas de asistencias
+let asistDesde = '', asistHasta = '', asistEmp = '';  // filtro de fechas y empleado de asistencias
 let khPedPeriodo = 'todo';
 
 function formatMes(ym) {
@@ -3144,19 +3144,24 @@ function asistSetQuick(type) {
 }
 function asistSetD(v){ asistDesde=v; renderKHContent(); }
 function asistSetH(v){ asistHasta=v; renderKHContent(); }
-function asistClear(){ asistDesde=''; asistHasta=''; renderKHContent(); }
+function asistSetEmp(v){ asistEmp=v; renderKHContent(); }
+function asistClear(){ asistDesde=''; asistHasta=''; asistEmp=''; renderKHContent(); }
 function asistParseDate(r) {
   const raw=(r['Fecha']||'').trim(); if(!raw) return null;
   const p=raw.split('/'); if(p.length<2) return null;
   const dt=new Date(new Date().getFullYear(), +p[1]-1, +p[0]);
   return isNaN(dt) ? null : dt;
 }
-function asistFilterRows(desde, hasta) {
+function asistEmpleados() {
+  return [...new Set(DATA.asistencias.map(r=>(r['Nombre']||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+}
+function asistFilterRows(desde, hasta, emp) {
   return DATA.asistencias.filter(r=>{
     const dt=asistParseDate(r); if(!dt) return false;
     const ds=pubDateStr(dt);
     if(desde&&ds<desde) return false;
     if(hasta&&ds>hasta) return false;
+    if(emp&&(r['Nombre']||'').trim()!==emp) return false;
     return true;
   });
 }
@@ -3165,6 +3170,7 @@ function renderAsistencias() {
   if (!DATA.asistencias.length) return '<div class="empty" style="padding:60px 0;">Sin datos de asistencias.</div>';
 
   const qa = pubQuickActive(asistDesde, asistHasta);
+  const empOptions = asistEmpleados().map(n=>`<option value="${n}" ${n===asistEmp?'selected':''}>${n}</option>`).join('');
   const filterBar = `
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
       ${asistQBtn('Este mes','este-mes',qa==='este-mes')}
@@ -3173,11 +3179,16 @@ function renderAsistencias() {
       ${asistQBtn('Semana pasada','semana-pasada',qa==='semana-pasada')}
       ${pubDateInput(asistDesde,'asistSetD','Desde')}
       ${pubDateInput(asistHasta,'asistSetH','Hasta')}
-      ${(asistDesde||asistHasta) ? `<span onclick="asistClear()" style="cursor:pointer;text-decoration:underline;color:var(--muted);font-size:10px;">limpiar</span>` : ''}
+      <span style="font-size:10px;color:var(--muted);letter-spacing:0.05em;">Empleado</span>
+      <select class="v-select" onchange="asistSetEmp(this.value)" style="padding:3px 6px;font-size:10px;">
+        <option value="">Todos</option>
+        ${empOptions}
+      </select>
+      ${(asistDesde||asistHasta||asistEmp) ? `<span onclick="asistClear()" style="cursor:pointer;text-decoration:underline;color:var(--muted);font-size:10px;">limpiar</span>` : ''}
     </div>`;
 
-  const rows = asistFilterRows(asistDesde, asistHasta);
-  if (!rows.length) return filterBar + '<div class="empty" style="padding:60px 0;">Sin novedades en el rango seleccionado.</div>';
+  const rows = asistFilterRows(asistDesde, asistHasta, asistEmp);
+  if (!rows.length) return filterBar + '<div class="empty" style="padding:60px 0;">Sin novedades para el filtro seleccionado.</div>';
 
   const data = rows.map(r => ({
     fecha:      (r['Fecha']||'').trim(),
