@@ -606,7 +606,7 @@
     <h2 id="topbar-title">Ventas</h2>
     <div style="display:flex;align-items:center;gap:16px;">
       <span class="last-update" id="last-update-label"></span>
-      <button id="refresh-btn" onclick="loadData()">↺ Actualizar</button>
+      <button id="refresh-btn" onclick="actualizarDatos()">↺ Actualizar</button>
     </div>
   </div>
 
@@ -744,6 +744,10 @@ function startApp(u){
 
 // ── CONFIG ──────────────────────────────────────────────────────
 const PUB_ID = '2PACX-1vQUYvdo1IOKfZS3NupXy24eIctfNsXLIZ_wfH6671Y7rr0hWesmdAmmTjNj69b1VxjjVe1RLbqGE-7R';
+// Apps Script de sincronización con Dux (kaya-dux-sync.gs): con URL cargada, el botón
+// Actualizar consulta Dux al momento y aplica ventas/semanal/órdenes frescas sin esperar
+// el lag del CSV publicado. Vacío = el botón solo recarga los CSVs como siempre.
+const DUX_SYNC = { url: '' };
 const URLS = {
   dux:        `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2130058495&single=true&output=csv`,
   tn:         `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=611485435&single=true&output=csv`,
@@ -932,6 +936,42 @@ async function loadData() {
       <div style="font-size:11px;color:var(--muted);margin-top:6px;">Verificá que el Google Sheets esté publicado.</div>
       <button onclick="loadData()" style="margin-top:16px;background:transparent;border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:4px;cursor:pointer;font-family:'DM Mono',monospace;">Reintentar</button>
     </div>`;
+  }
+}
+
+// ── ACTUALIZAR: recarga CSVs y, si está configurado, consulta Dux al momento ────
+async function actualizarDatos(){
+  const btn=document.getElementById('refresh-btn');
+  if(btn.disabled) return;
+  btn.disabled=true;
+  let pDux=null;
+  if(DUX_SYNC.url){
+    btn.textContent='⟳ Consultando Dux…';
+    const ctl=new AbortController();
+    const t=setTimeout(()=>ctl.abort(),150000);
+    pDux=fetch(DUX_SYNC.url,{signal:ctl.signal}).then(r=>r.json()).catch(()=>null).finally(()=>clearTimeout(t));
+  }
+  try{
+    await loadData();
+    if(pDux){
+      const j=await pDux;
+      if(j&&j.ok){
+        if(roleAllows('ventas')||roleAllows('proyeccion')){
+          DATA.ventas  = parseCSV(j.ventas).filter(r=>r['periodo']&&r['periodo'].trim());
+          DATA.ordenes = parseCSV(j.ordenes).filter(r=>r['periodo']&&r['periodo'].trim());
+        }
+        if(roleAllows('semanal')) DATA.semanal = parseCSV(j.semanal).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
+        bomCache=null;
+        const now=new Date();
+        const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})} · Dux al día`;
+        document.getElementById('last-update-label').textContent=lbl;
+        document.getElementById('last-update-sidebar').textContent=lbl;
+        renderCurrentModule();
+      }
+    }
+  } finally {
+    btn.textContent='↺ Actualizar';
+    btn.disabled=false;
   }
 }
 
