@@ -747,7 +747,7 @@ const PUB_ID = '2PACX-1vQUYvdo1IOKfZS3NupXy24eIctfNsXLIZ_wfH6671Y7rr0hWesmdAmmTj
 // Apps Script de sincronización con Dux (kaya-dux-sync.gs): con URL cargada, el botón
 // Actualizar consulta Dux al momento y aplica ventas/semanal/órdenes frescas sin esperar
 // el lag del CSV publicado. Vacío = el botón solo recarga los CSVs como siempre.
-const DUX_SYNC = { url: '' };
+const DUX_SYNC = { url: 'https://script.google.com/macros/s/AKfycbyF8xGt431RbnQKXWEzCrcRLsNPb9haT460gw27aXAMK9SiVSYH9ejWcCZVkjBa5-v7/exec' };
 const URLS = {
   dux:        `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=2130058495&single=true&output=csv`,
   tn:         `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=611485435&single=true&output=csv`,
