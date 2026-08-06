@@ -974,6 +974,10 @@ async function actualizarDatos(){
           DATA.ordenes = parseCSV(j.ordenes).filter(r=>r['periodo']&&r['periodo'].trim());
         }
         if(roleAllows('semanal')) DATA.semanal = parseCSV(j.semanal).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
+        if(roleAllows('stock')||roleAllows('proyeccion')){
+          if(j.dux) DATA.dux = parseCSV(j.dux.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
+          if(j.tn)  DATA.tn  = parseCSV(j.tn);
+        }
         bomCache=null;
         if(j.lastSync) DUX_SYNC.last=j.lastSync;
         setUpdateLabel();
