@@ -924,10 +924,8 @@ async function loadData() {
     DATA.saldos = _sl.rows; DATA.saldosFecha = _sl.fecha;
     DATA.meli = parseCSV(mlT).filter(r=>(r['Fecha']||'').trim());
     bomCache = null;
-    const now=new Date();
-    const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
-    document.getElementById('last-update-label').textContent=lbl;
-    document.getElementById('last-update-sidebar').textContent=lbl;
+    setUpdateLabel();
+    consultarInfoDux();
     document.getElementById('loading').style.display='none';
     renderCurrentModule();
   } catch(e) {
@@ -940,13 +938,28 @@ async function loadData() {
 }
 
 // ── ACTUALIZAR: recarga CSVs y, si está configurado, consulta Dux al momento ────
+// La etiqueta "Actualizado ..." muestra además la hora del ÚLTIMO sync real con Dux
+// (lo haya disparado el reloj de los 30 min o cualquier usuario con el botón).
+function fmtHora(d){ return `${d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})} ${d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`; }
+function setUpdateLabel(){
+  let lbl=`Actualizado ${fmtHora(new Date())}`;
+  if(DUX_SYNC.last) lbl+=` · Dux: ${fmtHora(new Date(DUX_SYNC.last))}`;
+  document.getElementById('last-update-label').textContent=lbl;
+  document.getElementById('last-update-sidebar').textContent=lbl;
+}
+function consultarInfoDux(){
+  if(!DUX_SYNC.url) return;
+  fetch(DUX_SYNC.url+'?info=1').then(r=>r.json()).then(j=>{
+    if(j&&j.ok&&j.lastSync){ DUX_SYNC.last=j.lastSync; setUpdateLabel(); }
+  }).catch(()=>{});
+}
 async function actualizarDatos(){
   const btn=document.getElementById('refresh-btn');
   if(btn.disabled) return;
   btn.disabled=true;
   let pDux=null;
   if(DUX_SYNC.url){
-    btn.textContent='⟳ Consultando Dux…';
+    btn.textContent='⟳ Consultando Dux… (puede demorar unos minutos)';
     const ctl=new AbortController();
     const t=setTimeout(()=>ctl.abort(),150000);
     pDux=fetch(DUX_SYNC.url,{signal:ctl.signal}).then(r=>r.json()).catch(()=>null).finally(()=>clearTimeout(t));
@@ -962,10 +975,8 @@ async function actualizarDatos(){
         }
         if(roleAllows('semanal')) DATA.semanal = parseCSV(j.semanal).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
         bomCache=null;
-        const now=new Date();
-        const lbl=`Actualizado ${now.toLocaleDateString('es-AR')} ${now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})} · Dux al día`;
-        document.getElementById('last-update-label').textContent=lbl;
-        document.getElementById('last-update-sidebar').textContent=lbl;
+        if(j.lastSync) DUX_SYNC.last=j.lastSync;
+        setUpdateLabel();
         renderCurrentModule();
       }
     }
