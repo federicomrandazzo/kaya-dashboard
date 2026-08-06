@@ -977,7 +977,7 @@ async function actualizarDatos(){
   if(DUX_SYNC.url){
     btn.textContent='⟳ Consultando Dux… (puede demorar unos minutos)';
     const ctl=new AbortController();
-    const t=setTimeout(()=>ctl.abort(),150000);
+    const t=setTimeout(()=>ctl.abort(),300000);
     pDux=fetch(DUX_SYNC.url,{signal:ctl.signal}).then(r=>r.json()).catch(()=>null).finally(()=>clearTimeout(t));
   }
   try{
