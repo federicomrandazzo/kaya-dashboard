@@ -1600,15 +1600,21 @@ function updateVentasStickyBar(){
 }
 
 // ── MAYORISTAS ───────────────────────────────────────────────────
-let mayPeriodo='', mayTab='producto';
+let mayTab='cliente', mayPeriodosSel=[], mayPeriodosCleared=false, mayExp=new Set();
 function getMayPeriodos(){
   return [...new Set(DATA.ventasMayorista.map(r=>r['periodo']))].filter(Boolean)
     .sort((a,b)=>{ const[ya,ma]=a.split('-').map(Number),[yb,mb]=b.split('-').map(Number); return ya!==yb?ya-yb:ma-mb; });
 }
-function getMayRows(p){ return DATA.ventasMayorista.filter(r=>r['periodo']===p); }
 function getMayCanal(p){ return DATA.canales.find(r=>r['periodo']===p && (r['canal']||'').trim().toUpperCase()==='MAYORISTA'); }
-function setMayPeriodo(p){ mayPeriodo=p; renderMayoristas(); }
 function setMayTab(t){ mayTab=t; renderMayoristas(); }
+function toggleMayPeriodo(p){
+  const i=mayPeriodosSel.indexOf(p);
+  if(i>=0) mayPeriodosSel.splice(i,1); else mayPeriodosSel.push(p);
+  mayPeriodosCleared=true;
+  renderMayoristas();
+}
+function mayClearPeriodos(){ mayPeriodosSel=[]; mayPeriodosCleared=true; renderMayoristas(); }
+function toggleMayExp(k){ mayExp.has(k)?mayExp.delete(k):mayExp.add(k); renderMayoristas(); }
 
 function renderMayoristas(){
   const el=document.getElementById('module-mayoristas');
@@ -1623,29 +1629,38 @@ function renderMayoristas(){
   if(!DATA.ventasMayorista||!DATA.ventasMayorista.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos de mayoristas.</div>'; return; }
 
   const periodos=getMayPeriodos();
-  if(!mayPeriodo||!periodos.includes(mayPeriodo)) mayPeriodo=periodos[periodos.length-1];
-  const rows=getMayRows(mayPeriodo);
-  const canalRow=getMayCanal(mayPeriodo);
-  const venta=canalRow?num(canalRow['importe']):rows.reduce((s,r)=>s+num(r['importe_neto']),0);
-  const costo=canalRow?num(canalRow['costo']):rows.reduce((s,r)=>s+num(r['costo_total']),0);
-  const comprobantes=canalRow?num(canalRow['comprobantes']):0;
-  const unidades=rows.reduce((s,r)=>s+num(r['qty']),0);
-  const ticket=comprobantes>0?venta/comprobantes:0;
-  const margenPct=venta>0?((venta-costo)/venta*100):0;
+  if(!mayPeriodosCleared && !mayPeriodosSel.length) mayPeriodosSel=periodos.slice(-4);
+  const cols=periodos.filter(p=>mayPeriodosSel.includes(p));
 
-  const tabDefs=[['producto','Por producto'],['cliente','Por cliente']];
+  const pills=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;align-items:center;">
+    <span style="font-size:11px;color:var(--muted);margin-right:2px;">Períodos:</span>
+    ${periodos.map(p=>{ const act=cols.includes(p); return `<button onclick="toggleMayPeriodo('${p}')" style="padding:3px 10px;border-radius:20px;border:1px solid ${act?'var(--accent)':'#d0c8b8'};background:${act?'var(--accent)':'transparent'};color:${act?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${p}</button>`; }).join('')}
+    ${cols.length?`<button onclick="mayClearPeriodos()" style="padding:3px 12px;border-radius:20px;border:1px solid #d0c8b8;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;font-family:inherit;margin-left:4px;">Limpiar</button>`:''}
+  </div>`;
+  const tabDefs=[['cliente','Por cliente'],['producto','Por producto']];
   const tabsH=`<div class="v-tabs">
     ${tabDefs.map(([t,l])=>`<div class="v-tab ${mayTab===t?'active':''}" onclick="setMayTab('${t}')">${l}</div>`).join('')}
   </div>`;
-  const bodyH = mayTab==='cliente' ? renderMayPorCliente(mayPeriodo) : renderMayPorProducto(rows,unidades,venta);
+
+  if(!cols.length){
+    el.innerHTML=pills+tabsH+'<div class="empty" style="padding:44px 0;">Elegí al menos un período.</div>';
+    return;
+  }
+
+  const rows=DATA.ventasMayorista.filter(r=>cols.includes(r['periodo']));
+  const canalRows=cols.map(p=>getMayCanal(p)).filter(Boolean);
+  const venta=canalRows.length?canalRows.reduce((s,r)=>s+num(r['importe']),0):rows.reduce((s,r)=>s+num(r['importe_neto']),0);
+  const costo=canalRows.length?canalRows.reduce((s,r)=>s+num(r['costo']),0):rows.reduce((s,r)=>s+num(r['costo_total']),0);
+  const comprobantes=canalRows.reduce((s,r)=>s+num(r['comprobantes']),0);
+  const ticket=comprobantes>0?venta/comprobantes:0;
+  const margenPct=venta>0?((venta-costo)/venta*100):0;
+
+  const bodyH = mayTab==='cliente'
+    ? renderMayTreeCliente((DATA.ventasClienteMayorista||[]).filter(r=>cols.includes(r['periodo'])),cols)
+    : renderMayTreeProducto(rows,cols);
 
   el.innerHTML=`
-    <div class="v-filters" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-      <span class="v-filter-label">Período</span>
-      <select class="v-select" onchange="setMayPeriodo(this.value)">
-        ${periodos.map(p=>`<option value="${p}" ${p===mayPeriodo?'selected':''}>${p}</option>`).join('')}
-      </select>
-    </div>
+    ${pills}
     <div class="v-kpi-grid">
       <div class="v-kpi"><div class="v-kpi-label">Venta</div><div class="v-kpi-val" style="color:var(--accent);">${pesos(venta)}</div></div>
       <div class="v-kpi"><div class="v-kpi-label">Comprobantes</div><div class="v-kpi-val">${comprobantes.toLocaleString('es-AR')}</div></div>
@@ -1656,96 +1671,90 @@ function renderMayoristas(){
     ${bodyH}`;
 }
 
-// árbol línea → rubro → producto
-function renderMayPorProducto(rows,unidades,venta){
-  const tree={};
-  rows.forEach(r=>{
-    const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim();
-    if(!tree[li]) tree[li]={v:0,u:0,rubros:{}};
-    tree[li].v+=num(r['importe_neto']); tree[li].u+=num(r['qty']);
-    if(!tree[li].rubros[rb]) tree[li].rubros[rb]={v:0,u:0,prods:{}};
-    tree[li].rubros[rb].v+=num(r['importe_neto']); tree[li].rubros[rb].u+=num(r['qty']);
-    if(!tree[li].rubros[rb].prods[sk]) tree[li].rubros[rb].prods[sk]={nombre:nm,sku:sk,v:0,u:0};
-    tree[li].rubros[rb].prods[sk].v+=num(r['importe_neto']); tree[li].rubros[rb].prods[sk].u+=num(r['qty']);
-  });
-  const NS='may';
-  let treeH=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
-    <span style="width:16px;margin-right:8px;"></span>
-    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Línea / Rubro / Producto</span>
-    <span style="min-width:50px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Uds</span>
-    <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Venta</span>
-  </div>`;
-  const LORDEN=['NEGRA','BLANCA','KITS'];
-  const lkeys=[...LORDEN,...Object.keys(tree).filter(k=>!LORDEN.includes(k))].filter(k=>tree[k]);
-  lkeys.forEach(li=>{
-    const ld=tree[li];
-    treeH+=TR(NS,'l-'+li,0,li,`${Math.round(ld.u)} uds`,pesos(ld.v),true,false);
-    let rubroH='';
-    Object.entries(ld.rubros).sort((a,b)=>b[1].v-a[1].v).forEach(([rb,rd])=>{
-      rubroH+=TR(NS,'r-'+li+'-'+rb,1,rb,`${Math.round(rd.u)} uds`,pesos(rd.v),true,false);
-      let prodH='';
-      Object.values(rd.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
-        prodH+=TR(NS,'p-'+pd.sku,2,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,`${Math.round(pd.u)} uds`,pesos(pd.v),false,false);
-      });
-      rubroH+=TC(NS,'r-'+li+'-'+rb,prodH,false);
-    });
-    treeH+=TC(NS,'l-'+li,rubroH,false);
-  });
-  treeH+=`<div class="tr l0 nc" style="border-top:2px solid var(--border);">
-    <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-    <span class="tl">TOTAL</span>
-    <span class="tu">${Math.round(unidades)} uds</span>
-    <span class="tv">${pesos(venta)}</span>
-  </div>`;
-  return `<div class="v-chart-wrap">
-    <div class="v-chart-title">Por producto · ${mayPeriodo}</div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${treeH}</div>
-  </div>`;
+// fila comparativa genérica (una columna $ por período seleccionado + total)
+function mayTrow(cols,label,obj,indent,key,hasChildren,bg){
+  const open=key&&mayExp.has(key);
+  const showTot=cols.length>1;
+  const tog=hasChildren?`<span style="display:inline-block;width:14px;color:var(--muted);">${open?'−':'+'}</span>`:`<span style="display:inline-block;width:14px;"></span>`;
+  const cells=cols.map(p=>`<td style="text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;${indent>0?'color:var(--muted);font-size:11px;':''}">${obj.m[p]?pesos(obj.m[p]):'—'}</td>`).join('');
+  const tot=showTot?`<td style="text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;font-weight:${indent===0?'600':'500'};border-left:1px solid #e8dfc8;">${pesos(obj.tot)}</td>`:'';
+  const click=hasChildren?`onclick="toggleMayExp('${key.replace(/'/g,'')}')" style="cursor:pointer;${bg||''}"`:`style="${bg||''}"`;
+  return `<tr ${click}><td style="padding:5px 8px;padding-left:${8+indent*18}px;font-size:${indent===0?'12px':'11px'};font-weight:${indent===0?'600':'400'};">${tog}${label}</td>${cells}${tot}</tr>`;
+}
+function mayTable(cols,titulo,rowsH,totRowH){
+  const showTot=cols.length>1;
+  return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;min-width:${180+cols.length*110}px;">
+    <thead><tr style="border-bottom:2px solid #d4c5a0;"><th style="text-align:left;font-size:10px;padding:6px 8px;">${titulo}</th>${cols.map(p=>`<th style="text-align:right;font-size:10px;padding:6px 8px;white-space:nowrap;">${p}</th>`).join('')}${showTot?`<th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Total</th>`:''}</tr></thead>
+    <tbody>${rowsH}${totRowH}</tbody></table></div>`;
+}
+function mayTotRow(cols,totM,grand){
+  const showTot=cols.length>1;
+  return `<tr style="background:var(--surface2);border-top:2px solid var(--border);"><td style="padding:6px 8px;font-weight:600;">TOTAL</td>${cols.map(p=>`<td style="text-align:right;padding:6px 8px;font-weight:600;font-variant-numeric:tabular-nums;">${pesos(totM[p]||0)}</td>`).join('')}${showTot?`<td style="text-align:right;padding:6px 8px;font-weight:700;border-left:1px solid #e8dfc8;font-variant-numeric:tabular-nums;">${pesos(grand)}</td>`:''}</tr>`;
 }
 
-// árbol cliente → producto (para Sofi)
-function renderMayPorCliente(periodo){
+// árbol línea → rubro → producto, comparativo por período
+function renderMayTreeProducto(rows,cols){
+  const tree={};
+  rows.forEach(r=>{
+    const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim(), p=r['periodo'], v=num(r['importe_neto']);
+    if(!tree[li]) tree[li]={tot:0,m:{},rubros:{}}; tree[li].tot+=v; tree[li].m[p]=(tree[li].m[p]||0)+v;
+    const R=tree[li].rubros; if(!R[rb]) R[rb]={tot:0,m:{},prods:{}}; R[rb].tot+=v; R[rb].m[p]=(R[rb].m[p]||0)+v;
+    const P=R[rb].prods; if(!P[sk]) P[sk]={nombre:nm,sku:sk,tot:0,m:{}}; P[sk].tot+=v; P[sk].m[p]=(P[sk].m[p]||0)+v;
+  });
+  const LORDEN=['NEGRA','BLANCA','KITS'];
+  const lkeys=[...LORDEN,...Object.keys(tree).filter(k=>!LORDEN.includes(k))].filter(k=>tree[k]);
+  let rowsH='';
+  lkeys.forEach(li=>{
+    const ld=tree[li], kL='mp-L:'+li;
+    rowsH+=mayTrow(cols,li,ld,0,kL,true,'background:#f4e8c8;');
+    if(mayExp.has(kL)){
+      Object.entries(ld.rubros).sort((a,b)=>b[1].tot-a[1].tot).forEach(([rb,rd])=>{
+        const kR=kL+'|R:'+rb;
+        rowsH+=mayTrow(cols,rb,rd,1,kR,true,'');
+        if(mayExp.has(kR)) Object.values(rd.prods).sort((a,b)=>b.tot-a.tot).forEach(pd=>{
+          rowsH+=mayTrow(cols,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,pd,2,null,false,'background:var(--surface);');
+        });
+      });
+    }
+  });
+  const totM={}; cols.forEach(p=>totM[p]=lkeys.reduce((s,li)=>s+(tree[li].m[p]||0),0));
+  const grand=lkeys.reduce((s,li)=>s+tree[li].tot,0);
+  return `<div style="font-size:10px;color:var(--muted);margin:12px 0;">Ventas ($) por período. Tocá una línea o rubro para desplegar.</div>`
+    +mayTable(cols,'Línea / Rubro / Producto',rowsH,mayTotRow(cols,totM,grand));
+}
+
+// árbol cliente → línea → producto, comparativo por período (para Sofi)
+function renderMayTreeCliente(rows,cols){
   if(!URLS.ventasClienteMayorista){
     return `<div class="empty" style="padding:40px 0;">Falta conectar la hoja de detalle por cliente — avisale a Federico.</div>`;
   }
-  const rows=(DATA.ventasClienteMayorista||[]).filter(r=>r['periodo']===periodo);
-  if(!rows.length) return `<div class="empty" style="padding:40px 0;">Sin datos de clientes para este período.</div>`;
-
-  const clientes={};
-  let totalV=0, totalU=0;
+  if(!rows.length) return `<div class="empty" style="padding:40px 0;">Sin datos de clientes para estos períodos.</div>`;
+  const tree={};
   rows.forEach(r=>{
-    const cli=(r['cliente']||'SIN CLIENTE').trim()||'SIN CLIENTE', sk=getSku(r), nm=(r['nombre']||sk).trim();
-    const v=num(r['importe_neto']), u=num(r['qty']);
-    if(!clientes[cli]) clientes[cli]={v:0,u:0,prods:{}};
-    clientes[cli].v+=v; clientes[cli].u+=u; totalV+=v; totalU+=u;
-    if(!clientes[cli].prods[sk]) clientes[cli].prods[sk]={nombre:nm,sku:sk,v:0,u:0};
-    clientes[cli].prods[sk].v+=v; clientes[cli].prods[sk].u+=u;
+    const cli=(r['cliente']||'SIN CLIENTE').trim()||'SIN CLIENTE', li=getLinea(r)||'OTRO', sk=getSku(r), nm=(r['nombre']||sk).trim(), p=r['periodo'], v=num(r['importe_neto']);
+    if(!tree[cli]) tree[cli]={tot:0,m:{},lineas:{}}; tree[cli].tot+=v; tree[cli].m[p]=(tree[cli].m[p]||0)+v;
+    const L=tree[cli].lineas; if(!L[li]) L[li]={tot:0,m:{},prods:{}}; L[li].tot+=v; L[li].m[p]=(L[li].m[p]||0)+v;
+    const P=L[li].prods; if(!P[sk]) P[sk]={nombre:nm,sku:sk,tot:0,m:{}}; P[sk].tot+=v; P[sk].m[p]=(P[sk].m[p]||0)+v;
   });
-  const NS='maycli';
-  let treeH=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
-    <span style="width:16px;margin-right:8px;"></span>
-    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Cliente / Producto</span>
-    <span style="min-width:50px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Uds</span>
-    <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Venta</span>
-  </div>`;
-  Object.entries(clientes).sort((a,b)=>b[1].v-a[1].v).forEach(([cli,cd])=>{
-    treeH+=TR(NS,'c-'+cli,0,cli,`${Math.round(cd.u)} uds`,pesos(cd.v),true,false);
-    let prodH='';
-    Object.values(cd.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
-      prodH+=TR(NS,'p-'+cli+'-'+pd.sku,1,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,`${Math.round(pd.u)} uds`,pesos(pd.v),false,false);
-    });
-    treeH+=TC(NS,'c-'+cli,prodH,false);
+  const ckeys=Object.keys(tree).sort((a,b)=>tree[b].tot-tree[a].tot);
+  let rowsH='';
+  ckeys.forEach(cli=>{
+    const cd=tree[cli], kC='mc-C:'+cli;
+    rowsH+=mayTrow(cols,cli,cd,0,kC,true,'background:#f4e8c8;');
+    if(mayExp.has(kC)){
+      Object.entries(cd.lineas).sort((a,b)=>b[1].tot-a[1].tot).forEach(([li,ld])=>{
+        const kL=kC+'|L:'+li;
+        rowsH+=mayTrow(cols,li,ld,1,kL,true,'');
+        if(mayExp.has(kL)) Object.values(ld.prods).sort((a,b)=>b.tot-a.tot).forEach(pd=>{
+          rowsH+=mayTrow(cols,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,pd,2,null,false,'background:var(--surface);');
+        });
+      });
+    }
   });
-  treeH+=`<div class="tr l0 nc" style="border-top:2px solid var(--border);">
-    <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-    <span class="tl">TOTAL</span>
-    <span class="tu">${Math.round(totalU)} uds</span>
-    <span class="tv">${pesos(totalV)}</span>
-  </div>`;
-  return `<div class="v-chart-wrap">
-    <div class="v-chart-title">Por cliente · ${periodo}</div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${treeH}</div>
-  </div>`;
+  const totM={}; cols.forEach(p=>totM[p]=ckeys.reduce((s,cli)=>s+(tree[cli].m[p]||0),0));
+  const grand=ckeys.reduce((s,cli)=>s+tree[cli].tot,0);
+  return `<div style="font-size:10px;color:var(--muted);margin:12px 0;">Ventas ($) por período. Tocá un cliente o línea para desplegar.</div>`
+    +mayTable(cols,'Cliente / Línea / Producto',rowsH,mayTotRow(cols,totM,grand));
 }
 
 function renderVentasModule(){
