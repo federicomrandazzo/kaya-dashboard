@@ -765,6 +765,8 @@ const URLS = {
   ventasMayorista:  `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=72679430&single=true&output=csv`,
   semanalMayorista: `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1890602519&single=true&output=csv`,
   canales:          `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1563024213&single=true&output=csv`,
+  // Pendiente: gid de dux_ventas_mayorista_cliente (Federico lo pasa después de correr rebuildTodo())
+  ventasClienteMayorista: '',
   produccion:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1425536720&single=true&output=csv',
   cajas:        'https://docs.google.com/spreadsheets/d/e/2PACX-1vTrYiAHk0UerGRjoKoU4ed0bpxYKBDeNR-XDtEQRTkSwSlQb3lm0FtQZw2RFbQ5lxJeZP_lX8bsXqmR/pub?gid=1281380437&single=true&output=csv',
   asistencias:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQeSGNkWldvyD9d3r_yBTm0TWAuxtpAwzB7WMjLJsOyeHd8_DVa96WvfCXdIg8DschcnZ4pODh31xVX/pub?gid=1137230020&single=true&output=csv',
@@ -794,7 +796,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],cajas:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:'',meli:[],ventasMayorista:[],semanalMayorista:[],canales:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],cajas:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:'',meli:[],ventasMayorista:[],semanalMayorista:[],canales:[],ventasClienteMayorista:[]};
 let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -888,7 +890,7 @@ async function loadData() {
   document.getElementById('module-mayoristas').style.display='none';
   document.getElementById('module-pub').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT,cjT,vmT,smT,cnT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT,cjT,vmT,smT,cnT,vcT] = await Promise.all([
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.dux):Promise.resolve(''),
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.tn):Promise.resolve(''),
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.compuestos):Promise.resolve(''),
@@ -907,6 +909,7 @@ async function loadData() {
       (roleAllows('mayoristas')&&URLS.ventasMayorista)?fetchCSV(URLS.ventasMayorista):Promise.resolve(''),
       (roleAllows('mayoristas')&&URLS.semanalMayorista)?fetchCSV(URLS.semanalMayorista):Promise.resolve(''),
       (roleAllows('mayoristas')&&URLS.canales)?fetchCSV(URLS.canales):Promise.resolve(''),
+      (roleAllows('mayoristas')&&URLS.ventasClienteMayorista)?fetchCSV(URLS.ventasClienteMayorista):Promise.resolve(''),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -939,6 +942,7 @@ async function loadData() {
     DATA.ventasMayorista  = parseCSV(vmT).filter(r=>r['periodo']&&r['periodo'].trim());
     DATA.semanalMayorista = parseCSV(smT).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
     DATA.canales = parseCSV(cnT).filter(r=>r['periodo']&&r['canal']);
+    DATA.ventasClienteMayorista = parseCSV(vcT).filter(r=>r['periodo']&&r['periodo'].trim());
     bomCache = null;
     setUpdateLabel();
     consultarInfoDux();
@@ -1597,7 +1601,7 @@ function updateVentasStickyBar(){
 }
 
 // ── MAYORISTAS ───────────────────────────────────────────────────
-let mayPeriodo='';
+let mayPeriodo='', mayTab='producto';
 function getMayPeriodos(){
   return [...new Set(DATA.ventasMayorista.map(r=>r['periodo']))].filter(Boolean)
     .sort((a,b)=>{ const[ya,ma]=a.split('-').map(Number),[yb,mb]=b.split('-').map(Number); return ya!==yb?ya-yb:ma-mb; });
@@ -1605,6 +1609,7 @@ function getMayPeriodos(){
 function getMayRows(p){ return DATA.ventasMayorista.filter(r=>r['periodo']===p); }
 function getMayCanal(p){ return DATA.canales.find(r=>r['periodo']===p && (r['canal']||'').trim().toUpperCase()==='MAYORISTA'); }
 function setMayPeriodo(p){ mayPeriodo=p; renderMayoristas(); }
+function setMayTab(t){ mayTab=t; renderMayoristas(); }
 
 function renderMayoristas(){
   const el=document.getElementById('module-mayoristas');
@@ -1629,7 +1634,31 @@ function renderMayoristas(){
   const ticket=comprobantes>0?venta/comprobantes:0;
   const margenPct=venta>0?((venta-costo)/venta*100):0;
 
-  // árbol línea → rubro → producto
+  const tabDefs=[['producto','Por producto'],['cliente','Por cliente']];
+  const tabsH=`<div class="v-tabs">
+    ${tabDefs.map(([t,l])=>`<div class="v-tab ${mayTab===t?'active':''}" onclick="setMayTab('${t}')">${l}</div>`).join('')}
+  </div>`;
+  const bodyH = mayTab==='cliente' ? renderMayPorCliente(mayPeriodo) : renderMayPorProducto(rows,unidades,venta);
+
+  el.innerHTML=`
+    <div class="v-filters" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+      <span class="v-filter-label">Período</span>
+      <select class="v-select" onchange="setMayPeriodo(this.value)">
+        ${periodos.map(p=>`<option value="${p}" ${p===mayPeriodo?'selected':''}>${p}</option>`).join('')}
+      </select>
+    </div>
+    <div class="v-kpi-grid">
+      <div class="v-kpi"><div class="v-kpi-label">Venta</div><div class="v-kpi-val" style="color:var(--accent);">${pesos(venta)}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Comprobantes</div><div class="v-kpi-val">${comprobantes.toLocaleString('es-AR')}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Ticket promedio</div><div class="v-kpi-val">${pesos(ticket)}</div></div>
+      <div class="v-kpi"><div class="v-kpi-label">Margen</div><div class="v-kpi-val">${margenPct.toFixed(1)}%</div></div>
+    </div>
+    ${tabsH}
+    ${bodyH}`;
+}
+
+// árbol línea → rubro → producto
+function renderMayPorProducto(rows,unidades,venta){
   const tree={};
   rows.forEach(r=>{
     const li=getLinea(r)||'OTRO', rb=getRubro(r), sk=getSku(r), nm=(r['nombre']||sk).trim();
@@ -1669,24 +1698,55 @@ function renderMayoristas(){
     <span class="tu">${Math.round(unidades)} uds</span>
     <span class="tv">${pesos(venta)}</span>
   </div>`;
+  return `<div class="v-chart-wrap">
+    <div class="v-chart-title">Por producto · ${mayPeriodo}</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${treeH}</div>
+  </div>`;
+}
 
-  el.innerHTML=`
-    <div class="v-filters" style="flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-      <span class="v-filter-label">Período</span>
-      <select class="v-select" onchange="setMayPeriodo(this.value)">
-        ${periodos.map(p=>`<option value="${p}" ${p===mayPeriodo?'selected':''}>${p}</option>`).join('')}
-      </select>
-    </div>
-    <div class="v-kpi-grid">
-      <div class="v-kpi"><div class="v-kpi-label">Venta</div><div class="v-kpi-val" style="color:var(--accent);">${pesos(venta)}</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Comprobantes</div><div class="v-kpi-val">${comprobantes.toLocaleString('es-AR')}</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Ticket promedio</div><div class="v-kpi-val">${pesos(ticket)}</div></div>
-      <div class="v-kpi"><div class="v-kpi-label">Margen</div><div class="v-kpi-val">${margenPct.toFixed(1)}%</div></div>
-    </div>
-    <div class="v-chart-wrap">
-      <div class="v-chart-title">Por producto · ${mayPeriodo}</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${treeH}</div>
-    </div>`;
+// árbol cliente → producto (para Sofi)
+function renderMayPorCliente(periodo){
+  if(!URLS.ventasClienteMayorista){
+    return `<div class="empty" style="padding:40px 0;">Falta conectar la hoja de detalle por cliente — avisale a Federico.</div>`;
+  }
+  const rows=(DATA.ventasClienteMayorista||[]).filter(r=>r['periodo']===periodo);
+  if(!rows.length) return `<div class="empty" style="padding:40px 0;">Sin datos de clientes para este período.</div>`;
+
+  const clientes={};
+  let totalV=0, totalU=0;
+  rows.forEach(r=>{
+    const cli=(r['cliente']||'SIN CLIENTE').trim()||'SIN CLIENTE', sk=getSku(r), nm=(r['nombre']||sk).trim();
+    const v=num(r['importe_neto']), u=num(r['qty']);
+    if(!clientes[cli]) clientes[cli]={v:0,u:0,prods:{}};
+    clientes[cli].v+=v; clientes[cli].u+=u; totalV+=v; totalU+=u;
+    if(!clientes[cli].prods[sk]) clientes[cli].prods[sk]={nombre:nm,sku:sk,v:0,u:0};
+    clientes[cli].prods[sk].v+=v; clientes[cli].prods[sk].u+=u;
+  });
+  const NS='maycli';
+  let treeH=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
+    <span style="width:16px;margin-right:8px;"></span>
+    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Cliente / Producto</span>
+    <span style="min-width:50px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Uds</span>
+    <span style="min-width:100px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Venta</span>
+  </div>`;
+  Object.entries(clientes).sort((a,b)=>b[1].v-a[1].v).forEach(([cli,cd])=>{
+    treeH+=TR(NS,'c-'+cli,0,cli,`${Math.round(cd.u)} uds`,pesos(cd.v),true,false);
+    let prodH='';
+    Object.values(cd.prods).sort((a,b)=>b.v-a.v).forEach(pd=>{
+      prodH+=TR(NS,'p-'+cli+'-'+pd.sku,1,`${pd.nombre} <span class="sku-badge" style="margin-left:4px;">${pd.sku}</span>`,`${Math.round(pd.u)} uds`,pesos(pd.v),false,false);
+    });
+    treeH+=TC(NS,'c-'+cli,prodH,false);
+  });
+  treeH+=`<div class="tr l0 nc" style="border-top:2px solid var(--border);">
+    <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+    <span class="tl">TOTAL</span>
+    <span class="tu">${Math.round(totalU)} uds</span>
+    <span class="tv">${pesos(totalV)}</span>
+  </div>`;
+  return `<div class="v-chart-wrap">
+    <div class="v-chart-title">Por cliente · ${periodo}</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${treeH}</div>
+  </div>`;
 }
 
 function renderVentasModule(){
