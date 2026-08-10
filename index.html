@@ -2390,6 +2390,8 @@ function finHoy(){ const d=new Date(); return new Date(d.getFullYear(),d.getMont
 const FIN_EXCLUIR=['01. SALDOS','05. PROVEEDORES','06. RETIROS'];
 let finVista='agenda';
 function setFinVista(v){ finVista=v; renderFinanzas(); }
+let finHor='sem'; // horizonte de la vista Por cuenta: hm | sem | 10 | 30
+function setFinHor(h){ finHor=h; renderFinanzas(); }
 let finKpiDet='';
 function setFinKpiDet(k){ finKpiDet=finKpiDet===k?'':k; renderFinanzas(); }
 let finTab='tablero';
@@ -2532,8 +2534,10 @@ function renderFinanzas(){
   const pagos=conPagos?finPagos():[];
   const en10=new Date(hoy.getTime()+10*86400000);
   const en30=new Date(hoy.getTime()+30*86400000);
+  const manana=new Date(hoy.getTime()+86400000);
   // Esta semana: hasta el domingo, vencidos incluidos (la ventana se achica a medida que avanza la semana)
   const domSem=new Date(hoy.getTime()+(6-((hoy.getDay()+6)%7))*86400000);
+  const pagHM=pagos.filter(p=>p.fecha<=manana);
   const pagSem=pagos.filter(p=>p.fecha<=domSem);
   const pag10=pagos.filter(p=>p.fecha<=en10);
   const pag30=pagos.filter(p=>p.fecha<=en30);
@@ -2553,8 +2557,9 @@ function renderFinanzas(){
   const sinRec='falta conectar recopilador';
   const kpiBtn=(key,html)=>`<div onclick="setFinKpiDet('${key}')" title="clic para ver el detalle" style="cursor:pointer;border-radius:8px;${finKpiDet===key?'outline:2px solid var(--accent);':''}">${html}</div>`;
   const verDet=k=>finKpiDet===k?' · cerrar ▴':' · ver detalle ▾';
-  const kpis=`<div class="fin-kpis" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:24px;">
+  const kpis=`<div class="fin-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin-bottom:24px;">
     ${pubKPI('Disponible operativo',pesos(disponible),`en cuentas ${pesos(reserva)} − ${pesos(PISO_RESERVA)} que viven en Reservas MP Ry${saldosFecha?' · al '+saldosFecha:''}`,resColor)}
+    ${kpiBtn('dhm',pubKPI('Hoy y mañana',conPagos?pesos(pagHM.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pagHM.length+' pagos · vencidos incluidos'+verDet('dhm'):sinRec,'var(--accent3)'))}
     ${kpiBtn('dsem',pubKPI('A pagar esta semana',conPagos?pesos(pagSem.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pagSem.length+' pagos · hasta el dom '+fF(domSem)+verDet('dsem'):sinRec,'var(--accent2)'))}
     ${kpiBtn('d10',pubKPI('A pagar 10 días',conPagos?pesos(pag10.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag10.length+' pagos'+verDet('d10'):sinRec,'var(--accent2)'))}
     ${kpiBtn('d30',pubKPI('A pagar 30 días',conPagos?pesos(pag30.reduce((s,p)=>s+p.monto,0)):'—',conPagos?pag30.length+' pagos'+verDet('d30'):sinRec))}
@@ -2565,7 +2570,7 @@ function renderFinanzas(){
   // ── Detalle del KPI clickeado ──
   let kpiDet='';
   if(conPagos&&finKpiDet){
-    const sets={dsem:{t:'A pagar · esta semana (hasta el dom '+fF(domSem)+')',list:pagSem},d10:{t:'A pagar · próximos 10 días',list:pag10},d30:{t:'A pagar · próximos 30 días',list:pag30},g30:{t:'Pagos grandes (≥$'+Math.round(UMBRAL_GRANDE/1e6)+'M) · próximos 30 días',list:grandes30}};
+    const sets={dhm:{t:'A pagar · hoy y mañana (vencidos incluidos)',list:pagHM},dsem:{t:'A pagar · esta semana (hasta el dom '+fF(domSem)+')',list:pagSem},d10:{t:'A pagar · próximos 10 días',list:pag10},d30:{t:'A pagar · próximos 30 días',list:pag30},g30:{t:'Pagos grandes (≥$'+Math.round(UMBRAL_GRANDE/1e6)+'M) · próximos 30 días',list:grandes30}};
     const s=sets[finKpiDet];
     if(s){
       const detRows=s.list.map(p=>{
@@ -2695,14 +2700,57 @@ function renderFinanzas(){
   });
   if(!arbolH) arbolH='<div class="empty">Sin pagos que cumplan el filtro.</div>';
 
+  // Vista por cuenta: responde "¿cuánta plata tengo que tener en cada cuenta?" (pedido de Ry, ago 2026).
+  // Horizonte elegible; por cada cuenta: necesario en el horizonte vs saldo actual, con semáforo y detalle.
+  const NSC='fincta';
+  const horizontes=[['hm','Hoy y mañana',manana],['sem','Esta semana',domSem],['10','10 días',en10],['30','30 días',en30]];
+  const horFecha=(horizontes.find(h=>h[0]===finHor)||horizontes[1])[2];
+  const horBtns=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+    <span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;">Necesario para pagar hasta:</span>
+    ${horizontes.map(([k,l])=>`<button onclick="setFinHor('${k}')" style="padding:3px 12px;border-radius:20px;border:1px solid ${finHor===k?'var(--accent)':'var(--border)'};background:${finHor===k?'var(--accent)':'transparent'};color:${finHor===k?'#fff':'var(--muted)'};font-size:10px;cursor:pointer;font-family:inherit;">${l}</button>`).join('')}
+    <span style="font-size:10px;color:var(--muted);">(${fF(horFecha)} inclusive · vencidos incluidos)</span>
+  </div>`;
+  const porCuenta={};
+  list.filter(p=>p.fecha<=horFecha).forEach(p=>{
+    const k=(p.cuenta||'(sin cuenta asignada)').trim()||'(sin cuenta asignada)';
+    if(!porCuenta[k]) porCuenta[k]={t:0,items:[]};
+    porCuenta[k].t+=p.monto; porCuenta[k].items.push(p);
+  });
+  let cuentasH='', totNec=0, totSaldo=0, hayFaltantes=[];
+  Object.entries(porCuenta).sort((a,b)=>b[1].t-a[1].t).forEach(([cta,C])=>{
+    const key='c-'+cta.replace(/\W+/g,'-');
+    const sinCta=cta==='(sin cuenta asignada)';
+    const saldoRow=sinCta?null:cuentasRows.find(r=>r.cuenta.toLowerCase()===cta.toLowerCase());
+    const saldo=saldoRow?saldoRow.saldo:null;
+    totNec+=C.t; if(saldo!==null) totSaldo+=saldo;
+    let estado;
+    if(sinCta) estado=`<span style="font-size:10px;color:var(--accent3);">asignar cuenta en el flujo</span>`;
+    else if(saldo===null) estado=`<span style="font-size:10px;color:var(--muted);">cuenta sin saldo cargado</span>`;
+    else if(saldo>=C.t) estado=`<span style="font-size:10px;color:#27ae60;">● cubre · saldo ${pesos(saldo)}</span>`;
+    else { estado=`<span style="font-size:10px;color:var(--accent3);font-weight:700;">● faltan ${pesos(C.t-saldo)} · saldo ${pesos(saldo)}</span>`; hayFaltantes.push({cta,falta:C.t-saldo}); }
+    cuentasH+=TR(NSC,key,0,`${cta}`,`${C.items.length} ${C.items.length===1?'pago':'pagos'} · ${estado}`,`<span style="font-weight:700;">necesita ${pesos(C.t)}</span>`,true,false);
+    cuentasH+=TC(NSC,key,C.items.slice().sort((a,b)=>a.fecha-b.fecha).map(pRow).join(''),false);
+  });
+  if(cuentasH){
+    cuentasH+=`<div class="tr nc" style="background:var(--surface2);border-top:2px solid var(--border);font-weight:600;">
+      <span class="tl">TOTAL a tener en cuentas hasta el ${fF(horFecha)}</span>
+      <span style="min-width:160px;text-align:right;font-size:10px;color:var(--muted);margin-right:14px;">saldos cargados: ${pesos(totSaldo)}</span>
+      <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;">${pesos(totNec)}</span>
+    </div>`;
+  } else cuentasH='<div class="empty">Sin pagos en el horizonte elegido (con los filtros activos).</div>';
+  const resumenFalta=hayFaltantes.length
+    ? `<div style="margin-bottom:12px;padding:10px 14px;background:#fdf3f1;border:1px solid #e8c8c0;border-radius:8px;font-size:12px;color:#8a3324;">⚠ Para llegar al ${fF(horFecha)} hay que fondear: ${hayFaltantes.map(f=>`<b>${f.cta}</b> +${pesos(f.falta)}`).join(' · ')}</div>`
+    : '';
+
   const vistaBtn=(v,l)=>`<button onclick="setFinVista('${v}')" style="padding:5px 14px;border-radius:4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:1px solid ${finVista===v?'var(--accent)':'var(--border)'};background:${finVista===v?'var(--accent)':'transparent'};color:${finVista===v?'#fff':'var(--muted)'};font-family:inherit;">${l}</button>`;
   const agenda=`<div class="subsection" style="margin-bottom:28px;">
     <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
       <span>Agenda de pagos <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:normal;">· los ≥ $${(UMBRAL_GRANDE/1e6).toFixed(0)}M van destacados</span></span>
-      <span style="display:flex;gap:4px;">${vistaBtn('agenda','Cronológica')}${vistaBtn('arbol','Por fuente')}</span>
+      <span style="display:flex;gap:4px;">${vistaBtn('agenda','Cronológica')}${vistaBtn('arbol','Por fuente')}${vistaBtn('cuentas','Por cuenta')}</span>
     </div>
     ${filtros}
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${finVista==='arbol'?arbolH:agendaH}</div>
+    ${finVista==='cuentas'?horBtns+resumenFalta:''}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">${finVista==='arbol'?arbolH:finVista==='cuentas'?cuentasH:agendaH}</div>
   </div>`;
 
   // ── Saldos por cuenta (renombrar / agregar cuentas / editar montos) ──
