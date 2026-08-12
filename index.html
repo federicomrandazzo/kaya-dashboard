@@ -809,6 +809,8 @@ let pubDesde = '', pubHasta = '';
 let pubCmpADesde = '', pubCmpAHasta = '', pubCmpBDesde = '', pubCmpBHasta = '';
 let edrSelectedPeriods = [];
 let edrTab = 'eerr';
+let mecOpen = {fijos:false, variables:false};
+function mecToggleGroup(key){ mecOpen[key]=!mecOpen[key]; renderMesEnCurso(); }
 let vSem1 = '', vSem2 = '';
 let semTab = 'margen', semCmpWeeks = [], semCmpExp = new Set(), semLineHidden = new Set(), semLineInit = false, semLinePreset = 'linea', semCmpCleared = false;
 
@@ -4832,12 +4834,14 @@ function renderMesEnCurso(){
   const pctS=v=>V>0?(v/V*100).toFixed(1)+'%':'—';
   const RS_H='background:#f9f5ec;', RS_S='background:#f0e8d0;border-top:1px solid #d4c5a0;border-bottom:1px solid #d4c5a0;', RS_R='background:#eaf5ee;border-top:2px solid #27ae60;';
 
-  const mRowS=(label,val,pct,val2,bg,indent,color,bold)=>{
+  const mRowS=(label,val,pct,val2,bg,indent,color,bold,onclick)=>{
     const pad=`padding-left:${8+(indent||0)*14}px;`;
     const isHL=(indent||0)===0;
     const fw=(isHL||bold)?'600':'400';
     const fs=isHL?'12px':'11px';
-    return `<tr style="background:${bg||'transparent'};border-bottom:1px solid #f0ead8;">
+    const trStyle=`background:${bg||'transparent'};border-bottom:1px solid #f0ead8;${onclick?'cursor:pointer;':''}`;
+    const onclickAttr=onclick?` onclick="${onclick}"`:'';
+    return `<tr style="${trStyle}"${onclickAttr}>
       <td style="padding:5px 8px;${pad}font-size:${fs};font-weight:${fw};">${label}</td>
       <td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${color||'var(--text)'};">${val===null?'—':$T(val)}</td>
       <td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);">${pct===undefined?'':pct}</td>
@@ -4868,17 +4872,15 @@ function renderMesEnCurso(){
       </tr>
       ${mRowS('Margen bruto',MB,pctS(MB),MBesp,RS_S,0,'#8b6914')}
       ${mRowS('03. Gastos',GF+GV,pctS(GF+GV),GTOTesp,RS_H,0)}
-      ${mRowS('Fijos (mes base '+fmtP(mesBase)+')',GF,pctS(GF),GF,'',1,null,true)}
-      ${rubrosFijSortedLocal.map(r=>mRowS(r,rubrosFijVals[r],pctS(rubrosFijVals[r]),rubrosFijVals[r],'',2)).join('')}
-      <tr style="border-bottom:1px solid #f0ead8;">
-        <td colspan="4" style="padding:6px 8px 4px 22px;font-size:11px;font-weight:600;color:var(--muted);">Variables (% promedio ${fmtP(base3[0]||mesBase)}–${fmtP(mesBase)}, editable)</td>
-      </tr>
-      ${rubrosVarSortedLocal.map(r=>`<tr style="border-bottom:1px solid #f0ead8;">
+      ${mRowS((mecOpen.fijos?'▾ ':'▸ ')+'Fijos (mes base '+fmtP(mesBase)+')',GF,pctS(GF),GF,'',1,null,true,"mecToggleGroup('fijos')")}
+      ${mecOpen.fijos?rubrosFijSortedLocal.map(r=>mRowS(r,rubrosFijVals[r],pctS(rubrosFijVals[r]),rubrosFijVals[r],'',2)).join(''):''}
+      ${mRowS((mecOpen.variables?'▾ ':'▸ ')+'Variables (% promedio '+fmtP(base3[0]||mesBase)+'–'+fmtP(mesBase)+', editable)',GV,pctS(GV),GVesp,'',1,null,true,"mecToggleGroup('variables')")}
+      ${mecOpen.variables?rubrosVarSortedLocal.map(r=>`<tr style="border-bottom:1px solid #f0ead8;">
         <td style="padding:5px 8px 5px 36px;font-size:11px;">${r}</td>
         <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;">${$T(RUBVAR[r])}</td>
         <td style="text-align:right;padding:5px 6px;">${pctInput(r,varPcts[r].pct)}</td>
         <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${RUBVAResp[r]===null?'—':$T(RUBVAResp[r])}</td>
-      </tr>`).join('')}
+      </tr>`).join(''):''}
       ${mRowS('Resultado',RES,pctS(RES),RESesp,RS_R,0,RES>=0?'#27ae60':'var(--accent3)')}
     </tbody>
   </table></div>`;
