@@ -570,6 +570,9 @@
     <div class="nav-item" id="nav-fin" onclick="showModule('fin')">
       <span class="nav-icon">◈</span> Finanzas
     </div>
+    <div class="nav-item" onclick="showModule('mesencurso')" id="nav-mesencurso">
+      <span class="nav-icon">◐</span> Mes en curso
+    </div>
     <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
       <span class="nav-icon">◑</span> Estado de Resultados
     </div>
@@ -641,6 +644,7 @@
     <div id="module-pub" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
     <div id="module-edr" style="display:none;"></div>
+    <div id="module-mesencurso" style="display:none;"></div>
     <div id="module-kh" style="display:none;"></div>
     <div id="module-mayoristas" style="display:none;"></div>
     <div id="welcome" style="display:none;">
@@ -663,7 +667,7 @@ const AUTH_USERS = {
   'ad1cf5b7a33cad4cfa0cddf2f09fd14ffe9aeaa7c8321f7649b3cac9f0ceedda': {role:'sofi',   label:'Sofi'},
 };
 const ROLE_MODULES = {
-  admin:  ['fin','edr','ventas','semanal','pub','stock','proyeccion','kh','mayoristas'],
+  admin:  ['fin','mesencurso','edr','ventas','semanal','pub','stock','proyeccion','kh','mayoristas'],
   ventas: ['semanal','pub','stock','proyeccion'],
   house:  ['stock','proyeccion','kh','ventas'],
   cajas:  ['kh'],
@@ -737,13 +741,13 @@ function startApp(u){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('sidebar').style.display='flex';
   document.getElementById('main').style.display='flex';
-  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',mayoristas:'nav-mayoristas',fin:'nav-fin',edr:'nav-edr'};
+  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',mayoristas:'nav-mayoristas',fin:'nav-fin',edr:'nav-edr',mesencurso:'nav-mesencurso'};
   Object.entries(NAVMAP).forEach(([m,id])=>{ const el=document.getElementById(id); if(el) el.style.display=roleAllows(m)?'flex':'none'; });
   document.getElementById('user-label').textContent=u.label;
   currentModule=(ROLE_MODULES[u.role]&&ROLE_MODULES[u.role][0])||'stock';
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+currentModule); if(n) n.classList.add('active');
-  const TITULOS={ventas:'Ventas',semanal:'Ventas Semanal',pub:'Publicidad',stock:'Stock',proyeccion:'Proyección',kh:'Operaciones',mayoristas:'Mayoristas',fin:'Finanzas',edr:'Estado de Resultados'};
+  const TITULOS={ventas:'Ventas',semanal:'Ventas Semanal',pub:'Publicidad',stock:'Stock',proyeccion:'Proyección',kh:'Operaciones',mayoristas:'Mayoristas',fin:'Finanzas',edr:'Estado de Resultados',mesencurso:'Mes en curso'};
   document.getElementById('topbar-title').textContent=TITULOS[currentModule]||'Stock';
   loadData();
 }
@@ -1015,13 +1019,14 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
   document.getElementById('module-fin').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
+  document.getElementById('module-mesencurso').style.display='none';
   document.getElementById('module-kh').style.display='none';
   document.getElementById('module-mayoristas').style.display='none';
   document.getElementById('module-pub').style.display='none';
@@ -1042,6 +1047,7 @@ function renderCurrentModule(){
   if(currentModule==='fin')        renderFinanzas();
   if(currentModule==='proyeccion') renderProyeccion();
   if(currentModule==='edr')        renderEDR();
+  if(currentModule==='mesencurso') renderMesEnCurso();
   if(currentModule==='kh')         renderKayaHouse();
   if(currentModule==='pub')        renderPublicidad();
   if(currentModule==='mayoristas') renderMayoristas();
@@ -4362,10 +4368,12 @@ function mecGetPct(rubro, def){
   const p=parseFloat(v);
   return isNaN(p)?def:p;
 }
-function mecSetPct(rubro,v){ localStorage.setItem(mecPctKey(rubro), v); renderEDR(); }
-function mecResetPct(rubro){ localStorage.removeItem(mecPctKey(rubro)); renderEDR(); }
+function mecSetPct(rubro,v){ localStorage.setItem(mecPctKey(rubro), v); renderMesEnCurso(); }
+function mecResetPct(rubro){ localStorage.removeItem(mecPctKey(rubro)); renderMesEnCurso(); }
 function mecGetObjetivo(){ return localStorage.getItem('mec_res_objetivo') ?? ''; }
-function mecSetObjetivo(v){ localStorage.setItem('mec_res_objetivo', v); renderEDR(); }
+function mecSetObjetivo(v){ localStorage.setItem('mec_res_objetivo', v); renderMesEnCurso(); }
+function mecGetVentaEsperada(){ return localStorage.getItem('mec_venta_esperada') ?? ''; }
+function mecSetVentaEsperada(v){ localStorage.setItem('mec_venta_esperada', v); renderMesEnCurso(); }
 function renderPubContent(){
   const el=document.getElementById('pub-tab-content');
   if(!el) return;
@@ -4478,7 +4486,6 @@ function renderEDR() {
   const tabHeader=`<div class="tabs" style="margin-bottom:20px;">
     <div class="tab ${edrTab==='eerr'?'active':''}" onclick="setEdrTab('eerr')">Estado de Resultados</div>
     <div class="tab ${edrTab==='udn'?'active':''}" onclick="setEdrTab('udn')">Por Unidad</div>
-    <div class="tab ${edrTab==='actual'?'active':''}" onclick="setEdrTab('actual')">Mes en curso</div>
   </div>`;
 
   // ── POR UNIDAD TAB ────────────────────────────────────────
@@ -4570,162 +4577,6 @@ function renderEDR() {
       <div class="subsection">
         <div class="subsection-label" style="margin-bottom:14px;">Detalle por unidad de negocio</div>
         ${udnTable}
-      </div>`;
-    return;
-  }
-
-  // ── MES EN CURSO TAB ───────────────────────────────────────
-  if(edrTab==='actual'){
-    const now=new Date();
-    const mesActual=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-    const basePeriods=allPeriods.filter(p=>p<mesActual);
-    const mesBase=basePeriods.length?basePeriods[basePeriods.length-1]:null;
-    const base3=basePeriods.slice(-3);
-
-    if(!mesBase){
-      el.innerHTML=tabHeader+'<div class="empty" style="padding:60px 0;">Todavía no hay ningún mes cerrado en el Estado de Resultados para usar como base.</div>';
-      return;
-    }
-
-    const V=DATA.ventas.filter(r=>r['periodo']===mesActual).reduce((s,r)=>s+num(r['importe_neto']),0);
-
-    const rubrosFijLocal=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='fijos').map(r=>r['RUBRO']))].sort();
-    const rubrosVarLocal=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='variables').map(r=>r['RUBRO']))].sort();
-
-    const vBaseTN=edrSum('01. ventas',null,null,mesBase,'01. tienda nube');
-    const cvBaseTN=edrSum('02. costo de ventas',null,null,mesBase,'01. tienda nube');
-    const cmvCalc=vBaseTN>0?Math.abs(cvBaseTN)/vBaseTN*100:0;
-    const cmvPct=mecGetPct('cmv',cmvCalc);
-    const CV=-(cmvPct/100)*V;
-
-    const varPcts={};
-    rubrosVarLocal.forEach(r=>{
-      const gastoSum=base3.reduce((s,p)=>s+Math.abs(edrSum('03. gastos','variables',r,p)),0);
-      const ventaSum=base3.reduce((s,p)=>s+edrSum('01. ventas',null,null,p),0);
-      const calc=ventaSum>0?gastoSum/ventaSum*100:0;
-      varPcts[r]={calc,pct:mecGetPct(r,calc)};
-    });
-    const RUBVAR={};
-    rubrosVarLocal.forEach(r=>{ RUBVAR[r]=-(varPcts[r].pct/100)*V; });
-    const GV=rubrosVarLocal.reduce((s,r)=>s+RUBVAR[r],0);
-
-    const rubrosFijVals={};
-    rubrosFijLocal.forEach(r=>{ rubrosFijVals[r]=edrSum('03. gastos','fijos',r,mesBase); });
-    const GF=edrSum('03. gastos','fijos',null,mesBase);
-    const rubrosFijSortedLocal=[...rubrosFijLocal].sort((a,b)=>Math.abs(rubrosFijVals[b])-Math.abs(rubrosFijVals[a]));
-    const rubrosVarSortedLocal=[...rubrosVarLocal].sort((a,b)=>Math.abs(RUBVAR[b])-Math.abs(RUBVAR[a]));
-
-    const MB=V+CV;
-    const RES=V+CV+GF+GV;
-    const varPctTotal=V>0?Math.abs(CV+GV)/V*100:0;
-    const mc=1-varPctTotal/100;
-    const mcValid=mc>0;
-    const PEQ=mcValid?Math.abs(GF)/mc:null;
-    const MGS=(PEQ!==null)?V-PEQ:null;
-    const MGSPCT=(MGS!==null&&PEQ>0)?MGS/PEQ*100:null;
-    const cubiertoPct=(PEQ!==null&&PEQ>0)?V/PEQ*100:null;
-
-    const objetivoRaw=mecGetObjetivo();
-    const objetivo=objetivoRaw===''?null:parseFloat(objetivoRaw);
-    let ventaNecesaria=null, faltaVender=null;
-    if(objetivo!==null && !isNaN(objetivo) && mcValid){
-      ventaNecesaria=(Math.abs(GF)+objetivo)/mc;
-      faltaVender=Math.max(0,ventaNecesaria-V);
-    }
-
-    const pctS=v=>V>0?(v/V*100).toFixed(1)+'%':'—';
-    const RS_H='background:#f9f5ec;', RS_S='background:#f0e8d0;border-top:1px solid #d4c5a0;border-bottom:1px solid #d4c5a0;', RS_R='background:#eaf5ee;border-top:2px solid #27ae60;';
-
-    const mRowS=(label,val,pct,bg,indent,color,bold)=>{
-      const pad=`padding-left:${8+(indent||0)*14}px;`;
-      const isHL=(indent||0)===0;
-      const fw=(isHL||bold)?'600':'400';
-      const fs=isHL?'12px':'11px';
-      return `<tr style="background:${bg||'transparent'};border-bottom:1px solid #f0ead8;">
-        <td style="padding:5px 8px;${pad}font-size:${fs};font-weight:${fw};">${label}</td>
-        <td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${color||'var(--text)'};">${val===null?'—':$T(val)}</td>
-        <td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);">${pct===undefined?'':pct}</td>
-      </tr>`;
-    };
-    const pctInput=(rubro,val)=>`<span style="display:inline-flex;align-items:center;gap:3px;">
-        <input type="number" step="0.1" value="${val.toFixed(1)}" onchange="mecSetPct('${rubro}',this.value)"
-          style="width:52px;border:1px solid #ddd4b8;border-radius:4px;padding:2px 4px;font-size:10px;font-family:'Red Hat Display',sans-serif;color:var(--text);background:var(--card);text-align:right;">%
-        <span onclick="mecResetPct('${rubro}')" title="Restablecer al valor calculado" style="cursor:pointer;color:var(--muted);font-size:10px;">↺</span>
-      </span>`;
-
-    const tableHTML=`<div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
-      <thead><tr style="border-bottom:2px solid #d4c5a0;">
-        <th style="text-align:left;font-size:10px;padding:6px 8px;min-width:170px;letter-spacing:0.05em;">CONCEPTO</th>
-        <th style="text-align:right;font-size:10px;padding:6px 8px;">${fmtP(mesActual)}</th>
-        <th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);">%</th>
-      </tr></thead>
-      <tbody>
-        ${mRowS('01. Ventas (Tienda Nube)',V,'100%',RS_H,0,'var(--accent)')}
-        <tr style="border-bottom:1px solid #f0ead8;">
-          <td style="padding:5px 8px;font-size:11px;">02. Costo de ventas <span style="color:var(--muted);font-size:9px;">(% del mes base ${fmtP(mesBase)})</span></td>
-          <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;">${$T(CV)}</td>
-          <td style="text-align:right;padding:5px 6px;">${pctInput('cmv',cmvPct)}</td>
-        </tr>
-        ${mRowS('Margen bruto',MB,pctS(MB),RS_S,0,'#8b6914')}
-        ${mRowS('03. Gastos',GF+GV,pctS(GF+GV),RS_H,0)}
-        ${mRowS('Fijos (mes base '+fmtP(mesBase)+')',GF,pctS(GF),'',1,null,true)}
-        ${rubrosFijSortedLocal.map(r=>mRowS(r,rubrosFijVals[r],pctS(rubrosFijVals[r]),'',2)).join('')}
-        <tr style="border-bottom:1px solid #f0ead8;">
-          <td colspan="3" style="padding:6px 8px 4px 22px;font-size:11px;font-weight:600;color:var(--muted);">Variables (% promedio ${fmtP(base3[0]||mesBase)}–${fmtP(mesBase)}, editable)</td>
-        </tr>
-        ${rubrosVarSortedLocal.map(r=>`<tr style="border-bottom:1px solid #f0ead8;">
-          <td style="padding:5px 8px 5px 36px;font-size:11px;">${r}</td>
-          <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;">${$T(RUBVAR[r])}</td>
-          <td style="text-align:right;padding:5px 6px;">${pctInput(r,varPcts[r].pct)}</td>
-        </tr>`).join('')}
-        ${mRowS('Resultado proyectado',RES,pctS(RES),RS_R,0,RES>=0?'#27ae60':'var(--accent3)')}
-      </tbody>
-    </table></div>`;
-
-    const peqNote=mcValid?'':' — no calculable (los % de costos variables suman 100% o más; ajustalos arriba)';
-    const metricsHTML=`<div style="overflow-x:auto;margin-top:10px;">
-    <table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
-      <tbody>
-        <tr style="border-top:2px solid #d4c5a0;background:#f4ede0;"><td colspan="3" style="padding:4px 8px;font-size:10px;letter-spacing:0.05em;color:var(--muted);font-weight:600;">MÉTRICAS DERIVADAS${peqNote}</td></tr>
-        ${mRowS('Punto de equilibrio',PEQ,'',null,0,'var(--muted)')}
-        ${mRowS('Margen de seguridad',MGS,MGSPCT!==null?Math.round(MGSPCT)+'%':'',null,0,'var(--muted)')}
-        ${objetivo!==null&&!isNaN(objetivo)?mRowS('Venta necesaria (objetivo '+$T(objetivo)+')',ventaNecesaria,'',null,0,'var(--muted)'):''}
-      </tbody>
-    </table></div>`;
-
-    const objetivoHTML=`<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--card);border:1px solid #e8dfc8;border-radius:8px;margin:20px 0;flex-wrap:wrap;">
-      <span style="font-size:9px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Resultado objetivo del mes</span>
-      <span style="display:flex;align-items:center;gap:2px;">$
-        <input type="number" step="1000" value="${objetivoRaw}" placeholder="opcional" onchange="mecSetObjetivo(this.value)"
-          style="width:120px;border:1px solid #ddd4b8;border-radius:4px;padding:3px 6px;font-size:12px;font-family:'Red Hat Display',sans-serif;color:var(--text);background:var(--card);text-align:right;">
-      </span>
-    </div>`;
-
-    const kpiCubierto = cubiertoPct===null
-      ? pubKPI('Cubierto','—','margen de contribución ≤ 0')
-      : pubKPI('Cubierto',Math.round(cubiertoPct)+'%',cubiertoPct>=100?('superado, +'+$T(MGS)):('faltan '+$T(PEQ-V)),cubiertoPct>=100?'#27ae60':'#e67e22');
-
-    const kpiFalta = (objetivo===null||isNaN(objetivo))
-      ? pubKPI('Falta para el objetivo','—','Ingresá un objetivo abajo')
-      : (!mcValid
-          ? pubKPI('Falta para el objetivo','—','margen de contribución ≤ 0')
-          : (faltaVender<=0
-              ? pubKPI('Falta para el objetivo','¡Alcanzado!','+'+$T(V-ventaNecesaria)+' de venta extra','#27ae60')
-              : pubKPI('Falta para el objetivo',$T(faltaVender),'para llegar a '+$T(objetivo),'#e67e22')));
-
-    const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
-      ${pubKPI('Venta actual',$T(V),fmtP(mesActual)+' · Tienda Nube','var(--accent)')}
-      ${pubKPI('Punto de equilibrio',PEQ===null?'—':$T(PEQ),'gastos fijos / margen de contribución')}
-      ${kpiCubierto}
-      ${kpiFalta}
-    </div>`;
-
-    el.innerHTML=tabHeader+kpis+objetivoHTML+
-      `<div class="subsection">
-        <div class="subsection-label" style="margin-bottom:14px;">Estado de Resultados simulado — ${fmtP(mesActual)}</div>
-        ${tableHTML}
-        ${metricsHTML}
       </div>`;
     return;
   }
@@ -4885,6 +4736,209 @@ function renderEDR() {
     <div class="subsection" style="margin-bottom:24px;">
       <div class="subsection-label" style="margin-bottom:14px;">Estado de Resultados</div>
       ${tableHTML}
+    </div>`;
+}
+
+// ── MES EN CURSO ────────────────────────────────────────────────
+function renderMesEnCurso(){
+  const el=document.getElementById('module-mesencurso');
+  el.style.display='block';
+  if(!DATA.edrData||!DATA.edrData.length){
+    el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos de Estado de Resultados.</div>';
+    return;
+  }
+
+  const $T=v=>{if(!v&&v!==0)return'—';const s=v<0?'-':'';return`${s}$${Math.abs(Math.round(v)).toLocaleString('es-AR')}`;};
+  const fmtP=p=>{const[y,m]=p.split('-');return['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][+m]+' '+y;};
+  function edrSum(concepto,linea,rubro,periodo,unidad){
+    return DATA.edrData.filter(r=>
+      (!concepto||r['concepto']===concepto)&&
+      (!linea||r['LINEA']===linea)&&
+      (!rubro||r['RUBRO']===rubro)&&
+      (!periodo||r['periodo']===periodo)&&
+      (!unidad||r['unidad de negocio']===unidad)
+    ).reduce((a,r)=>a+num(r['importe eerr']),0);
+  }
+  const allPeriods=[...new Set(DATA.edrData.map(r=>r['periodo']))].sort();
+
+  const now=new Date();
+  const mesActual=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const basePeriods=allPeriods.filter(p=>p<mesActual);
+  const mesBase=basePeriods.length?basePeriods[basePeriods.length-1]:null;
+  const base3=basePeriods.slice(-3);
+
+  if(!mesBase){
+    el.innerHTML='<div class="empty" style="padding:60px 0;">Todavía no hay ningún mes cerrado en el Estado de Resultados para usar como base.</div>';
+    return;
+  }
+
+  const V=DATA.ventas.filter(r=>r['periodo']===mesActual).reduce((s,r)=>s+num(r['importe_neto']),0);
+
+  const rubrosFijLocal=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='fijos').map(r=>r['RUBRO']))].sort();
+  const rubrosVarLocal=[...new Set(DATA.edrData.filter(r=>r['concepto']==='03. gastos'&&r['LINEA']==='variables').map(r=>r['RUBRO']))].sort();
+
+  const vBaseTN=edrSum('01. ventas',null,null,mesBase,'01. tienda nube');
+  const cvBaseTN=edrSum('02. costo de ventas',null,null,mesBase,'01. tienda nube');
+  const cmvCalc=vBaseTN>0?Math.abs(cvBaseTN)/vBaseTN*100:0;
+  const cmvPct=mecGetPct('cmv',cmvCalc);
+  const CV=-(cmvPct/100)*V;
+
+  const varPcts={};
+  rubrosVarLocal.forEach(r=>{
+    const gastoSum=base3.reduce((s,p)=>s+Math.abs(edrSum('03. gastos','variables',r,p)),0);
+    const ventaSum=base3.reduce((s,p)=>s+edrSum('01. ventas',null,null,p),0);
+    const calc=ventaSum>0?gastoSum/ventaSum*100:0;
+    varPcts[r]={calc,pct:mecGetPct(r,calc)};
+  });
+  const RUBVAR={};
+  rubrosVarLocal.forEach(r=>{ RUBVAR[r]=-(varPcts[r].pct/100)*V; });
+  const GV=rubrosVarLocal.reduce((s,r)=>s+RUBVAR[r],0);
+
+  const rubrosFijVals={};
+  rubrosFijLocal.forEach(r=>{ rubrosFijVals[r]=edrSum('03. gastos','fijos',r,mesBase); });
+  const GF=edrSum('03. gastos','fijos',null,mesBase);
+  const rubrosFijSortedLocal=[...rubrosFijLocal].sort((a,b)=>Math.abs(rubrosFijVals[b])-Math.abs(rubrosFijVals[a]));
+  const rubrosVarSortedLocal=[...rubrosVarLocal].sort((a,b)=>Math.abs(RUBVAR[b])-Math.abs(RUBVAR[a]));
+
+  const MB=V+CV;
+  const RES=V+CV+GF+GV;
+  const varPctTotal=V>0?Math.abs(CV+GV)/V*100:0;
+  const mc=1-varPctTotal/100;
+  const mcValid=mc>0;
+  const PEQ=mcValid?Math.abs(GF)/mc:null;
+  const MGS=(PEQ!==null)?V-PEQ:null;
+  const MGSPCT=(MGS!==null&&PEQ>0)?MGS/PEQ*100:null;
+  const cubiertoPct=(PEQ!==null&&PEQ>0)?V/PEQ*100:null;
+
+  const objetivoRaw=mecGetObjetivo();
+  const objetivo=objetivoRaw===''?null:num(objetivoRaw);
+  let ventaNecesaria=null, faltaVender=null;
+  if(objetivo!==null && mcValid){
+    ventaNecesaria=(Math.abs(GF)+objetivo)/mc;
+    faltaVender=Math.max(0,ventaNecesaria-V);
+  }
+
+  // Venta esperada (proyección de cierre) → resultado esperado, con los mismos % que la venta real
+  const ventaEspRaw=mecGetVentaEsperada();
+  const Vesp=ventaEspRaw===''?null:num(ventaEspRaw);
+  const CVesp=Vesp!==null?-(cmvPct/100)*Vesp:null;
+  const RUBVAResp={};
+  rubrosVarLocal.forEach(r=>{ RUBVAResp[r]=Vesp!==null?-(varPcts[r].pct/100)*Vesp:null; });
+  const GVesp=Vesp!==null?rubrosVarLocal.reduce((s,r)=>s+RUBVAResp[r],0):null;
+  const MBesp=Vesp!==null?Vesp+CVesp:null;
+  const GTOTesp=Vesp!==null?GF+GVesp:null;
+  const RESesp=Vesp!==null?Vesp+CVesp+GF+GVesp:null;
+
+  const pctS=v=>V>0?(v/V*100).toFixed(1)+'%':'—';
+  const RS_H='background:#f9f5ec;', RS_S='background:#f0e8d0;border-top:1px solid #d4c5a0;border-bottom:1px solid #d4c5a0;', RS_R='background:#eaf5ee;border-top:2px solid #27ae60;';
+
+  const mRowS=(label,val,pct,val2,bg,indent,color,bold)=>{
+    const pad=`padding-left:${8+(indent||0)*14}px;`;
+    const isHL=(indent||0)===0;
+    const fw=(isHL||bold)?'600':'400';
+    const fs=isHL?'12px':'11px';
+    return `<tr style="background:${bg||'transparent'};border-bottom:1px solid #f0ead8;">
+      <td style="padding:5px 8px;${pad}font-size:${fs};font-weight:${fw};">${label}</td>
+      <td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${color||'var(--text)'};">${val===null?'—':$T(val)}</td>
+      <td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);">${pct===undefined?'':pct}</td>
+      <td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${color||'var(--text)'};border-left:1px solid #ece5d5;">${val2===undefined||val2===null?'—':$T(val2)}</td>
+    </tr>`;
+  };
+  const pctInput=(rubro,val)=>`<span style="display:inline-flex;align-items:center;gap:3px;">
+      <input type="number" step="0.1" value="${val.toFixed(1)}" onchange="mecSetPct('${rubro}',this.value)"
+        style="width:52px;border:1px solid #ddd4b8;border-radius:4px;padding:2px 4px;font-size:10px;font-family:'Red Hat Display',sans-serif;color:var(--text);background:var(--card);text-align:right;">%
+      <span onclick="mecResetPct('${rubro}')" title="Restablecer al valor calculado" style="cursor:pointer;color:var(--muted);font-size:10px;">↺</span>
+    </span>`;
+
+  const tableHTML=`<div style="overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+    <thead><tr style="border-bottom:2px solid #d4c5a0;">
+      <th style="text-align:left;font-size:10px;padding:6px 8px;min-width:170px;letter-spacing:0.05em;">CONCEPTO</th>
+      <th style="text-align:right;font-size:10px;padding:6px 8px;">${fmtP(mesActual)}</th>
+      <th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);">%</th>
+      <th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Esperado</th>
+    </tr></thead>
+    <tbody>
+      ${mRowS('01. Ventas (Tienda Nube)',V,'100%',Vesp,RS_H,0,'var(--accent)')}
+      <tr style="border-bottom:1px solid #f0ead8;">
+        <td style="padding:5px 8px;font-size:11px;">02. Costo de ventas <span style="color:var(--muted);font-size:9px;">(% del mes base ${fmtP(mesBase)})</span></td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;">${$T(CV)}</td>
+        <td style="text-align:right;padding:5px 6px;">${pctInput('cmv',cmvPct)}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${CVesp===null?'—':$T(CVesp)}</td>
+      </tr>
+      ${mRowS('Margen bruto',MB,pctS(MB),MBesp,RS_S,0,'#8b6914')}
+      ${mRowS('03. Gastos',GF+GV,pctS(GF+GV),GTOTesp,RS_H,0)}
+      ${mRowS('Fijos (mes base '+fmtP(mesBase)+')',GF,pctS(GF),GF,'',1,null,true)}
+      ${rubrosFijSortedLocal.map(r=>mRowS(r,rubrosFijVals[r],pctS(rubrosFijVals[r]),rubrosFijVals[r],'',2)).join('')}
+      <tr style="border-bottom:1px solid #f0ead8;">
+        <td colspan="4" style="padding:6px 8px 4px 22px;font-size:11px;font-weight:600;color:var(--muted);">Variables (% promedio ${fmtP(base3[0]||mesBase)}–${fmtP(mesBase)}, editable)</td>
+      </tr>
+      ${rubrosVarSortedLocal.map(r=>`<tr style="border-bottom:1px solid #f0ead8;">
+        <td style="padding:5px 8px 5px 36px;font-size:11px;">${r}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;">${$T(RUBVAR[r])}</td>
+        <td style="text-align:right;padding:5px 6px;">${pctInput(r,varPcts[r].pct)}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${RUBVAResp[r]===null?'—':$T(RUBVAResp[r])}</td>
+      </tr>`).join('')}
+      ${mRowS('Resultado',RES,pctS(RES),RESesp,RS_R,0,RES>=0?'#27ae60':'var(--accent3)')}
+    </tbody>
+  </table></div>`;
+
+  const mRowM=(label,val,pct)=>`<tr style="border-bottom:1px solid #f0ead8;">
+    <td style="padding:5px 8px;font-size:11px;">${label}</td>
+    <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;color:var(--muted);">${val===null?'—':$T(val)}</td>
+    <td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);">${pct||''}</td>
+  </tr>`;
+  const peqNote=mcValid?'':' — no calculable (los % de costos variables suman 100% o más; ajustalos arriba)';
+  const metricsHTML=`<div style="overflow-x:auto;margin-top:10px;">
+  <table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+    <tbody>
+      <tr style="border-top:2px solid #d4c5a0;background:#f4ede0;"><td colspan="3" style="padding:4px 8px;font-size:10px;letter-spacing:0.05em;color:var(--muted);font-weight:600;">MÉTRICAS DERIVADAS${peqNote}</td></tr>
+      ${mRowM('Punto de equilibrio',PEQ)}
+      ${mRowM('Margen de seguridad',MGS,MGSPCT!==null?Math.round(MGSPCT)+'%':'')}
+      ${objetivo!==null?mRowM('Venta necesaria (objetivo '+$T(objetivo)+')',ventaNecesaria):''}
+      ${Vesp!==null?mRowM('Resultado esperado (venta esperada '+$T(Vesp)+')',RESesp):''}
+    </tbody>
+  </table></div>`;
+
+  const objetivoHTML=`<div style="display:flex;align-items:center;gap:24px;padding:10px 16px;background:var(--card);border:1px solid #e8dfc8;border-radius:8px;margin:20px 0;flex-wrap:wrap;">
+    <span style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:9px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Venta esperada (cierre del mes)</span>
+      <input type="text" inputmode="numeric" value="${Vesp!==null?pesos(Vesp):''}" placeholder="opcional"
+        onblur="this.value=this.value?pesos(num(this.value)):''; mecSetVentaEsperada(this.value?num(this.value):'')"
+        style="width:130px;border:1px solid #ddd4b8;border-radius:4px;padding:3px 6px;font-size:12px;font-family:'Red Hat Display',sans-serif;color:var(--text);background:var(--card);text-align:right;font-variant-numeric:tabular-nums;">
+    </span>
+    <span style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:9px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Resultado objetivo del mes</span>
+      <input type="text" inputmode="numeric" value="${objetivo!==null?pesos(objetivo):''}" placeholder="opcional"
+        onblur="this.value=this.value?pesos(num(this.value)):''; mecSetObjetivo(this.value?num(this.value):'')"
+        style="width:130px;border:1px solid #ddd4b8;border-radius:4px;padding:3px 6px;font-size:12px;font-family:'Red Hat Display',sans-serif;color:var(--text);background:var(--card);text-align:right;font-variant-numeric:tabular-nums;">
+    </span>
+  </div>`;
+
+  const kpiCubierto = cubiertoPct===null
+    ? pubKPI('Cubierto','—','margen de contribución ≤ 0')
+    : pubKPI('Cubierto',Math.round(cubiertoPct)+'%',cubiertoPct>=100?('superado, +'+$T(MGS)):('faltan '+$T(PEQ-V)),cubiertoPct>=100?'#27ae60':'#e67e22');
+
+  const kpiFalta = objetivo===null
+    ? pubKPI('Falta para el objetivo','—','Ingresá un objetivo abajo')
+    : (!mcValid
+        ? pubKPI('Falta para el objetivo','—','margen de contribución ≤ 0')
+        : (faltaVender<=0
+            ? pubKPI('Falta para el objetivo','¡Alcanzado!','+'+$T(V-ventaNecesaria)+' de venta extra','#27ae60')
+            : pubKPI('Falta para el objetivo',$T(faltaVender),'para llegar a '+$T(objetivo),'#e67e22')));
+
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+    ${pubKPI('Venta actual',$T(V),fmtP(mesActual)+' · Tienda Nube','var(--accent)')}
+    ${pubKPI('Punto de equilibrio',PEQ===null?'—':$T(PEQ),'gastos fijos / margen de contribución')}
+    ${kpiCubierto}
+    ${kpiFalta}
+  </div>`;
+
+  el.innerHTML=kpis+objetivoHTML+
+    `<div class="subsection">
+      <div class="subsection-label" style="margin-bottom:14px;">Estado de Resultados simulado — ${fmtP(mesActual)}</div>
+      ${tableHTML}
+      ${metricsHTML}
     </div>`;
 }
 
