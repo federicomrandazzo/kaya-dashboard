@@ -4820,32 +4820,40 @@ function renderMesEnCurso(){
     faltaVender=Math.max(0,ventaNecesaria-V);
   }
 
+  // Columna auxiliar: recalcula todo el P&L con una venta hipotética, mismos % que la venta real
+  function mecColumn(Vx){
+    if(Vx===null) return {V:null,CV:null,RUBVAR:{},GV:null,MB:null,GTOT:null,RES:null};
+    const CVx=-(cmvPct/100)*Vx;
+    const RUBVARx={};
+    rubrosVarLocal.forEach(r=>{ RUBVARx[r]=-(varPcts[r].pct/100)*Vx; });
+    const GVx=rubrosVarLocal.reduce((s,r)=>s+RUBVARx[r],0);
+    return {V:Vx,CV:CVx,RUBVAR:RUBVARx,GV:GVx,MB:Vx+CVx,GTOT:GF+GVx,RES:Vx+CVx+GF+GVx};
+  }
+
   // Venta esperada (proyección de cierre) → resultado esperado, con los mismos % que la venta real
   const ventaEspRaw=mecGetVentaEsperada();
   const Vesp=ventaEspRaw===''?null:num(ventaEspRaw);
-  const CVesp=Vesp!==null?-(cmvPct/100)*Vesp:null;
-  const RUBVAResp={};
-  rubrosVarLocal.forEach(r=>{ RUBVAResp[r]=Vesp!==null?-(varPcts[r].pct/100)*Vesp:null; });
-  const GVesp=Vesp!==null?rubrosVarLocal.reduce((s,r)=>s+RUBVAResp[r],0):null;
-  const MBesp=Vesp!==null?Vesp+CVesp:null;
-  const GTOTesp=Vesp!==null?GF+GVesp:null;
-  const RESesp=Vesp!==null?Vesp+CVesp+GF+GVesp:null;
+  const colEsp=mecColumn(Vesp);
+
+  // Objetivo: mismo P&L pero con la venta necesaria para llegar al resultado objetivo
+  const colObj=mecColumn(objetivo!==null&&mcValid?ventaNecesaria:null);
 
   const pctS=v=>V>0?(v/V*100).toFixed(1)+'%':'—';
   const RS_H='background:#f9f5ec;', RS_S='background:#f0e8d0;border-top:1px solid #d4c5a0;border-bottom:1px solid #d4c5a0;', RS_R='background:#eaf5ee;border-top:2px solid #27ae60;';
 
-  const mRowS=(label,val,pct,val2,bg,indent,color,bold,onclick)=>{
+  const mRowS=(label,val,pct,val2,val3,bg,indent,color,bold,onclick)=>{
     const pad=`padding-left:${8+(indent||0)*14}px;`;
     const isHL=(indent||0)===0;
     const fw=(isHL||bold)?'600':'400';
     const fs=isHL?'12px':'11px';
     const trStyle=`background:${bg||'transparent'};border-bottom:1px solid #f0ead8;${onclick?'cursor:pointer;':''}`;
     const onclickAttr=onclick?` onclick="${onclick}"`:'';
+    const vtd=v=>`<td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${color||'var(--text)'};border-left:1px solid #ece5d5;">${v===undefined||v===null?'—':$T(v)}</td>`;
     return `<tr style="${trStyle}"${onclickAttr}>
       <td style="padding:5px 8px;${pad}font-size:${fs};font-weight:${fw};">${label}</td>
       <td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${color||'var(--text)'};">${val===null?'—':$T(val)}</td>
       <td style="text-align:right;padding:5px 6px;font-size:10px;color:var(--muted);">${pct===undefined?'':pct}</td>
-      <td style="text-align:right;padding:5px 8px;font-size:${fs};font-variant-numeric:tabular-nums;color:${color||'var(--text)'};border-left:1px solid #ece5d5;">${val2===undefined||val2===null?'—':$T(val2)}</td>
+      ${vtd(val2)}${vtd(val3)}
     </tr>`;
   };
   const pctInput=(rubro,val)=>`<span style="display:inline-flex;align-items:center;gap:3px;">
@@ -4861,27 +4869,30 @@ function renderMesEnCurso(){
       <th style="text-align:right;font-size:10px;padding:6px 8px;">${fmtP(mesActual)}</th>
       <th style="text-align:right;font-size:10px;padding:6px 6px;color:var(--muted);">%</th>
       <th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Esperado</th>
+      <th style="text-align:right;font-size:10px;padding:6px 8px;border-left:1px solid #e8dfc8;">Objetivo</th>
     </tr></thead>
     <tbody>
-      ${mRowS('01. Ventas (Tienda Nube)',V,'100%',Vesp,RS_H,0,'var(--accent)')}
+      ${mRowS('01. Ventas (Tienda Nube)',V,'100%',Vesp,colObj.V,RS_H,0,'var(--accent)')}
       <tr style="border-bottom:1px solid #f0ead8;">
         <td style="padding:5px 8px;font-size:11px;">02. Costo de ventas <span style="color:var(--muted);font-size:9px;">(% del mes base ${fmtP(mesBase)})</span></td>
         <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;">${$T(CV)}</td>
         <td style="text-align:right;padding:5px 6px;">${pctInput('cmv',cmvPct)}</td>
-        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${CVesp===null?'—':$T(CVesp)}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${colEsp.CV===null?'—':$T(colEsp.CV)}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${colObj.CV===null?'—':$T(colObj.CV)}</td>
       </tr>
-      ${mRowS('Margen bruto',MB,pctS(MB),MBesp,RS_S,0,'#8b6914')}
-      ${mRowS('03. Gastos',GF+GV,pctS(GF+GV),GTOTesp,RS_H,0)}
-      ${mRowS((mecOpen.fijos?'▾ ':'▸ ')+'Fijos (mes base '+fmtP(mesBase)+')',GF,pctS(GF),GF,'',1,null,true,"mecToggleGroup('fijos')")}
-      ${mecOpen.fijos?rubrosFijSortedLocal.map(r=>mRowS(r,rubrosFijVals[r],pctS(rubrosFijVals[r]),rubrosFijVals[r],'',2)).join(''):''}
-      ${mRowS((mecOpen.variables?'▾ ':'▸ ')+'Variables (% promedio '+fmtP(base3[0]||mesBase)+'–'+fmtP(mesBase)+', editable)',GV,pctS(GV),GVesp,'',1,null,true,"mecToggleGroup('variables')")}
+      ${mRowS('Margen bruto',MB,pctS(MB),colEsp.MB,colObj.MB,RS_S,0,'#8b6914')}
+      ${mRowS('03. Gastos',GF+GV,pctS(GF+GV),colEsp.GTOT,colObj.GTOT,RS_H,0)}
+      ${mRowS((mecOpen.fijos?'▾ ':'▸ ')+'Fijos (mes base '+fmtP(mesBase)+')',GF,pctS(GF),GF,GF,'',1,null,true,"mecToggleGroup('fijos')")}
+      ${mecOpen.fijos?rubrosFijSortedLocal.map(r=>mRowS(r,rubrosFijVals[r],pctS(rubrosFijVals[r]),rubrosFijVals[r],rubrosFijVals[r],'',2)).join(''):''}
+      ${mRowS((mecOpen.variables?'▾ ':'▸ ')+'Variables (% promedio '+fmtP(base3[0]||mesBase)+'–'+fmtP(mesBase)+', editable)',GV,pctS(GV),colEsp.GV,colObj.GV,'',1,null,true,"mecToggleGroup('variables')")}
       ${mecOpen.variables?rubrosVarSortedLocal.map(r=>`<tr style="border-bottom:1px solid #f0ead8;">
         <td style="padding:5px 8px 5px 36px;font-size:11px;">${r}</td>
         <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;">${$T(RUBVAR[r])}</td>
         <td style="text-align:right;padding:5px 6px;">${pctInput(r,varPcts[r].pct)}</td>
-        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${RUBVAResp[r]===null?'—':$T(RUBVAResp[r])}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${colEsp.RUBVAR[r]===undefined||colEsp.RUBVAR[r]===null?'—':$T(colEsp.RUBVAR[r])}</td>
+        <td style="text-align:right;padding:5px 8px;font-size:11px;font-variant-numeric:tabular-nums;border-left:1px solid #ece5d5;">${colObj.RUBVAR[r]===undefined||colObj.RUBVAR[r]===null?'—':$T(colObj.RUBVAR[r])}</td>
       </tr>`).join(''):''}
-      ${mRowS('Resultado',RES,pctS(RES),RESesp,RS_R,0,RES>=0?'#27ae60':'var(--accent3)')}
+      ${mRowS('Resultado',RES,pctS(RES),colEsp.RES,colObj.RES,RS_R,0,RES>=0?'#27ae60':'var(--accent3)')}
     </tbody>
   </table></div>`;
 
@@ -4898,7 +4909,7 @@ function renderMesEnCurso(){
       ${mRowM('Punto de equilibrio',PEQ)}
       ${mRowM('Margen de seguridad',MGS,MGSPCT!==null?Math.round(MGSPCT)+'%':'')}
       ${objetivo!==null?mRowM('Venta necesaria (objetivo '+$T(objetivo)+')',ventaNecesaria):''}
-      ${Vesp!==null?mRowM('Resultado esperado (venta esperada '+$T(Vesp)+')',RESesp):''}
+      ${Vesp!==null?mRowM('Resultado esperado (venta esperada '+$T(Vesp)+')',colEsp.RES):''}
     </tbody>
   </table></div>`;
 
