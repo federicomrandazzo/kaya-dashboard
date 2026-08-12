@@ -573,9 +573,6 @@
     <div class="nav-item" onclick="showModule('mesencurso')" id="nav-mesencurso">
       <span class="nav-icon">◐</span> Mes en curso
     </div>
-    <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
-      <span class="nav-icon">◑</span> Estado de Resultados
-    </div>
     <div class="nav-item" onclick="showModule('ventas')" id="nav-ventas">
       <span class="nav-icon">◉</span> Ventas
     </div>
@@ -596,6 +593,9 @@
     </div>
     <div class="nav-item" onclick="showModule('mayoristas')" id="nav-mayoristas">
       <span class="nav-icon">◆</span> Mayoristas
+    </div>
+    <div class="nav-item" onclick="showModule('edr')" id="nav-edr">
+      <span class="nav-icon">◑</span> Estado de Resultados
     </div>
   </div>
   <div class="sidebar-footer">
@@ -667,7 +667,7 @@ const AUTH_USERS = {
   'ad1cf5b7a33cad4cfa0cddf2f09fd14ffe9aeaa7c8321f7649b3cac9f0ceedda': {role:'sofi',   label:'Sofi'},
 };
 const ROLE_MODULES = {
-  admin:  ['fin','mesencurso','edr','ventas','semanal','pub','stock','proyeccion','kh','mayoristas'],
+  admin:  ['fin','mesencurso','ventas','semanal','pub','stock','proyeccion','kh','mayoristas','edr'],
   ventas: ['semanal','pub','stock','proyeccion'],
   house:  ['stock','proyeccion','kh','ventas'],
   cajas:  ['kh'],
