@@ -3059,6 +3059,7 @@ function comprasDias(desde,hasta){
 }
 
 function comprasToggleRubro(rb,on){ if(on) comprasState.rubros.add(rb); else comprasState.rubros.delete(rb); renderCompras(); }
+function comprasLimpiarRubros(){ comprasState.rubros.clear(); renderCompras(); }
 function comprasToggleSku(sku,on){
   if(on) comprasState.sel.add(sku); else comprasState.sel.delete(sku);
   const c=document.getElementById('compras-sel-count'); if(c) c.textContent=comprasState.sel.size;
@@ -3103,7 +3104,10 @@ function renderCompras(){
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:20px;">
       <div style="font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;">Parámetros de la compra</div>
       <div>
-        <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Rubros</div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>Rubros</span>
+          ${comprasState.rubros.size?`<span onclick="comprasLimpiarRubros()" style="cursor:pointer;text-decoration:underline;color:var(--muted);text-transform:none;letter-spacing:normal;font-size:11px;">Limpiar selección</span>`:''}
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">${rubroChips}</div>
       </div>
       <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
