@@ -585,6 +585,9 @@
     <div class="nav-item" onclick="showModule('stock')" id="nav-stock">
       <span class="nav-icon">◈</span> Stock
     </div>
+    <div class="nav-item" onclick="showModule('compras')" id="nav-compras">
+      <span class="nav-icon">▤</span> Compras
+    </div>
     <div class="nav-item" onclick="showModule('proyeccion')" id="nav-proyeccion">
       <span class="nav-icon">◎</span> Proyección
     </div>
@@ -642,6 +645,7 @@
     <div id="module-semanal" style="display:none;"></div>
     <div id="module-fin" style="display:none;"></div>
     <div id="module-pub" style="display:none;"></div>
+    <div id="module-compras" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
     <div id="module-edr" style="display:none;"></div>
     <div id="module-mesencurso" style="display:none;"></div>
@@ -667,9 +671,9 @@ const AUTH_USERS = {
   'ad1cf5b7a33cad4cfa0cddf2f09fd14ffe9aeaa7c8321f7649b3cac9f0ceedda': {role:'sofi',   label:'Sofi'},
 };
 const ROLE_MODULES = {
-  admin:  ['fin','mesencurso','ventas','semanal','pub','stock','proyeccion','kh','mayoristas','edr'],
-  ventas: ['semanal','pub','stock','proyeccion'],
-  house:  ['stock','proyeccion','kh','ventas'],
+  admin:  ['fin','mesencurso','ventas','semanal','pub','stock','compras','proyeccion','kh','mayoristas','edr'],
+  ventas: ['semanal','pub','stock','compras','proyeccion'],
+  house:  ['stock','compras','proyeccion','kh','ventas'],
   cajas:  ['kh'],
   lab:    ['kh'],
   sofi:   ['mayoristas'],
@@ -889,6 +893,7 @@ async function loadData() {
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
   document.getElementById('module-fin').style.display='none';
+  document.getElementById('module-compras').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
@@ -1021,11 +1026,12 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':mod==='compras'?'Compras':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
   document.getElementById('module-fin').style.display='none';
+  document.getElementById('module-compras').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-mesencurso').style.display='none';
@@ -1040,13 +1046,14 @@ function showModule(mod) {
   if(vb) vb.classList.remove('vis');
   renderCurrentModule();
   // Set up intersection observer after render (not needed for proyeccion)
-  if(mod !== 'proyeccion') setTimeout(()=>setupStickyObs(mod), 100);
+  if(mod !== 'proyeccion' && mod !== 'compras') setTimeout(()=>setupStickyObs(mod), 100);
 }
 function renderCurrentModule(){
   if(currentModule==='stock')      renderStock();
   if(currentModule==='ventas')     renderVentasModule();
   if(currentModule==='semanal')    renderSemanal();
   if(currentModule==='fin')        renderFinanzas();
+  if(currentModule==='compras')    renderCompras();
   if(currentModule==='proyeccion') renderProyeccion();
   if(currentModule==='edr')        renderEDR();
   if(currentModule==='mesencurso') renderMesEnCurso();
@@ -2992,6 +2999,168 @@ function renderConsumoInsumos(){
   DATA.dux.forEach(r=>{ skuRub[(r['Código Producto']||'').trim()]=(r['Rubro']||'OTRO').trim().toUpperCase(); });
   return `<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Período: <strong style="color:var(--text);">${getMainLabel()}</strong>${vPeriodo2?` vs <strong style="color:var(--text);">${vPeriodo2}</strong>`:''} · Productos abiertos a insumos</div>
     ${renderConsumoTree(cIns,unD,NS,it=>skuRub[it.sku]||'OTRO',null,cIns2)}`;
+}
+
+// ── COMPRAS ──────────────────────────────────────────────────────
+// Herramienta previa a un pedido a proveedor: elegís rubro → productos comprados
+// de ese rubro (excluye lo que se arma en casa, vía la misma regla de recetas
+// que Consumo/Proyección) → rango de fechas para el ritmo de consumo real →
+// días de cobertura objetivo (el lead time del proveedor) → cuánto falta o sobra.
+let comprasState = { rubro:'', desde:'', hasta:'', dias:'', sel:new Set(), calculado:false };
+
+function comprasRecetas(){
+  const recetas={};
+  DATA.compuestos.forEach(r=>{
+    const cod=(r['Código Compuesto']||'').trim(); if(!cod) return;
+    if(!recetas[cod]) recetas[cod]=[];
+    recetas[cod].push({comp:(r['Código Componente']||'').trim(),qty:num(r['Cantidad'])});
+  });
+  return recetas;
+}
+// Un SKU se compra (no se fabrica en casa) si no tiene receta o su receta es de un solo
+// insumo (ej. una etiqueta) — no es "suma de insumos" armada acá.
+function comprasEsComprado(sku,recetas){ return !recetas[sku] || recetas[sku].length<2; }
+
+function comprasRubros(recetas){
+  const set=new Set();
+  DATA.dux.forEach(r=>{
+    const sku=(r['Código Producto']||'').trim(); const rb=(r['Rubro']||'').trim();
+    if(sku&&rb&&comprasEsComprado(sku,recetas)) set.add(rb);
+  });
+  return [...set].sort();
+}
+function comprasProductosDeRubro(rubro,recetas){
+  return DATA.dux.filter(r=>{
+    const sku=(r['Código Producto']||'').trim();
+    return sku&&(r['Rubro']||'').trim()===rubro&&comprasEsComprado(sku,recetas);
+  }).map(r=>({sku:(r['Código Producto']||'').trim(),nombre:r['Producto']||'',stock:num(r['Stock Disponible']),unidad:(r['Unidad']||'UNIDAD').toUpperCase()}))
+    .sort((a,b)=>a.nombre.localeCompare(b.nombre));
+}
+// Explota cada venta del rango recursivamente por receta hasta llegar a un SKU comprado
+// (kits → productos → insumos, a la profundidad que haga falta), y acumula el consumo ahí.
+function comprasConsumo(desde,hasta,recetas){
+  const rows=DATA.ventas.filter(r=>{ const p=(r['periodo']||'').trim(); return p>=desde&&p<=hasta; });
+  const cons={};
+  function explode(sku,qty,depth){
+    if(depth>8||!sku||!qty) return;
+    const rec=recetas[sku];
+    if(rec&&rec.length>=2) rec.forEach(c=>explode(c.comp,qty*c.qty,depth+1));
+    else cons[sku]=(cons[sku]||0)+qty;
+  }
+  rows.forEach(r=>explode(getSku(r),num(r['qty']),0));
+  return cons;
+}
+function comprasDias(desde,hasta){
+  const [y1,m1]=desde.split('-').map(Number), [y2,m2]=hasta.split('-').map(Number);
+  const start=new Date(y1,m1-1,1), hoy=new Date();
+  const esMesActual=(y2===hoy.getFullYear()&&m2===(hoy.getMonth()+1));
+  const end=esMesActual?hoy:new Date(y2,m2,0);
+  return Math.max(1,Math.round((end-start)/86400000)+1);
+}
+
+function comprasSetRubro(rb){ comprasState.rubro=rb; comprasState.sel=new Set(); renderCompras(); }
+function comprasToggleSku(sku,on){ if(on) comprasState.sel.add(sku); else comprasState.sel.delete(sku); }
+
+function renderCompras(){
+  const el=document.getElementById('module-compras');
+  el.style.display='block';
+  const recetas=comprasRecetas();
+  const rubros=comprasRubros(recetas);
+  const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
+  if(!comprasState.desde) comprasState.desde=periodos[Math.max(0,periodos.length-3)]||'';
+  if(!comprasState.hasta) comprasState.hasta=periodos[periodos.length-1]||'';
+
+  const productos=comprasState.rubro?comprasProductosDeRubro(comprasState.rubro,recetas):[];
+  const rubroOpts=`<option value="">— elegir —</option>`+rubros.map(rb=>`<option value="${rb}" ${rb===comprasState.rubro?'selected':''}>${rb}</option>`).join('');
+  const optsDesde=periodos.map(p=>`<option value="${p}" ${p===comprasState.desde?'selected':''}>${p}</option>`).join('');
+  const optsHasta=periodos.map(p=>`<option value="${p}" ${p===comprasState.hasta?'selected':''}>${p}</option>`).join('');
+
+  const listaHtml=productos.length?productos.map(p=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;">
+      <input type="checkbox" ${comprasState.sel.has(p.sku)?'checked':''} onchange="comprasToggleSku('${p.sku}',this.checked)" style="width:15px;height:15px;accent-color:#b89021;cursor:pointer;flex-shrink:0;">
+      <span style="flex:1;font-size:12px;">${p.nombre} <span class="sku-badge" style="margin-left:4px;">${p.sku}</span></span>
+      <span style="font-size:11px;color:var(--muted);">stock: ${p.stock.toLocaleString('es-AR')} ${p.unidad}</span>
+    </label>`).join('') : `<div class="empty" style="padding:16px;">${comprasState.rubro?'Sin productos comprados en este rubro.':'Elegí un rubro para ver sus productos.'}</div>`;
+
+  el.innerHTML=`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:20px;">
+      <div style="font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;">Parámetros de la compra</div>
+      <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Rubro</div>
+          <select class="v-select" style="width:200px;" onchange="comprasSetRubro(this.value)">${rubroOpts}</select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Consumo desde</div>
+          <select class="v-select" style="width:120px;" onchange="comprasState.desde=this.value">${optsDesde}</select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">hasta</div>
+          <select class="v-select" style="width:120px;" onchange="comprasState.hasta=this.value">${optsHasta}</select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Días de cobertura objetivo</div>
+          <input id="compras-dias" type="text" class="v-select" placeholder="Ej: 40" value="${comprasState.dias}" style="width:110px;" oninput="comprasState.dias=this.value">
+        </div>
+        <button onclick="calcCompras()" style="background:var(--accent);color:#0e0e0e;border:none;padding:8px 20px;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.08em;cursor:pointer;font-weight:500;">Calcular</button>
+      </div>
+      <div style="margin-top:18px;">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Productos del rubro ${comprasState.rubro?`· ${comprasState.sel.size} tildados`:''}</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;max-height:320px;overflow-y:auto;">${listaHtml}</div>
+      </div>
+    </div>
+    <div id="compras-resultado"></div>
+  `;
+  if(comprasState.calculado) calcCompras(true);
+}
+
+function calcCompras(silent){
+  if(!silent) comprasState.calculado=true;
+  const el=document.getElementById('compras-resultado');
+  if(!el) return;
+  const dias=Number(String(comprasState.dias).replace(',','.'));
+  if(!comprasState.sel.size||!comprasState.desde||!comprasState.hasta||!dias){
+    el.innerHTML=`<div class="empty">Elegí rubro, tildá productos, un rango de fechas y los días de cobertura objetivo para calcular.</div>`;
+    return;
+  }
+  const recetas=comprasRecetas();
+  const consumo=comprasConsumo(comprasState.desde,comprasState.hasta,recetas);
+  const diasRango=comprasDias(comprasState.desde,comprasState.hasta);
+  const stockD={},nomD={},unD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
+
+  const filas=[...comprasState.sel].map(sku=>{
+    const cons=consumo[sku]||0, diario=cons/diasRango, stock=stockD[sku]||0;
+    const diasHoy=diario>0?stock/diario:Infinity;
+    const objetivoUds=diario*dias;
+    const faltan=Math.max(0,objetivoUds-stock), sobran=Math.max(0,stock-objetivoUds);
+    return {sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',cons,diario,stock,diasHoy,faltan,sobran};
+  }).sort((a,b)=>a.diasHoy-b.diasHoy);
+
+  const rows=filas.map(f=>{
+    const critico=f.diasHoy<dias;
+    const diasFmt=f.diasHoy===Infinity?'—':Math.round(f.diasHoy).toLocaleString('es-AR');
+    const accion=f.faltan>0?`Comprar ${Math.ceil(f.faltan).toLocaleString('es-AR')} ${f.unidad}`:(f.sobran>0?`Sobran ${Math.round(f.sobran).toLocaleString('es-AR')} ${f.unidad}`:'Justo');
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;">${f.nombre} <span class="sku-badge" style="margin-left:4px;">${f.sku}</span></td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.stock.toLocaleString('es-AR')} ${f.unidad}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.diario.toLocaleString('es-AR',{maximumFractionDigits:2})}/día</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${critico?'var(--accent3)':'var(--text)'};">${diasFmt} días</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${f.faltan>0?'var(--accent3)':'var(--muted)'};">${accion}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">
+        <th style="text-align:left;font-size:10px;padding:8px 10px;">Producto</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Stock hoy</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Consumo</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Días de cobertura</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Objetivo ${dias} días</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+  </div>
+  <div style="margin-top:10px;font-size:10px;color:var(--muted);">Consumo diario calculado sobre ${comprasState.desde} a ${comprasState.hasta} (${diasRango} días) · incluye lo vendido dentro de kits y productos compuestos.</div>`;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
