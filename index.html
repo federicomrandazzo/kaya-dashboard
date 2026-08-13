@@ -3178,8 +3178,8 @@ function calcCompras(silent){
   const consumo=comprasConsumo(comprasState.desde,comprasState.hasta,recetas);
   const diasRango=comprasDias(comprasState.desde,comprasState.hasta);
   const armado=comprasStockArmado(recetas);
-  const stockD={},nomD={},unD={};
-  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
+  const stockD={},nomD={},unD={},rubD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); rubD[c]=(r['Rubro']||'').trim(); });
 
   const filas=[...comprasState.sel].map(sku=>{
     const cons=consumo[sku]||0, diario=cons/diasRango;
@@ -3187,10 +3187,16 @@ function calcCompras(silent){
     const diasHoy=diario>0?stock/diario:Infinity;
     const objetivoUds=diario*dias;
     const faltan=Math.max(0,objetivoUds-stock), sobran=Math.max(0,stock-objetivoUds);
-    return {sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',cons,diario,stockSuelto,stockArm,stock,diasHoy,faltan,sobran};
-  }).sort((a,b)=>a.diasHoy-b.diasHoy);
+    return {sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',rubro:rubD[sku]||'OTRO',cons,diario,stockSuelto,stockArm,stock,diasHoy,faltan,sobran};
+  });
 
-  const rows=filas.map(f=>{
+  // Agrupado por rubro (orden alfabético, no importa) · dentro de cada rubro, de lo que más falta a lo que menos falta.
+  const porRubro={};
+  filas.forEach(f=>{ if(!porRubro[f.rubro]) porRubro[f.rubro]=[]; porRubro[f.rubro].push(f); });
+  const rubrosOrden=Object.keys(porRubro).sort();
+  rubrosOrden.forEach(rb=>porRubro[rb].sort((a,b)=>b.faltan-a.faltan||a.diasHoy-b.diasHoy));
+
+  const filaHtml=f=>{
     const critico=f.diasHoy<dias;
     const diasFmt=f.diasHoy===Infinity?'—':Math.round(f.diasHoy).toLocaleString('es-AR');
     const accion=f.faltan>0?`Comprar ${Math.ceil(f.faltan).toLocaleString('es-AR')} ${f.unidad}`:(f.sobran>0?`Sobran ${Math.round(f.sobran).toLocaleString('es-AR')} ${f.unidad}`:'Justo');
@@ -3202,7 +3208,11 @@ function calcCompras(silent){
       <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${critico?'var(--accent3)':'var(--text)'};">${diasFmt} días</td>
       <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${f.faltan>0?'var(--accent3)':'var(--muted)'};">${accion}</td>
     </tr>`;
-  }).join('');
+  };
+  const rows=rubrosOrden.map(rb=>
+    `<tr><td colspan="5" style="padding:10px 10px 6px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);background:var(--surface2);">${rb}</td></tr>`
+    +porRubro[rb].map(filaHtml).join('')
+  ).join('');
 
   el.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
