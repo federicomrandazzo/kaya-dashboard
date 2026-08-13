@@ -3050,6 +3050,30 @@ function comprasConsumo(desde,hasta,recetas){
   rows.forEach(r=>explode(getSku(r),num(r['qty']),0));
   return cons;
 }
+// Un insumo comprado no solo está "suelto" en Dux: también hay unidades encerradas
+// dentro de productos ya armados (ej. las botellitas que ya están puestas en adaptógenos
+// con stock hoy). Para cada compuesto real (receta ≥2 insumos) con stock propio en Dux,
+// explota su receta a fondo y suma stock del compuesto × ratio a cada insumo hoja.
+function comprasStockArmado(recetas){
+  const stockDux={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); if(c) stockDux[c]=num(r['Stock Disponible']); });
+  const armado={};
+  Object.keys(recetas).forEach(compSku=>{
+    const rec=recetas[compSku];
+    if(!rec||rec.length<2) return;
+    const stockCompuesto=stockDux[compSku]||0;
+    if(!stockCompuesto) return;
+    const ratios={};
+    (function walk(sku,mult,depth){
+      if(depth>8) return;
+      const r2=recetas[sku];
+      if(r2&&r2.length>=2) r2.forEach(c=>walk(c.comp,mult*c.qty,depth+1));
+      else ratios[sku]=(ratios[sku]||0)+mult;
+    })(compSku,1,0);
+    Object.entries(ratios).forEach(([insumo,ratio])=>{ armado[insumo]=(armado[insumo]||0)+stockCompuesto*ratio; });
+  });
+  return armado;
+}
 function comprasDias(desde,hasta){
   const [y1,m1]=desde.split('-').map(Number), [y2,m2]=hasta.split('-').map(Number);
   const start=new Date(y1,m1-1,1), hoy=new Date();
@@ -3153,24 +3177,27 @@ function calcCompras(silent){
   const recetas=comprasRecetas();
   const consumo=comprasConsumo(comprasState.desde,comprasState.hasta,recetas);
   const diasRango=comprasDias(comprasState.desde,comprasState.hasta);
+  const armado=comprasStockArmado(recetas);
   const stockD={},nomD={},unD={};
   DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
 
   const filas=[...comprasState.sel].map(sku=>{
-    const cons=consumo[sku]||0, diario=cons/diasRango, stock=stockD[sku]||0;
+    const cons=consumo[sku]||0, diario=cons/diasRango;
+    const stockSuelto=stockD[sku]||0, stockArm=armado[sku]||0, stock=stockSuelto+stockArm;
     const diasHoy=diario>0?stock/diario:Infinity;
     const objetivoUds=diario*dias;
     const faltan=Math.max(0,objetivoUds-stock), sobran=Math.max(0,stock-objetivoUds);
-    return {sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',cons,diario,stock,diasHoy,faltan,sobran};
+    return {sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',cons,diario,stockSuelto,stockArm,stock,diasHoy,faltan,sobran};
   }).sort((a,b)=>a.diasHoy-b.diasHoy);
 
   const rows=filas.map(f=>{
     const critico=f.diasHoy<dias;
     const diasFmt=f.diasHoy===Infinity?'—':Math.round(f.diasHoy).toLocaleString('es-AR');
     const accion=f.faltan>0?`Comprar ${Math.ceil(f.faltan).toLocaleString('es-AR')} ${f.unidad}`:(f.sobran>0?`Sobran ${Math.round(f.sobran).toLocaleString('es-AR')} ${f.unidad}`:'Justo');
+    const stockDetalle=f.stockArm>0.001?`<br><span style="font-size:9px;">${Math.round(f.stockSuelto).toLocaleString('es-AR')} suelto + ${Math.round(f.stockArm).toLocaleString('es-AR')} armado</span>`:'';
     return `<tr style="border-bottom:1px solid var(--border);">
       <td style="padding:8px 10px;font-size:12px;">${f.nombre} <span class="sku-badge" style="margin-left:4px;">${f.sku}</span></td>
-      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.stock.toLocaleString('es-AR')} ${f.unidad}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.stock.toLocaleString('es-AR')} ${f.unidad}${stockDetalle}</td>
       <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.diario.toLocaleString('es-AR',{maximumFractionDigits:2})}/día</td>
       <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${critico?'var(--accent3)':'var(--text)'};">${diasFmt} días</td>
       <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${f.faltan>0?'var(--accent3)':'var(--muted)'};">${accion}</td>
@@ -3187,7 +3214,7 @@ function calcCompras(silent){
         <th style="text-align:right;font-size:10px;padding:8px 10px;">Objetivo ${dias} días</th>
       </tr></thead><tbody>${rows}</tbody></table></div>
   </div>
-  <div style="margin-top:10px;font-size:10px;color:var(--muted);">Consumo diario calculado sobre ${comprasState.desde} a ${comprasState.hasta} (${diasRango} días) · incluye lo vendido dentro de kits y productos compuestos.</div>`;
+  <div style="margin-top:10px;font-size:10px;color:var(--muted);">Consumo diario calculado sobre ${comprasState.desde} a ${comprasState.hasta} (${diasRango} días) · incluye lo vendido dentro de kits y productos compuestos · el stock hoy suma lo suelto en Dux más lo que ya está adentro de productos armados con stock (ej. el insumo puesto en un producto compuesto que todavía no se vendió).</div>`;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
