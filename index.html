@@ -3006,7 +3006,7 @@ function renderConsumoInsumos(){
 // de ese rubro (excluye lo que se arma en casa, vía la misma regla de recetas
 // que Consumo/Proyección) → rango de fechas para el ritmo de consumo real →
 // días de cobertura objetivo (el lead time del proveedor) → cuánto falta o sobra.
-let comprasState = { rubro:'', desde:'', hasta:'', dias:'', sel:new Set(), calculado:false };
+let comprasState = { rubros:new Set(), desde:'', hasta:'', dias:'', sel:new Set(), calculado:false };
 
 function comprasRecetas(){
   const recetas={};
@@ -3029,12 +3029,12 @@ function comprasRubros(recetas){
   });
   return [...set].sort();
 }
-function comprasProductosDeRubro(rubro,recetas){
+function comprasProductosDeRubros(rubros,recetas){
   return DATA.dux.filter(r=>{
-    const sku=(r['Código Producto']||'').trim();
-    return sku&&(r['Rubro']||'').trim()===rubro&&comprasEsComprado(sku,recetas);
-  }).map(r=>({sku:(r['Código Producto']||'').trim(),nombre:r['Producto']||'',stock:num(r['Stock Disponible']),unidad:(r['Unidad']||'UNIDAD').toUpperCase()}))
-    .sort((a,b)=>a.nombre.localeCompare(b.nombre));
+    const sku=(r['Código Producto']||'').trim(); const rb=(r['Rubro']||'').trim();
+    return sku&&rubros.has(rb)&&comprasEsComprado(sku,recetas);
+  }).map(r=>({sku:(r['Código Producto']||'').trim(),nombre:r['Producto']||'',stock:num(r['Stock Disponible']),unidad:(r['Unidad']||'UNIDAD').toUpperCase(),rubro:(r['Rubro']||'').trim()}))
+    .sort((a,b)=>a.rubro===b.rubro?a.nombre.localeCompare(b.nombre):a.rubro.localeCompare(b.rubro));
 }
 // Explota cada venta del rango recursivamente por receta hasta llegar a un SKU comprado
 // (kits → productos → insumos, a la profundidad que haga falta), y acumula el consumo ahí.
@@ -3058,8 +3058,17 @@ function comprasDias(desde,hasta){
   return Math.max(1,Math.round((end-start)/86400000)+1);
 }
 
-function comprasSetRubro(rb){ comprasState.rubro=rb; comprasState.sel=new Set(); renderCompras(); }
-function comprasToggleSku(sku,on){ if(on) comprasState.sel.add(sku); else comprasState.sel.delete(sku); }
+function comprasToggleRubro(rb,on){ if(on) comprasState.rubros.add(rb); else comprasState.rubros.delete(rb); renderCompras(); }
+function comprasToggleSku(sku,on){
+  if(on) comprasState.sel.add(sku); else comprasState.sel.delete(sku);
+  const c=document.getElementById('compras-sel-count'); if(c) c.textContent=comprasState.sel.size;
+}
+function comprasSeleccionarTodo(){
+  const recetas=comprasRecetas();
+  comprasProductosDeRubros(comprasState.rubros,recetas).forEach(p=>comprasState.sel.add(p.sku));
+  renderCompras();
+}
+function comprasVaciarSeleccion(){ comprasState.sel.clear(); renderCompras(); }
 
 function renderCompras(){
   const el=document.getElementById('module-compras');
@@ -3070,26 +3079,34 @@ function renderCompras(){
   if(!comprasState.desde) comprasState.desde=periodos[Math.max(0,periodos.length-3)]||'';
   if(!comprasState.hasta) comprasState.hasta=periodos[periodos.length-1]||'';
 
-  const productos=comprasState.rubro?comprasProductosDeRubro(comprasState.rubro,recetas):[];
-  const rubroOpts=`<option value="">— elegir —</option>`+rubros.map(rb=>`<option value="${rb}" ${rb===comprasState.rubro?'selected':''}>${rb}</option>`).join('');
+  const productos=comprasState.rubros.size?comprasProductosDeRubros(comprasState.rubros,recetas):[];
+  const rubroChips=rubros.map(rb=>{
+    const on=comprasState.rubros.has(rb);
+    return `<div onclick="comprasToggleRubro('${rb}',${!on})" style="cursor:pointer;padding:6px 14px;border-radius:20px;font-size:11px;letter-spacing:0.03em;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'var(--surface2)'};color:${on?'#fff':'var(--text)'};font-weight:${on?'600':'400'};transition:all .15s;">${rb}</div>`;
+  }).join('');
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===comprasState.desde?'selected':''}>${p}</option>`).join('');
   const optsHasta=periodos.map(p=>`<option value="${p}" ${p===comprasState.hasta?'selected':''}>${p}</option>`).join('');
 
-  const listaHtml=productos.length?productos.map(p=>`
-    <label style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;">
+  const showGroups=comprasState.rubros.size>1;
+  let lastRubro=null;
+  const listaHtml=productos.length?productos.map(p=>{
+    let header='';
+    if(showGroups&&p.rubro!==lastRubro){ lastRubro=p.rubro; header=`<div style="padding:8px 10px 4px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);">${p.rubro}</div>`; }
+    return header+`<label style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;">
       <input type="checkbox" ${comprasState.sel.has(p.sku)?'checked':''} onchange="comprasToggleSku('${p.sku}',this.checked)" style="width:15px;height:15px;accent-color:#b89021;cursor:pointer;flex-shrink:0;">
       <span style="flex:1;font-size:12px;">${p.nombre} <span class="sku-badge" style="margin-left:4px;">${p.sku}</span></span>
       <span style="font-size:11px;color:var(--muted);">stock: ${p.stock.toLocaleString('es-AR')} ${p.unidad}</span>
-    </label>`).join('') : `<div class="empty" style="padding:16px;">${comprasState.rubro?'Sin productos comprados en este rubro.':'Elegí un rubro para ver sus productos.'}</div>`;
+    </label>`;
+  }).join('') : `<div class="empty" style="padding:16px;">${comprasState.rubros.size?'Sin productos comprados en estos rubros.':'Elegí uno o más rubros para ver sus productos.'}</div>`;
 
   el.innerHTML=`
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:20px;">
       <div style="font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;">Parámetros de la compra</div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Rubros</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">${rubroChips}</div>
+      </div>
       <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
-        <div>
-          <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Rubro</div>
-          <select class="v-select" style="width:200px;" onchange="comprasSetRubro(this.value)">${rubroOpts}</select>
-        </div>
         <div>
           <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Consumo desde</div>
           <select class="v-select" style="width:120px;" onchange="comprasState.desde=this.value">${optsDesde}</select>
@@ -3105,7 +3122,13 @@ function renderCompras(){
         <button onclick="calcCompras()" style="background:var(--accent);color:#0e0e0e;border:none;padding:8px 20px;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.08em;cursor:pointer;font-weight:500;">Calcular</button>
       </div>
       <div style="margin-top:18px;">
-        <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Productos del rubro ${comprasState.rubro?`· ${comprasState.sel.size} tildados`:''}</div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>Productos ${comprasState.rubros.size?`· <span id="compras-sel-count">${comprasState.sel.size}</span> tildados`:''}</span>
+          ${productos.length?`<span style="display:flex;gap:14px;text-transform:none;letter-spacing:normal;">
+            <span onclick="comprasSeleccionarTodo()" style="cursor:pointer;text-decoration:underline;color:var(--accent2);">Seleccionar todo</span>
+            <span onclick="comprasVaciarSeleccion()" style="cursor:pointer;text-decoration:underline;color:var(--muted);">Vaciar</span>
+          </span>`:''}
+        </div>
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;max-height:320px;overflow-y:auto;">${listaHtml}</div>
       </div>
     </div>
