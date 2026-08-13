@@ -3059,6 +3059,7 @@ function comprasStockArmado(recetas){
   DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); if(c) stockDux[c]=num(r['Stock Disponible']); });
   const armado={};
   Object.keys(recetas).forEach(compSku=>{
+    if(/^KIT/i.test(compSku)) return; // el "stock" de un kit en Dux es una combinación posible, no inventario real
     const rec=recetas[compSku];
     if(!rec||rec.length<2) return;
     const stockCompuesto=stockDux[compSku]||0;
