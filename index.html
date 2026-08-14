@@ -780,6 +780,7 @@ const URLS = {
   pedidos:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcbDTtZqDIScLeubq7MzURi9gEGInUaMqw5Ds1P-CezU2_nBezYgOq29ib8HBpfIen3nUDfMd3DDv9/pub?gid=2143737438&single=true&output=csv',
   publicidad:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vTSPDtSKc612ZTMDlBF-s0JBLj7CWh-VKT2tuXwgg9_QKET6g0tSzrbNFuXOPrf3gLTzzCznIL3Zx1R/pub?gid=0&single=true&output=csv',
   meli:         'https://docs.google.com/spreadsheets/d/e/2PACX-1vTSPDtSKc612ZTMDlBF-s0JBLj7CWh-VKT2tuXwgg9_QKET6g0tSzrbNFuXOPrf3gLTzzCznIL3Zx1R/pub?gid=1786682465&single=true&output=csv',
+  proveedores:  `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=1281089187&single=true&output=csv`,
 };
 
 const SKU_MAP = {
@@ -803,7 +804,7 @@ const MOSQUETA_SKU = 'ROS-MOS';
 // SKUs que aunque sean FUN-/TIN- van a Línea Blanca (no Negra)
 const SKU_BLANCA_OVERRIDE = new Set(['NECESER-KAYA','BOLSO-KAYA']);
 
-let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],cajas:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:'',meli:[],ventasMayorista:[],semanalMayorista:[],canales:[],ventasClienteMayorista:[]};
+let DATA = {dux:[],tn:[],compuestos:[],ventas:[],ordenes:[],produccion:[],cajas:[],asistencias:[],pedidos:[],publicidad:[],edrData:[],semanal:[],finanzas:[],saldos:[],saldosFecha:'',meli:[],ventasMayorista:[],semanalMayorista:[],canales:[],ventasClienteMayorista:[],proveedores:[]};
 let currentModule = 'ventas';
 let currentTab = 'venta';
 let armarCardMode = false;
@@ -900,7 +901,7 @@ async function loadData() {
   document.getElementById('module-mayoristas').style.display='none';
   document.getElementById('module-pub').style.display='none';
   try {
-    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT,cjT,vmT,smT,cnT,vcT] = await Promise.all([
+    const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT,cjT,vmT,smT,cnT,vcT,pvT] = await Promise.all([
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.dux):Promise.resolve(''),
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.tn):Promise.resolve(''),
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.compuestos):Promise.resolve(''),
@@ -920,6 +921,7 @@ async function loadData() {
       (roleAllows('mayoristas')&&URLS.semanalMayorista)?fetchCSV(URLS.semanalMayorista):Promise.resolve(''),
       (roleAllows('mayoristas')&&URLS.canales)?fetchCSV(URLS.canales):Promise.resolve(''),
       (roleAllows('mayoristas')&&URLS.ventasClienteMayorista)?fetchCSV(URLS.ventasClienteMayorista):Promise.resolve(''),
+      roleAllows('compras')?fetchCSV(URLS.proveedores):Promise.resolve(''),
     ]);
     DATA.dux = parseCSV(dT.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
     DATA.tn  = parseCSV(tT);
@@ -933,6 +935,7 @@ async function loadData() {
     DATA.publicidad = parseCSV(pbT.split('\n').slice(1).join('\n')).filter(r=>r['Fecha']&&(r['VENTA TN']||'').trim()&&num(r['VENTA TN'])>0);
     DATA.edrData = parseCSV(edT).filter(r=>r['concepto']&&r['periodo']&&(r['importe eerr']||'').trim());
     DATA.semanal = parseCSV(swT).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
+    DATA.proveedores = parseCSV(pvT).filter(r=>r['SKU']&&r['SKU'].trim());
     // base de datos: parse propio para rastrear _fila (nº de fila real en la hoja — lo necesita "marcar pagado")
     DATA.finanzas = (()=>{
       const lines=fnT.split('\n');
@@ -3006,7 +3009,8 @@ function renderConsumoInsumos(){
 // de ese rubro (excluye lo que se arma en casa, vía la misma regla de recetas
 // que Consumo/Proyección) → rango de fechas para el ritmo de consumo real →
 // días de cobertura objetivo (el lead time del proveedor) → cuánto falta o sobra.
-let comprasState = { rubros:new Set(), desde:'', hasta:'', dias:'', sel:new Set(), calculado:false };
+let comprasState = { rubros:new Set(), desde:'', hasta:'', dias:'', sel:new Set(), calculado:false, soloFaltantes:false };
+let comprasVista = 'rubro';
 
 function comprasRecetas(){
   const recetas={};
@@ -3075,6 +3079,18 @@ function comprasStockArmado(recetas){
   });
   return armado;
 }
+// El campo Proveedor puede traer "A / B" cuando dos proveedores distintos venden el mismo
+// insumo (no es un solo proveedor con ese nombre) — se devuelve como lista.
+function comprasProveedorMap(){
+  const map={};
+  DATA.proveedores.forEach(r=>{
+    const sku=(r['SKU']||'').trim(); if(!sku) return;
+    const dias=num(r['Dias de demora']);
+    const proveedores=(r['Proveedor']||'').split('/').map(s=>s.trim()).filter(Boolean);
+    if(dias&&proveedores.length) map[sku]={proveedores,dias};
+  });
+  return map;
+}
 function comprasDias(desde,hasta){
   const [y1,m1]=desde.split('-').map(Number), [y2,m2]=hasta.split('-').map(Number);
   const start=new Date(y1,m1-1,1), hoy=new Date();
@@ -3100,6 +3116,19 @@ function comprasVaciarSeleccion(){ comprasState.sel.clear(); renderCompras(); }
 function renderCompras(){
   const el=document.getElementById('module-compras');
   el.style.display='block';
+  el.innerHTML=`
+    <div class="tabs" style="margin-bottom:20px;">
+      <div class="tab ${comprasVista==='rubro'?'active':''}" onclick="setComprasVista('rubro')">Por rubro</div>
+      <div class="tab ${comprasVista==='alertas'?'active':''}" onclick="setComprasVista('alertas')">Alertas</div>
+    </div>
+    <div id="compras-content"></div>
+  `;
+  if(comprasVista==='rubro') renderComprasRubro(); else renderComprasAlertas();
+}
+function setComprasVista(v){ comprasVista=v; renderCompras(); }
+
+function renderComprasRubro(){
+  const el=document.getElementById('compras-content');
   const recetas=comprasRecetas();
   const rubros=comprasRubros(recetas);
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
@@ -3196,10 +3225,19 @@ function calcCompras(silent){
   });
 
   // Agrupado por rubro (orden alfabético, no importa) · dentro de cada rubro, de lo que más falta a lo que menos falta.
+  const filasVista=comprasState.soloFaltantes?filas.filter(f=>f.faltan>0):filas;
   const porRubro={};
-  filas.forEach(f=>{ if(!porRubro[f.rubro]) porRubro[f.rubro]=[]; porRubro[f.rubro].push(f); });
+  filasVista.forEach(f=>{ if(!porRubro[f.rubro]) porRubro[f.rubro]=[]; porRubro[f.rubro].push(f); });
   const rubrosOrden=Object.keys(porRubro).sort();
   rubrosOrden.forEach(rb=>porRubro[rb].sort((a,b)=>b.faltan-a.faltan||a.diasHoy-b.diasHoy));
+  const soloFaltantesCheck=`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:var(--muted);margin-bottom:12px;">
+    <input type="checkbox" ${comprasState.soloFaltantes?'checked':''} onchange="comprasState.soloFaltantes=this.checked;calcCompras(true)" style="width:14px;height:14px;accent-color:#b89021;cursor:pointer;">
+    Solo mostrar lo que falta
+  </label>`;
+  if(!rubrosOrden.length){
+    el.innerHTML=soloFaltantesCheck+`<div class="empty" style="padding:40px 0;">Todo cubierto — ningún producto tildado está por debajo del objetivo.</div>`;
+    return;
+  }
 
   const filaHtml=f=>{
     const critico=f.diasHoy<dias;
@@ -3219,7 +3257,7 @@ function calcCompras(silent){
     +porRubro[rb].map(filaHtml).join('')
   ).join('');
 
-  el.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+  el.innerHTML=soloFaltantesCheck+`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
       <thead><tr style="border-bottom:2px solid #d4c5a0;">
         <th style="text-align:left;font-size:10px;padding:8px 10px;">Producto</th>
@@ -3230,6 +3268,79 @@ function calcCompras(silent){
       </tr></thead><tbody>${rows}</tbody></table></div>
   </div>
   <div style="margin-top:10px;font-size:10px;color:var(--muted);">Consumo diario calculado sobre ${comprasState.desde} a ${comprasState.hasta} (${diasRango} días) · incluye lo vendido dentro de kits y productos compuestos · el stock hoy suma lo suelto en Dux más lo que ya está adentro de productos armados con stock (ej. el insumo puesto en un producto compuesto que todavía no se vendió).</div>`;
+}
+
+// Automática: recorre todos los insumos con proveedor cargado y muestra solo los que
+// hoy tienen menos días de cobertura que el plazo de entrega que puso Gastón. Sin gap
+// extra por ahora — se compara directo contra el plazo cargado, para no complicar.
+function renderComprasAlertas(){
+  const el=document.getElementById('compras-content');
+  if(!DATA.proveedores.length){
+    el.innerHTML=`<div class="empty" style="padding:40px 0;">Todavía no hay datos de proveedores cargados.</div>`;
+    return;
+  }
+  const recetas=comprasRecetas();
+  const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
+  const desde=periodos[Math.max(0,periodos.length-3)]||'', hasta=periodos[periodos.length-1]||'';
+  if(!desde||!hasta){ el.innerHTML=`<div class="empty" style="padding:40px 0;">Sin datos de ventas para calcular consumo.</div>`; return; }
+  const consumo=comprasConsumo(desde,hasta,recetas);
+  const diasRango=comprasDias(desde,hasta);
+  const armado=comprasStockArmado(recetas);
+  const stockD={},nomD={},unD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
+  const provMap=comprasProveedorMap();
+
+  const alertas=[];
+  Object.entries(provMap).forEach(([sku,info])=>{
+    const cons=consumo[sku]||0, diario=cons/diasRango;
+    const stockSuelto=stockD[sku]||0, stockArm=armado[sku]||0, stock=stockSuelto+stockArm;
+    const diasHoy=diario>0?stock/diario:Infinity;
+    if(diasHoy>=info.dias) return;
+    alertas.push({sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',proveedores:info.proveedores,plazo:info.dias,
+      stock,stockSuelto,stockArm,diario,diasHoy,faltante:info.dias-diasHoy});
+  });
+
+  const nota=`<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Consumo calculado sobre ${desde} a ${hasta} (${diasRango} días) · muestra los insumos cuyos días de cobertura hoy están por debajo del plazo de entrega cargado para su proveedor.</div>`;
+
+  if(!alertas.length){
+    el.innerHTML=nota+`<div class="empty" style="padding:40px 0;">Ningún insumo con proveedor cargado está por debajo de su plazo de entrega hoy.</div>`;
+    return;
+  }
+
+  // Si el proveedor es "A / B" (dos proveedores distintos para el mismo insumo), el insumo
+  // aparece en el grupo de cada uno — no es un tercer proveedor combinado.
+  const porProveedor={};
+  alertas.forEach(a=>a.proveedores.forEach(p=>{ if(!porProveedor[p]) porProveedor[p]=[]; porProveedor[p].push(a); }));
+  const proveedoresOrden=Object.keys(porProveedor).sort((a,b)=>
+    Math.max(...porProveedor[b].map(x=>x.faltante))-Math.max(...porProveedor[a].map(x=>x.faltante)));
+  proveedoresOrden.forEach(p=>porProveedor[p].sort((a,b)=>b.faltante-a.faltante));
+
+  const filaHtml=a=>{
+    const diasFmt=a.diasHoy===Infinity?'—':Math.round(a.diasHoy).toLocaleString('es-AR');
+    const stockDetalle=a.stockArm>0.001?`<br><span style="font-size:9px;">${Math.round(a.stockSuelto).toLocaleString('es-AR')} suelto + ${Math.round(a.stockArm).toLocaleString('es-AR')} armado</span>`:'';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;">${a.nombre} <span class="sku-badge" style="margin-left:4px;">${a.sku}</span></td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${a.stock.toLocaleString('es-AR')} ${a.unidad}${stockDetalle}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${a.diario.toLocaleString('es-AR',{maximumFractionDigits:2})}/día</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:var(--accent3);">${diasFmt} días</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;color:var(--muted);">${a.plazo} días</td>
+    </tr>`;
+  };
+  const rows=proveedoresOrden.map(p=>
+    `<tr><td colspan="5" style="padding:10px 10px 6px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);background:var(--surface2);">${p} · ${porProveedor[p].length} insumo${porProveedor[p].length>1?'s':''}</td></tr>`
+    +porProveedor[p].map(filaHtml).join('')
+  ).join('');
+
+  el.innerHTML=nota+`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">
+        <th style="text-align:left;font-size:10px;padding:8px 10px;">Producto</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Stock hoy</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Consumo</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Días de cobertura</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Plazo del proveedor</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
