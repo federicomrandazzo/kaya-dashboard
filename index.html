@@ -3009,8 +3009,8 @@ function renderConsumoInsumos(){
 // de ese rubro (excluye lo que se arma en casa, vía la misma regla de recetas
 // que Consumo/Proyección) → rango de fechas para el ritmo de consumo real →
 // días de cobertura objetivo (el lead time del proveedor) → cuánto falta o sobra.
-let comprasState = { rubros:new Set(), desde:'', hasta:'', dias:'', sel:new Set(), calculado:false, soloFaltantes:false };
-let comprasVista = 'rubro';
+let comprasState = { modo:'rubro', rubros:new Set(), proveedores:new Set(), desde:'', hasta:'', dias:'', sel:new Set(), calculado:false, soloFaltantes:false };
+let comprasVista = 'analisis';
 
 function comprasRecetas(){
   const recetas={};
@@ -3091,6 +3091,28 @@ function comprasProveedorMap(){
   });
   return map;
 }
+// Lista de proveedores para elegir como chips — misma idea que los rubros, pero
+// separando los "A / B" en nombres individuales (son 2 proveedores, no 1 combinado).
+function comprasProveedoresList(){
+  const set=new Set();
+  DATA.proveedores.forEach(r=>{
+    (r['Proveedor']||'').split('/').map(s=>s.trim()).filter(Boolean).forEach(p=>set.add(p));
+  });
+  return [...set].sort();
+}
+function comprasProductosDeProveedores(proveedores){
+  const nomD={},unD={},stockD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); stockD[c]=num(r['Stock Disponible']); });
+  const out=[];
+  DATA.proveedores.forEach(r=>{
+    const sku=(r['SKU']||'').trim(); if(!sku) return;
+    const raw=(r['Proveedor']||'').trim();
+    const partes=raw.split('/').map(s=>s.trim()).filter(Boolean);
+    if(!partes.some(p=>proveedores.has(p))) return;
+    out.push({sku,nombre:nomD[sku]||sku,stock:stockD[sku]||0,unidad:unD[sku]||'UNIDAD',proveedor:raw});
+  });
+  return out.sort((a,b)=>a.proveedor===b.proveedor?a.nombre.localeCompare(b.nombre):a.proveedor.localeCompare(b.proveedor));
+}
 function comprasDias(desde,hasta){
   const [y1,m1]=desde.split('-').map(Number), [y2,m2]=hasta.split('-').map(Number);
   const start=new Date(y1,m1-1,1), hoy=new Date();
@@ -3102,13 +3124,20 @@ function comprasDias(desde,hasta){
 function comprasToggleRubro(rb,on){ if(on) comprasState.rubros.add(rb); else comprasState.rubros.delete(rb); renderCompras(); }
 function comprasLimpiarRubros(){ comprasState.rubros.clear(); renderCompras(); }
 function comprasSeleccionarTodosRubros(){ comprasState.rubros=new Set(comprasRubros(comprasRecetas())); renderCompras(); }
+function comprasToggleProveedor(p,on){ if(on) comprasState.proveedores.add(p); else comprasState.proveedores.delete(p); renderCompras(); }
+function comprasLimpiarProveedores(){ comprasState.proveedores.clear(); renderCompras(); }
+function comprasSeleccionarTodosProveedores(){ comprasState.proveedores=new Set(comprasProveedoresList()); renderCompras(); }
+function comprasSetModo(m){ comprasState.modo=m; renderCompras(); }
 function comprasToggleSku(sku,on){
   if(on) comprasState.sel.add(sku); else comprasState.sel.delete(sku);
   const c=document.getElementById('compras-sel-count'); if(c) c.textContent=comprasState.sel.size;
 }
 function comprasSeleccionarTodo(){
   const recetas=comprasRecetas();
-  comprasProductosDeRubros(comprasState.rubros,recetas).forEach(p=>comprasState.sel.add(p.sku));
+  const productos=comprasState.modo==='rubro'
+    ? comprasProductosDeRubros(comprasState.rubros,recetas)
+    : comprasProductosDeProveedores(comprasState.proveedores);
+  productos.forEach(p=>comprasState.sel.add(p.sku));
   renderCompras();
 }
 function comprasVaciarSeleccion(){ comprasState.sel.clear(); renderCompras(); }
@@ -3118,55 +3147,71 @@ function renderCompras(){
   el.style.display='block';
   el.innerHTML=`
     <div class="tabs" style="margin-bottom:20px;">
-      <div class="tab ${comprasVista==='rubro'?'active':''}" onclick="setComprasVista('rubro')">Por rubro</div>
+      <div class="tab ${comprasVista==='analisis'?'active':''}" onclick="setComprasVista('analisis')">Análisis</div>
       <div class="tab ${comprasVista==='alertas'?'active':''}" onclick="setComprasVista('alertas')">Alertas</div>
     </div>
     <div id="compras-content"></div>
   `;
-  if(comprasVista==='rubro') renderComprasRubro(); else renderComprasAlertas();
+  if(comprasVista==='analisis') renderComprasAnalisis(); else renderComprasAlertas();
 }
 function setComprasVista(v){ comprasVista=v; renderCompras(); }
 
-function renderComprasRubro(){
+function renderComprasAnalisis(){
   const el=document.getElementById('compras-content');
   const recetas=comprasRecetas();
-  const rubros=comprasRubros(recetas);
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
   if(!comprasState.desde) comprasState.desde=periodos[Math.max(0,periodos.length-3)]||'';
   if(!comprasState.hasta) comprasState.hasta=periodos[periodos.length-1]||'';
 
-  const productos=comprasState.rubros.size?comprasProductosDeRubros(comprasState.rubros,recetas):[];
-  const rubroChips=rubros.map(rb=>{
-    const on=comprasState.rubros.has(rb);
-    return `<div onclick="comprasToggleRubro('${rb}',${!on})" style="cursor:pointer;padding:6px 14px;border-radius:20px;font-size:11px;letter-spacing:0.03em;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'var(--surface2)'};color:${on?'#fff':'var(--text)'};font-weight:${on?'600':'400'};transition:all .15s;">${rb}</div>`;
+  const modo=comprasState.modo;
+  const chipsOpts=modo==='rubro'?comprasRubros(recetas):comprasProveedoresList();
+  const chipsSet=modo==='rubro'?comprasState.rubros:comprasState.proveedores;
+  const toggleFn=modo==='rubro'?'comprasToggleRubro':'comprasToggleProveedor';
+  const seleccionarTodosFn=modo==='rubro'?'comprasSeleccionarTodosRubros':'comprasSeleccionarTodosProveedores';
+  const limpiarFn=modo==='rubro'?'comprasLimpiarRubros':'comprasLimpiarProveedores';
+  const etiqueta=modo==='rubro'?'Rubros':'Proveedores';
+
+  const productos=chipsSet.size
+    ?(modo==='rubro'?comprasProductosDeRubros(comprasState.rubros,recetas):comprasProductosDeProveedores(comprasState.proveedores))
+    :[];
+  const chips=chipsOpts.map(v=>{
+    const on=chipsSet.has(v);
+    const vEsc=v.replace(/'/g,"\\'");
+    return `<div onclick="${toggleFn}('${vEsc}',${!on})" style="cursor:pointer;padding:6px 14px;border-radius:20px;font-size:11px;letter-spacing:0.03em;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'var(--surface2)'};color:${on?'#fff':'var(--text)'};font-weight:${on?'600':'400'};transition:all .15s;">${v}</div>`;
   }).join('');
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===comprasState.desde?'selected':''}>${p}</option>`).join('');
   const optsHasta=periodos.map(p=>`<option value="${p}" ${p===comprasState.hasta?'selected':''}>${p}</option>`).join('');
+  const modoToggle=`<div style="display:flex;gap:6px;margin-bottom:18px;">
+    ${['rubro','proveedor'].map(m=>`<div onclick="comprasSetModo('${m}')" style="cursor:pointer;padding:6px 16px;border-radius:6px;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;border:1px solid ${modo===m?'var(--accent)':'var(--border)'};background:${modo===m?'var(--accent)':'transparent'};color:${modo===m?'#fff':'var(--muted)'};font-weight:${modo===m?'600':'400'};">${m==='rubro'?'Por rubro':'Por proveedor'}</div>`).join('')}
+  </div>`;
 
-  const showGroups=comprasState.rubros.size>1;
-  let lastRubro=null;
+  const showGroups=chipsSet.size>1;
+  let lastGroup=null;
+  const groupKey=p=>modo==='rubro'?p.rubro:p.proveedor;
   const listaHtml=productos.length?productos.map(p=>{
     let header='';
-    if(showGroups&&p.rubro!==lastRubro){ lastRubro=p.rubro; header=`<div style="padding:8px 10px 4px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);">${p.rubro}</div>`; }
+    const gk=groupKey(p);
+    if(showGroups&&gk!==lastGroup){ lastGroup=gk; header=`<div style="padding:8px 10px 4px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);">${gk}</div>`; }
     return header+`<label style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;">
       <input type="checkbox" ${comprasState.sel.has(p.sku)?'checked':''} onchange="comprasToggleSku('${p.sku}',this.checked)" style="width:15px;height:15px;accent-color:#b89021;cursor:pointer;flex-shrink:0;">
       <span style="flex:1;font-size:12px;">${p.nombre} <span class="sku-badge" style="margin-left:4px;">${p.sku}</span></span>
       <span style="font-size:11px;color:var(--muted);">stock: ${p.stock.toLocaleString('es-AR')} ${p.unidad}</span>
     </label>`;
-  }).join('') : `<div class="empty" style="padding:16px;">${comprasState.rubros.size?'Sin productos comprados en estos rubros.':'Elegí uno o más rubros para ver sus productos.'}</div>`;
+  }).join('') : `<div class="empty" style="padding:16px;">${chipsSet.size?`Sin productos comprados en estos ${modo==='rubro'?'rubros':'proveedores'}.`:`Elegí uno o más ${modo==='rubro'?'rubros':'proveedores'} para ver sus productos.`}</div>`;
 
   el.innerHTML=`
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:20px;">
       <div style="font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;">Parámetros de la compra</div>
+      ${modoToggle}
       <div>
         <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <span>Rubros</span>
+          <span>${etiqueta}</span>
           <span style="display:flex;gap:14px;text-transform:none;letter-spacing:normal;">
-            <span onclick="comprasSeleccionarTodosRubros()" style="cursor:pointer;text-decoration:underline;color:var(--accent2);font-size:11px;">Seleccionar todos</span>
-            ${comprasState.rubros.size?`<span onclick="comprasLimpiarRubros()" style="cursor:pointer;text-decoration:underline;color:var(--muted);font-size:11px;">Limpiar selección</span>`:''}
+            <span onclick="${seleccionarTodosFn}()" style="cursor:pointer;text-decoration:underline;color:var(--accent2);font-size:11px;">Seleccionar todos</span>
+            ${chipsSet.size?`<span onclick="${limpiarFn}()" style="cursor:pointer;text-decoration:underline;color:var(--muted);font-size:11px;">Limpiar selección</span>`:''}
           </span>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">${rubroChips}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">${chips}</div>
       </div>
       <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
         <div>
@@ -3185,7 +3230,7 @@ function renderComprasRubro(){
       </div>
       <div style="margin-top:18px;">
         <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <span>Productos ${comprasState.rubros.size?`· <span id="compras-sel-count">${comprasState.sel.size}</span> tildados`:''}</span>
+          <span>Productos ${chipsSet.size?`· <span id="compras-sel-count">${comprasState.sel.size}</span> tildados`:''}</span>
           ${productos.length?`<span style="display:flex;gap:14px;text-transform:none;letter-spacing:normal;">
             <span onclick="comprasSeleccionarTodo()" style="cursor:pointer;text-decoration:underline;color:var(--accent2);">Seleccionar todo</span>
             <span onclick="comprasVaciarSeleccion()" style="cursor:pointer;text-decoration:underline;color:var(--muted);">Vaciar</span>
@@ -3214,6 +3259,7 @@ function calcCompras(silent){
   const armado=comprasStockArmado(recetas);
   const stockD={},nomD={},unD={},rubD={};
   DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); rubD[c]=(r['Rubro']||'').trim(); });
+  const provMapCC=comprasState.modo==='proveedor'?comprasProveedorMap():null;
 
   const filas=[...comprasState.sel].map(sku=>{
     const cons=consumo[sku]||0, diario=cons/diasRango;
@@ -3221,20 +3267,25 @@ function calcCompras(silent){
     const diasHoy=diario>0?stock/diario:Infinity;
     const objetivoUds=diario*dias;
     const faltan=Math.max(0,objetivoUds-stock), sobran=Math.max(0,stock-objetivoUds);
-    return {sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',rubro:rubD[sku]||'OTRO',cons,diario,stockSuelto,stockArm,stock,diasHoy,faltan,sobran};
+    const grupos=comprasState.modo==='proveedor'
+      ?((provMapCC[sku]&&provMapCC[sku].proveedores.length)?provMapCC[sku].proveedores:['SIN PROVEEDOR'])
+      :[rubD[sku]||'OTRO'];
+    return {sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',grupos,cons,diario,stockSuelto,stockArm,stock,diasHoy,faltan,sobran};
   });
 
-  // Agrupado por rubro (orden alfabético, no importa) · dentro de cada rubro, de lo que más falta a lo que menos falta.
+  // Agrupado por rubro o por proveedor según el modo (orden alfabético, no importa) · dentro
+  // de cada grupo, de lo que más falta a lo que menos falta. Si un insumo tiene 2 proveedores
+  // ("A / B"), aparece en el grupo de cada uno.
   const filasVista=comprasState.soloFaltantes?filas.filter(f=>f.faltan>0):filas;
-  const porRubro={};
-  filasVista.forEach(f=>{ if(!porRubro[f.rubro]) porRubro[f.rubro]=[]; porRubro[f.rubro].push(f); });
-  const rubrosOrden=Object.keys(porRubro).sort();
-  rubrosOrden.forEach(rb=>porRubro[rb].sort((a,b)=>b.faltan-a.faltan||a.diasHoy-b.diasHoy));
+  const porGrupo={};
+  filasVista.forEach(f=>f.grupos.forEach(g=>{ if(!porGrupo[g]) porGrupo[g]=[]; porGrupo[g].push(f); }));
+  const gruposOrden=Object.keys(porGrupo).sort();
+  gruposOrden.forEach(g=>porGrupo[g].sort((a,b)=>b.faltan-a.faltan||a.diasHoy-b.diasHoy));
   const soloFaltantesCheck=`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:var(--muted);margin-bottom:12px;">
     <input type="checkbox" ${comprasState.soloFaltantes?'checked':''} onchange="comprasState.soloFaltantes=this.checked;calcCompras(true)" style="width:14px;height:14px;accent-color:#b89021;cursor:pointer;">
     Solo mostrar lo que falta
   </label>`;
-  if(!rubrosOrden.length){
+  if(!gruposOrden.length){
     el.innerHTML=soloFaltantesCheck+`<div class="empty" style="padding:40px 0;">Todo cubierto — ningún producto tildado está por debajo del objetivo.</div>`;
     return;
   }
@@ -3252,9 +3303,9 @@ function calcCompras(silent){
       <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${f.faltan>0?'var(--accent3)':'var(--muted)'};">${accion}</td>
     </tr>`;
   };
-  const rows=rubrosOrden.map(rb=>
-    `<tr><td colspan="5" style="padding:10px 10px 6px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);background:var(--surface2);">${rb}</td></tr>`
-    +porRubro[rb].map(filaHtml).join('')
+  const rows=gruposOrden.map(g=>
+    `<tr><td colspan="5" style="padding:10px 10px 6px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);background:var(--surface2);">${g}</td></tr>`
+    +porGrupo[g].map(filaHtml).join('')
   ).join('');
 
   el.innerHTML=soloFaltantesCheck+`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
