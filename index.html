@@ -3324,6 +3324,7 @@ function calcCompras(silent){
 // Automática: recorre todos los insumos con proveedor cargado y muestra solo los que
 // hoy tienen menos días de cobertura que el plazo de entrega que puso Gastón. Sin gap
 // extra por ahora — se compara directo contra el plazo cargado, para no complicar.
+function comprasSetAlertaPeriodo(campo,v){ comprasState[campo]=v; renderComprasAlertas(); }
 function renderComprasAlertas(){
   const el=document.getElementById('compras-content');
   if(!DATA.proveedores.length){
@@ -3332,8 +3333,22 @@ function renderComprasAlertas(){
   }
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  const desde=periodos[Math.max(0,periodos.length-3)]||'', hasta=periodos[periodos.length-1]||'';
-  if(!desde||!hasta){ el.innerHTML=`<div class="empty" style="padding:40px 0;">Sin datos de ventas para calcular consumo.</div>`; return; }
+  if(!comprasState.alertasDesde) comprasState.alertasDesde=periodos[Math.max(0,periodos.length-3)]||'';
+  if(!comprasState.alertasHasta) comprasState.alertasHasta=periodos[periodos.length-1]||'';
+  const desde=comprasState.alertasDesde, hasta=comprasState.alertasHasta;
+  const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
+  const optsHasta=periodos.map(p=>`<option value="${p}" ${p===hasta?'selected':''}>${p}</option>`).join('');
+  const periodoSel=`<div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;">
+    <div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Consumo desde</div>
+      <select class="v-select" style="width:120px;" onchange="comprasSetAlertaPeriodo('alertasDesde',this.value)">${optsDesde}</select>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">hasta</div>
+      <select class="v-select" style="width:120px;" onchange="comprasSetAlertaPeriodo('alertasHasta',this.value)">${optsHasta}</select>
+    </div>
+  </div>`;
+  if(!desde||!hasta){ el.innerHTML=periodoSel+`<div class="empty" style="padding:40px 0;">Sin datos de ventas para calcular consumo.</div>`; return; }
   const consumo=comprasConsumo(desde,hasta,recetas);
   const diasRango=comprasDias(desde,hasta);
   const armado=comprasStockArmado(recetas);
@@ -3351,17 +3366,17 @@ function renderComprasAlertas(){
       stock,stockSuelto,stockArm,diario,diasHoy,faltante:info.dias-diasHoy});
   });
 
-  const nota=`<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Consumo calculado sobre ${desde} a ${hasta} (${diasRango} días) · muestra los insumos cuyos días de cobertura hoy están por debajo del plazo de entrega cargado para su proveedor.</div>`;
+  const nota=periodoSel+`<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Consumo calculado sobre ${desde} a ${hasta} (${diasRango} días) · muestra los insumos cuyos días de cobertura hoy están por debajo del plazo de entrega cargado para su proveedor.</div>`;
 
   if(!alertas.length){
     el.innerHTML=nota+`<div class="empty" style="padding:40px 0;">Ningún insumo con proveedor cargado está por debajo de su plazo de entrega hoy.</div>`;
     return;
   }
 
-  // Si el proveedor es "A / B" (dos proveedores distintos para el mismo insumo), el insumo
-  // aparece en el grupo de cada uno — no es un tercer proveedor combinado.
+  // Agrupado por el proveedor tal cual lo cargó Gastón — si dice "A / B" es un solo grupo
+  // (dos opciones para comprar lo mismo, no dos faltantes distintos), sin duplicar la fila.
   const porProveedor={};
-  alertas.forEach(a=>a.proveedores.forEach(p=>{ if(!porProveedor[p]) porProveedor[p]=[]; porProveedor[p].push(a); }));
+  alertas.forEach(a=>{ const key=a.proveedores.join(' / '); if(!porProveedor[key]) porProveedor[key]=[]; porProveedor[key].push(a); });
   const proveedoresOrden=Object.keys(porProveedor).sort((a,b)=>
     Math.max(...porProveedor[b].map(x=>x.faltante))-Math.max(...porProveedor[a].map(x=>x.faltante)));
   proveedoresOrden.forEach(p=>porProveedor[p].sort((a,b)=>b.faltante-a.faltante));
