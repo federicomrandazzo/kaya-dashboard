@@ -588,6 +588,9 @@
     <div class="nav-item" onclick="showModule('compras')" id="nav-compras">
       <span class="nav-icon">▤</span> Compras
     </div>
+    <div class="nav-item" onclick="showModule('laboratorio')" id="nav-laboratorio">
+      <span class="nav-icon">▧</span> Laboratorio
+    </div>
     <div class="nav-item" onclick="showModule('proyeccion')" id="nav-proyeccion">
       <span class="nav-icon">◎</span> Proyección
     </div>
@@ -646,6 +649,7 @@
     <div id="module-fin" style="display:none;"></div>
     <div id="module-pub" style="display:none;"></div>
     <div id="module-compras" style="display:none;"></div>
+    <div id="module-laboratorio" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
     <div id="module-edr" style="display:none;"></div>
     <div id="module-mesencurso" style="display:none;"></div>
@@ -672,9 +676,9 @@ const AUTH_USERS = {
   'ad1cf5b7a33cad4cfa0cddf2f09fd14ffe9aeaa7c8321f7649b3cac9f0ceedda': {role:'sofi',   label:'Sofi'},
 };
 const ROLE_MODULES = {
-  admin:  ['fin','mesencurso','ventas','semanal','pub','stock','compras','proyeccion','kh','mayoristas','edr'],
+  admin:  ['fin','mesencurso','ventas','semanal','pub','stock','compras','laboratorio','proyeccion','kh','mayoristas','edr'],
   ventas: ['semanal','pub','stock','compras','proyeccion'],
-  house:  ['stock','compras','proyeccion','kh','ventas'],
+  house:  ['stock','compras','laboratorio','proyeccion','kh','ventas'],
   cajas:  ['kh'],
   lab:    ['kh'],
   sofi:   ['mayoristas'],
@@ -897,6 +901,7 @@ async function loadData() {
   document.getElementById('module-semanal').style.display='none';
   document.getElementById('module-fin').style.display='none';
   document.getElementById('module-compras').style.display='none';
+  document.getElementById('module-laboratorio').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-kh').style.display='none';
@@ -1031,12 +1036,13 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':mod==='compras'?'Compras':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':mod==='compras'?'Compras':mod==='laboratorio'?'Laboratorio':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
   document.getElementById('module-fin').style.display='none';
   document.getElementById('module-compras').style.display='none';
+  document.getElementById('module-laboratorio').style.display='none';
   document.getElementById('module-proyeccion').style.display='none';
   document.getElementById('module-edr').style.display='none';
   document.getElementById('module-mesencurso').style.display='none';
@@ -1051,7 +1057,7 @@ function showModule(mod) {
   if(vb) vb.classList.remove('vis');
   renderCurrentModule();
   // Set up intersection observer after render (not needed for proyeccion)
-  if(mod !== 'proyeccion' && mod !== 'compras') setTimeout(()=>setupStickyObs(mod), 100);
+  if(mod !== 'proyeccion' && mod !== 'compras' && mod !== 'laboratorio') setTimeout(()=>setupStickyObs(mod), 100);
 }
 function renderCurrentModule(){
   if(currentModule==='stock')      renderStock();
@@ -1059,6 +1065,7 @@ function renderCurrentModule(){
   if(currentModule==='semanal')    renderSemanal();
   if(currentModule==='fin')        renderFinanzas();
   if(currentModule==='compras')    renderCompras();
+  if(currentModule==='laboratorio')renderLaboratorio();
   if(currentModule==='proyeccion') renderProyeccion();
   if(currentModule==='edr')        renderEDR();
   if(currentModule==='mesencurso') renderMesEnCurso();
@@ -3575,6 +3582,187 @@ function renderComprasRankingInsumo(){
         <th style="text-align:right;font-size:10px;padding:8px 10px;">Margen</th>
       </tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
+}
+
+// ── LABORATORIO ──────────────────────────────────────────────────
+// Espejo del módulo Compras, un piso más arriba: en vez de insumos que se le compran a
+// un proveedor, los productos que envasa la casa. Responde cuándo y cuánto envasar.
+// CONFIRMADO con Tomi (ago 2026): la producción se ingresa a Dux AL ENVASAR y etiquetar,
+// no cuando armado cierra la caja. Por eso el Stock Disponible de Dux del producto
+// terminado es, para este módulo, "lo que hay envasado" — la cajita se junta después.
+let labState = { desde:'', hasta:'', objetivo:21, alerta:7, tanda:0 };
+
+// Los productos del laboratorio no se listan a mano: son los que llevan un componente de
+// rubro PRODUCTO LIQUIDO en su receta de Dux (el granel que se envasa). Si mañana entra un
+// producto nuevo con granel, aparece solo.
+function labProductos(){
+  const out={};
+  DATA.compuestos.forEach(r=>{
+    if((r['Rubro Componente']||'').trim().toUpperCase()!=='PRODUCTO LIQUIDO') return;
+    const sku=(r['Código Compuesto']||'').trim(); if(!sku) return;
+    out[sku]={granel:(r['Código Componente']||'').trim(), litros:num(r['Cantidad']), granelNombre:(r['Producto Componente']||'').trim()};
+  });
+  return out;
+}
+// La medida sale del nombre de Dux cuando lo dice; si no (las tinturas de 50ml se llaman
+// sin medida), se deduce de los litros de la receta. No se usa la receta cuando el nombre
+// ya trae la medida porque algún litraje está redondeado (jojoba 125ml figura como 0,13 L).
+function labMedida(nombre,litros){
+  const m=(nombre||'').match(/(\d+)\s*ML/i);
+  if(m) return m[1]+'ml';
+  return litros>0?Math.round(litros*1000)+'ml':'';
+}
+// Igual que comprasConsumo pero frenando en el producto terminado: un kit vendido consume
+// las unidades que lleva adentro, y ahí se para (no se sigue bajando hasta la botellita).
+function labConsumo(desde,hasta,recetas,prods){
+  const rows=DATA.ventas.filter(r=>{ const p=(r['periodo']||'').trim(); return p>=desde&&p<=hasta; });
+  const cons={};
+  function explode(sku,qty,depth){
+    if(depth>6||!sku||!qty) return;
+    if(prods[sku]){ cons[sku]=(cons[sku]||0)+qty; return; }
+    const rec=recetas[sku];
+    if(rec&&rec.length>=2) rec.forEach(c=>explode(c.comp,qty*c.qty,depth+1));
+  }
+  rows.forEach(r=>explode(getSku(r),num(r['qty']),0));
+  return cons;
+}
+// Capacidad real del laboratorio según las planillas de producción diaria: unidades por
+// día efectivamente trabajado. Sirve para traducir el plan a días de trabajo.
+function labCapacidad(){
+  const src=DATA.produccion||[];
+  if(!src.length) return 0;
+  const meses=[...new Set(src.map(r=>(r['fecha']||'').substring(0,7)).filter(Boolean))].sort().slice(-6);
+  const rows=src.filter(r=>meses.includes((r['fecha']||'').substring(0,7)));
+  const dias=new Set(rows.map(r=>r['fecha'])).size;
+  if(!dias) return 0;
+  return rows.reduce((s,r)=>s+num(r['cantidad']),0)/dias;
+}
+function labSet(campo,v){
+  const n=Number(String(v).replace(',','.'));
+  labState[campo]=(campo==='desde'||campo==='hasta')?v:(isNaN(n)?labState[campo]:n);
+  renderLaboratorio();
+}
+function labCalc(){
+  const prods=labProductos();
+  const recetas=comprasRecetas();
+  const consumo=labConsumo(labState.desde,labState.hasta,recetas,prods);
+  const diasRango=comprasDias(labState.desde,labState.hasta);
+  const stockD={},nomD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; });
+  const tanda=labState.tanda>0?labState.tanda:0;
+  const filas=Object.entries(prods).map(([sku,p])=>{
+    const cons=consumo[sku]||0, diario=diasRango>0?cons/diasRango:0;
+    const stock=stockD[sku]||0;
+    const cobertura=diario>0?stock/diario:Infinity;
+    const bruto=Math.max(0,diario*labState.objetivo-stock);
+    const envasar=bruto>0?(tanda?Math.ceil(bruto/tanda)*tanda:Math.ceil(bruto)):0;
+    // El nombre se muestra sin la medida y la medida va aparte, para que todas las filas
+    // se lean igual (en Dux la de 50ml no la trae y la de 100ml sí).
+    const nombre=(nomD[sku]||sku).replace(/\s*-?\s*\d+\s*ML/i,'').trim();
+    return {sku,nombre,medida:labMedida(nomD[sku],p.litros),granel:p.granel,granelNombre:p.granelNombre,
+            litros:p.litros,cons,diario,stock,cobertura,envasar};
+  }).filter(f=>f.stock>0||f.cons>0);
+  filas.sort((a,b)=>a.cobertura-b.cobertura);
+  // Granel: los litros que pide el plan de todos los productos que salen de ese líquido.
+  const granel={};
+  filas.forEach(f=>{
+    if(!f.granel) return;
+    if(!granel[f.granel]) granel[f.granel]={sku:f.granel,nombre:f.granelNombre||nomD[f.granel]||f.granel,stock:stockD[f.granel]||0,necesita:0};
+    granel[f.granel].necesita+=f.envasar*f.litros;
+  });
+  Object.values(granel).forEach(g=>{ g.falta=Math.max(0,g.necesita-g.stock); });
+  filas.forEach(f=>{ f.sinGranel=!!(granel[f.granel]&&granel[f.granel].falta>0.001&&f.envasar>0); });
+  return {filas,granel,diasRango};
+}
+function renderLaboratorio(){
+  const el=document.getElementById('module-laboratorio');
+  el.style.display='block';
+  const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
+  if(!labState.desde) labState.desde=periodos[Math.max(0,periodos.length-3)]||'';
+  if(!labState.hasta) labState.hasta=periodos[periodos.length-1]||'';
+  if(!periodos.length||!DATA.compuestos.length){
+    el.innerHTML=`<div class="empty" style="padding:40px 0;">Todavía no hay datos cargados.</div>`;
+    return;
+  }
+  const {filas,granel,diasRango}=labCalc();
+  const enAlerta=filas.filter(f=>f.cobertura<labState.alerta);
+  const totalEnvasar=filas.reduce((s,f)=>s+f.envasar,0);
+  const cap=labCapacidad();
+  const optsP=p=>periodos.map(x=>`<option value="${x}" ${x===p?'selected':''}>${x}</option>`).join('');
+  const optsT=[0,10,50,70,100].map(t=>`<option value="${t}" ${t===labState.tanda?'selected':''}>${t?t+' u.':'sin redondeo'}</option>`).join('');
+
+  const controles=`<div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;">
+    ${[['Consumo desde','desde',`<select class="v-select" style="width:120px;" onchange="labSet('desde',this.value)">${optsP(labState.desde)}</select>`],
+       ['hasta','hasta',`<select class="v-select" style="width:120px;" onchange="labSet('hasta',this.value)">${optsP(labState.hasta)}</select>`],
+       ['Objetivo (días)','objetivo',`<input type="number" min="1" class="v-select" style="width:80px;" value="${labState.objetivo}" onchange="labSet('objetivo',this.value)">`],
+       ['Alerta (días)','alerta',`<input type="number" min="1" class="v-select" style="width:80px;" value="${labState.alerta}" onchange="labSet('alerta',this.value)">`],
+       ['Redondear a','tanda',`<select class="v-select" style="width:120px;" onchange="labSet('tanda',this.value)">${optsT}</select>`]]
+      .map(([lbl,,ctl])=>`<div><div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">${lbl}</div>${ctl}</div>`).join('')}
+  </div>`;
+
+  const kpi=(lbl,val,det,col)=>`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
+    <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">${lbl}</div>
+    <div style="font-size:22px;font-weight:500;color:${col};font-variant-numeric:tabular-nums;">${val}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:4px;">${det}</div>
+  </div>`;
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
+    ${kpi('Productos en alerta',enAlerta.length,`de ${filas.length} · menos de ${labState.alerta} días de stock`,enAlerta.length?'var(--accent3)':'var(--text)')}
+    ${kpi('Unidades a envasar',totalEnvasar.toLocaleString('es-AR'),`para llegar a ${labState.objetivo} días de cobertura`,'var(--accent)')}
+    ${kpi('Días de laboratorio',cap>0?(totalEnvasar/cap).toLocaleString('es-AR',{maximumFractionDigits:1}):'—',cap>0?`a ${Math.round(cap).toLocaleString('es-AR')} u. por día trabajado`:'sin planillas de producción cargadas','var(--text)')}
+  </div>`;
+
+  const filaHtml=f=>{
+    const crit=f.cobertura<labState.alerta;
+    const cob=f.cobertura===Infinity?'—':Math.round(f.cobertura).toLocaleString('es-AR');
+    const aviso=f.sinGranel?` <span class="sku-badge" style="margin-left:4px;color:var(--accent3);border-color:var(--accent3);">sin granel</span>`:'';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;${crit?'font-weight:600;':''}">${f.nombre} ${f.medida?`<span style="color:var(--muted);">${f.medida}</span>`:''} <span class="sku-badge" style="margin-left:4px;">${f.sku}</span></td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.stock.toLocaleString('es-AR')}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.diario.toLocaleString('es-AR',{maximumFractionDigits:1})}/día</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${crit?'var(--accent3)':'var(--text)'};">${cob} días</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:${f.envasar?'600':'400'};color:${f.envasar?'var(--text)':'var(--muted)'};">${f.envasar?f.envasar.toLocaleString('es-AR')+' u.':'—'}${aviso}</td>
+    </tr>`;
+  };
+  const tablaQue=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">
+        <th style="text-align:left;font-size:10px;padding:8px 10px;">Producto</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Envasado hoy</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Venta</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Días de cobertura</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">A envasar</th>
+      </tr></thead><tbody>${filas.map(filaHtml).join('')}</tbody></table></div>
+  </div>`;
+
+  const provMapLab=comprasProveedorMap();
+  const gList=Object.values(granel).sort((a,b)=>b.falta-a.falta||b.necesita-a.necesita);
+  const gFila=g=>{
+    const info=provMapLab[g.sku];
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;${g.falta>0.001?'font-weight:600;':''}">${g.nombre} <span class="sku-badge" style="margin-left:4px;">${g.sku}</span></td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${g.stock.toLocaleString('es-AR',{maximumFractionDigits:1})} L</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${g.necesita.toLocaleString('es-AR',{maximumFractionDigits:1})} L</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:${g.falta>0.001?'600':'400'};color:${g.falta>0.001?'var(--accent3)':'var(--muted)'};">${g.falta>0.001?'faltan '+g.falta.toLocaleString('es-AR',{maximumFractionDigits:1})+' L':'alcanza'}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${info?info.proveedores.join(' / ')+' · '+info.dias+' días':'—'}</td>
+    </tr>`;
+  };
+  const tablaGranel=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">
+        <th style="text-align:left;font-size:10px;padding:8px 10px;">Granel</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">En stock</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Pide el plan</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Situación</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Proveedor y plazo</th>
+      </tr></thead><tbody>${gList.map(gFila).join('')}</tbody></table></div>
+  </div>`;
+
+  const sub=(t,d)=>`<div style="margin:28px 0 12px;"><div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);margin-bottom:4px;">${t}</div><div style="font-size:11px;color:var(--muted);">${d}</div></div>`;
+  el.innerHTML=controles+kpis
+    +sub('Qué envasar',`Ordenado por días de cobertura. Venta diaria calculada sobre ${labState.desde} a ${labState.hasta} (${diasRango} días), incluyendo lo que salió adentro de kits y combos. Envasado hoy es el Stock Disponible de Dux, que se carga al envasar y etiquetar.`)
+    +tablaQue
+    +sub('¿Alcanza el granel?',`Los litros que pide el plan de arriba, contra el granel disponible. Los productos cuyo líquido no alcanza quedan marcados como <em>sin granel</em> en la tabla anterior.`)
+    +tablaGranel;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
