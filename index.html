@@ -662,10 +662,11 @@
 // ── AUTH ────────────────────────────────────────────────────────
 // Solo se guardan hashes SHA-256 de las contraseñas, nunca el texto plano.
 const AUTH_USERS = {
-  '878f96264ece1c85973dfa3b39dec9a7dc4cf6f08168ff5a183389a36b1bb9d0': {role:'admin',  label:'Federico'},
+  '878f96264ece1c85973dfa3b39dec9a7dc4cf6f08168ff5a183389a36b1bb9d0': {role:'admin',  label:'Federico', nolog:true},
   '496e1024976c46529563591cf710a3f23ee88f280ec01790f7fb66e1dbc76b33': {role:'admin',  label:'Ry'},
   '88181564dd39240afed2778078fc527f1a13d7a27a508027cc41edccfd30d697': {role:'ventas', label:'Ventas'},
-  'ca392825f45dafa307b9f83524d8cd9c51022c0938507df7186ffc1a168d5cf0': {role:'house',  label:'House'},
+  '13245e37cafb78891a979b9ca62fe4ff00b606c8999947521c49f34d4a19316e': {role:'house',  label:'Tomi'},
+  '4f57d611c63e5c51aec7e73156b9d63c35d1433977f2ccb63e0993d68b0a8da9': {role:'house',  label:'Gastón'},
   '79f575e1bd80d7dc478fa0dc204ad665696a8c6f56d74af1ea764750436dad95': {role:'cajas',  label:'Cajas'},
   '9f155ffabd5edb1dd35cd79ff35f8c11c35d6bd5a8380fc3d9acd07079983c19': {role:'lab',    label:'Producción'},
   'ad1cf5b7a33cad4cfa0cddf2f09fd14ffe9aeaa7c8321f7649b3cac9f0ceedda': {role:'sofi',   label:'Sofi'},
@@ -706,9 +707,10 @@ async function doLogin(){
 }
 function logout(){ registrarSalida(); localStorage.removeItem('kayaAuth'); location.reload(); }
 // Registro de accesos en Google Sheet vía Apps Script (URL vacía = apagado)
+// Los perfiles con nolog:true (Federico) no se registran: ensucian la hoja sin aportar.
 const LOG_URL='https://script.google.com/macros/s/AKfycbxdnIM_GYqa_5dlaxwCFa7mC7VdLGKzmYyHF-jLxXEz5pN97ku34vNazyYFgV8iDPMr/exec';
 function registrarAcceso(evento){
-  if(!LOG_URL||!USER) return;
+  if(!LOG_URL||!USER||USER.nolog) return;
   const disp=/Mobi|Android/i.test(navigator.userAgent)?'celular':'computadora';
   try{
     fetch(LOG_URL,{method:'POST',mode:'no-cors',keepalive:true,headers:{'Content-Type':'application/x-www-form-urlencoded'},
@@ -726,7 +728,7 @@ function minutosUso(){
   return Math.max(1, Math.round(ms/60000));
 }
 function registrarSalida(){
-  if(!LOG_URL||!USER) return;
+  if(!LOG_URL||!USER||USER.nolog) return;
   const ahora = Date.now();
   if(ahora - ultimaSalida < 30000) return;   // evita filas duplicadas del mismo cierre
   ultimaSalida = ahora;
