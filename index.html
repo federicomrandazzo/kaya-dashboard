@@ -857,6 +857,14 @@ function pesos(v){ return '$'+Math.round(v).toLocaleString('es-AR'); }
 function getLinea(r){ return (r['LINEA']||r['linea']||'').trim().toUpperCase(); }
 function getRubro(r){ return (r['RUBRO']||r['rubro']||'').trim().toUpperCase()||'OTRO'; }
 function getSku(r){ return (r['sku']||r['SKU']||'').trim(); }
+// Período por defecto de los selectores de consumo (Compras y Laboratorio): el mes en
+// curso, que es el ritmo con el que se decide hoy. Si todavía no tiene ventas cargadas,
+// cae al último período disponible.
+function periodoDefault(periodos){
+  if(!periodos||!periodos.length) return '';
+  const d=new Date(), mes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  return periodos.includes(mes)?mes:periodos[periodos.length-1];
+}
 
 // ── TREE ENGINE ─────────────────────────────────────────────────
 const TS = {};
@@ -3174,8 +3182,8 @@ function renderComprasAnalisis(){
   const el=document.getElementById('compras-content');
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.desde) comprasState.desde=periodos[Math.max(0,periodos.length-3)]||'';
-  if(!comprasState.hasta) comprasState.hasta=periodos[periodos.length-1]||'';
+  if(!comprasState.desde) comprasState.desde=periodoDefault(periodos);
+  if(!comprasState.hasta) comprasState.hasta=periodoDefault(periodos);
 
   const modo=comprasState.modo;
   const chipsOpts=modo==='rubro'?comprasRubros(recetas):comprasProveedoresList();
@@ -3347,8 +3355,8 @@ function renderComprasAlertas(){
   }
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.alertasDesde) comprasState.alertasDesde=periodos[Math.max(0,periodos.length-3)]||'';
-  if(!comprasState.alertasHasta) comprasState.alertasHasta=periodos[periodos.length-1]||'';
+  if(!comprasState.alertasDesde) comprasState.alertasDesde=periodoDefault(periodos);
+  if(!comprasState.alertasHasta) comprasState.alertasHasta=periodoDefault(periodos);
   const desde=comprasState.alertasDesde, hasta=comprasState.alertasHasta;
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
   const optsHasta=periodos.map(p=>`<option value="${p}" ${p===hasta?'selected':''}>${p}</option>`).join('');
@@ -3435,8 +3443,8 @@ function renderComprasRanking(){
   }
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.rankingDesde) comprasState.rankingDesde=periodos[Math.max(0,periodos.length-3)]||'';
-  if(!comprasState.rankingHasta) comprasState.rankingHasta=periodos[periodos.length-1]||'';
+  if(!comprasState.rankingDesde) comprasState.rankingDesde=periodoDefault(periodos);
+  if(!comprasState.rankingHasta) comprasState.rankingHasta=periodoDefault(periodos);
   const desde=comprasState.rankingDesde, hasta=comprasState.rankingHasta;
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
   const optsHasta=periodos.map(p=>`<option value="${p}" ${p===hasta?'selected':''}>${p}</option>`).join('');
@@ -3520,8 +3528,8 @@ function renderComprasRankingInsumo(){
   }
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.rankingInsDesde) comprasState.rankingInsDesde=periodos[Math.max(0,periodos.length-3)]||'';
-  if(!comprasState.rankingInsHasta) comprasState.rankingInsHasta=periodos[periodos.length-1]||'';
+  if(!comprasState.rankingInsDesde) comprasState.rankingInsDesde=periodoDefault(periodos);
+  if(!comprasState.rankingInsHasta) comprasState.rankingInsHasta=periodoDefault(periodos);
   const desde=comprasState.rankingInsDesde, hasta=comprasState.rankingInsHasta;
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
   const optsHasta=periodos.map(p=>`<option value="${p}" ${p===hasta?'selected':''}>${p}</option>`).join('');
@@ -3647,8 +3655,8 @@ function labCalc(){
   const recetas=comprasRecetas();
   const consumo=labConsumo(labState.desde,labState.hasta,recetas,prods);
   const diasRango=comprasDias(labState.desde,labState.hasta);
-  const stockD={},nomD={};
-  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; });
+  const stockD={},nomD={},rubD={},unD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; rubD[c]=(r['Rubro']||'').trim(); unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
   const tanda=labState.tanda>0?labState.tanda:0;
   const filas=Object.entries(prods).map(([sku,p])=>{
     const cons=consumo[sku]||0, diario=diasRango>0?cons/diasRango:0;
@@ -3660,7 +3668,7 @@ function labCalc(){
     // se lean igual (en Dux la de 50ml no la trae y la de 100ml sí).
     const nombre=(nomD[sku]||sku).replace(/\s*-?\s*\d+\s*ML/i,'').trim();
     return {sku,nombre,medida:labMedida(nomD[sku],p.litros),granel:p.granel,granelNombre:p.granelNombre,
-            litros:p.litros,cons,diario,stock,cobertura,envasar};
+            granelStock:stockD[p.granel]||0,litros:p.litros,cons,diario,stock,cobertura,envasar};
   }).filter(f=>f.stock>0||f.cons>0);
   filas.sort((a,b)=>a.cobertura-b.cobertura);
   // Granel: los litros que pide el plan de todos los productos que salen de ese líquido.
@@ -3672,19 +3680,43 @@ function labCalc(){
   });
   Object.values(granel).forEach(g=>{ g.falta=Math.max(0,g.necesita-g.stock); });
   filas.forEach(f=>{ f.sinGranel=!!(granel[f.granel]&&granel[f.granel].falta>0.001&&f.envasar>0); });
-  return {filas,granel,diasRango};
+  // Resto del material: botellita, tetina, etiqueta y partes de caja. Se mira acumulado
+  // porque un mismo insumo sirve a varios productos (la botella negra de 50ml va en todas
+  // las tinturas chicas), así que el faltante real solo se ve sumando el plan entero.
+  // Stock suelto de Dux, no el que ya está puesto adentro de un producto armado.
+  const insumos={};
+  filas.forEach(f=>{
+    if(!f.envasar) return;
+    (recetas[f.sku]||[]).forEach(cmp=>{
+      if(!cmp.comp||cmp.comp===f.granel) return;
+      if(!insumos[cmp.comp]) insumos[cmp.comp]={sku:cmp.comp,nombre:nomD[cmp.comp]||cmp.comp,rubro:rubD[cmp.comp]||'OTRO',
+                                               unidad:unD[cmp.comp]||'UNIDAD',stock:stockD[cmp.comp]||0,necesita:0,
+                                               // La caja la arma otro sector: si falta, no frena el envasado.
+                                               esCaja:/CAJA/i.test(rubD[cmp.comp]||'')};
+      insumos[cmp.comp].necesita+=f.envasar*cmp.qty;
+    });
+  });
+  Object.values(insumos).forEach(i=>{ i.falta=Math.max(0,i.necesita-i.stock); });
+  filas.forEach(f=>{
+    const falt=!f.envasar?[]:(recetas[f.sku]||[])
+      .filter(c=>c.comp&&c.comp!==f.granel&&insumos[c.comp]&&insumos[c.comp].falta>0.001)
+      .map(c=>insumos[c.comp]);
+    f.faltanInsumos=falt.filter(i=>!i.esCaja).map(i=>i.nombre);   // frenan el envasado
+    f.faltanCajas=falt.filter(i=>i.esCaja).map(i=>i.nombre);      // frenan la venta, no el envasado
+  });
+  return {filas,granel,insumos,diasRango};
 }
 function renderLaboratorio(){
   const el=document.getElementById('module-laboratorio');
   el.style.display='block';
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!labState.desde) labState.desde=periodos[Math.max(0,periodos.length-3)]||'';
-  if(!labState.hasta) labState.hasta=periodos[periodos.length-1]||'';
+  if(!labState.desde) labState.desde=periodoDefault(periodos);
+  if(!labState.hasta) labState.hasta=periodoDefault(periodos);
   if(!periodos.length||!DATA.compuestos.length){
     el.innerHTML=`<div class="empty" style="padding:40px 0;">Todavía no hay datos cargados.</div>`;
     return;
   }
-  const {filas,granel,diasRango}=labCalc();
+  const {filas,granel,insumos,diasRango}=labCalc();
   const enAlerta=filas.filter(f=>f.cobertura<labState.alerta);
   const totalEnvasar=filas.reduce((s,f)=>s+f.envasar,0);
   const cap=labCapacidad();
@@ -3713,14 +3745,19 @@ function renderLaboratorio(){
 
   const filaHtml=f=>{
     const crit=f.cobertura<labState.alerta;
-    const cob=f.cobertura===Infinity?'—':Math.round(f.cobertura).toLocaleString('es-AR');
-    const aviso=f.sinGranel?` <span class="sku-badge" style="margin-left:4px;color:var(--accent3);border-color:var(--accent3);">sin granel</span>`:'';
+    const cobN=Math.round(f.cobertura);
+    const cob=f.cobertura===Infinity?'—':cobN.toLocaleString('es-AR')+(cobN===1?' día':' días');
+    const badge=(t,tit)=>` <span class="sku-badge" style="margin-left:4px;color:var(--accent3);border-color:var(--accent3);" title="${tit}">${t}</span>`;
+    const aviso=(f.sinGranel?badge('sin granel','No alcanza el '+(f.granelNombre||'granel')+' para lo que pide el plan'):'')
+      +(f.faltanInsumos.length?badge('falta '+(f.faltanInsumos.length>1?'material':f.faltanInsumos[0].toLowerCase()),f.faltanInsumos.join(' · ')):'')
+      +(f.faltanCajas.length?` <span class="sku-badge" style="margin-left:4px;" title="${f.faltanCajas.join(' · ')} · no frena el envasado, sí el armado">falta caja</span>`:'');
     return `<tr style="border-bottom:1px solid var(--border);">
       <td style="padding:8px 10px;font-size:12px;${crit?'font-weight:600;':''}">${f.nombre} ${f.medida?`<span style="color:var(--muted);">${f.medida}</span>`:''} <span class="sku-badge" style="margin-left:4px;">${f.sku}</span></td>
       <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.stock.toLocaleString('es-AR')}</td>
       <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${f.diario.toLocaleString('es-AR',{maximumFractionDigits:1})} u.</td>
-      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${crit?'var(--accent3)':'var(--text)'};">${cob} días</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${crit?'var(--accent3)':'var(--text)'};">${cob}</td>
       <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:${f.envasar?'600':'400'};color:${f.envasar?'var(--text)':'var(--muted)'};">${f.envasar?f.envasar.toLocaleString('es-AR')+' u.':'—'}${aviso}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:${f.sinGranel?'var(--accent3)':'var(--muted)'};" title="${f.granelNombre||''}">${f.granelStock.toLocaleString('es-AR',{maximumFractionDigits:1})} L</td>
     </tr>`;
   };
   const tablaQue=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
@@ -3731,6 +3768,7 @@ function renderLaboratorio(){
         <th style="text-align:right;font-size:10px;padding:8px 10px;">Venta promedio diaria</th>
         <th style="text-align:right;font-size:10px;padding:8px 10px;">Días de cobertura</th>
         <th style="text-align:right;font-size:10px;padding:8px 10px;">A envasar</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Litros disponibles</th>
       </tr></thead><tbody>${filas.map(filaHtml).join('')}</tbody></table></div>
   </div>`;
 
@@ -3757,12 +3795,43 @@ function renderLaboratorio(){
       </tr></thead><tbody>${gList.map(gFila).join('')}</tbody></table></div>
   </div>`;
 
+  // Tercera tabla: el material que no es el líquido. Solo se listan los que no alcanzan —
+  // si estuvieran todos, la tabla sería un listado de insumos sin ninguna decisión adentro.
+  const insFaltan=Object.values(insumos||{}).filter(i=>i.falta>0.001)
+    .sort((a,b)=>(a.esCaja?1:0)-(b.esCaja?1:0)||b.falta-a.falta);
+  const iFila=i=>{
+    const info=provMapLab[i.sku];
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;font-weight:600;">${i.nombre} <span class="sku-badge" style="margin-left:4px;">${i.sku}</span></td>
+      <td style="padding:8px 10px;font-size:11px;color:var(--muted);">${i.rubro}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${i.stock.toLocaleString('es-AR')}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${Math.ceil(i.necesita).toLocaleString('es-AR')}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:var(--accent3);">faltan ${Math.ceil(i.falta).toLocaleString('es-AR')}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${info?info.proveedores.join(' / ')+' · '+info.dias+' días':'—'}</td>
+    </tr>`;
+  };
+  const tablaMaterial=insFaltan.length
+    ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+        <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+          <thead><tr style="border-bottom:2px solid #d4c5a0;">
+            <th style="text-align:left;font-size:10px;padding:8px 10px;">Insumo</th>
+            <th style="text-align:left;font-size:10px;padding:8px 10px;">Rubro</th>
+            <th style="text-align:right;font-size:10px;padding:8px 10px;">En stock</th>
+            <th style="text-align:right;font-size:10px;padding:8px 10px;">Pide el plan</th>
+            <th style="text-align:right;font-size:10px;padding:8px 10px;">Situación</th>
+            <th style="text-align:right;font-size:10px;padding:8px 10px;">Proveedor y plazo</th>
+          </tr></thead><tbody>${insFaltan.map(iFila).join('')}</tbody></table></div>
+      </div>`
+    : `<div class="empty" style="padding:28px 0;">Con lo que hay en Dux alcanza para envasar todo el plan.</div>`;
+
   const sub=(t,d)=>`<div style="margin:28px 0 12px;"><div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);margin-bottom:4px;">${t}</div><div style="font-size:11px;color:var(--muted);">${d}</div></div>`;
   el.innerHTML=controles+kpis
     +sub('Qué envasar',`Ordenado por días de cobertura. Venta diaria calculada sobre ${labState.desde} a ${labState.hasta} (${diasRango} días), incluyendo lo que salió adentro de kits y combos. El stock disponible es el de Dux, que se carga al envasar y etiquetar.`)
     +tablaQue
     +sub('¿Alcanza el granel?',`Los litros que pide el plan de arriba, contra el granel disponible. Los productos cuyo líquido no alcanza quedan marcados como <em>sin granel</em> en la tabla anterior.`)
-    +tablaGranel;
+    +tablaGranel
+    +sub('¿Alcanza el resto del material?',`Lo que pide el plan y hoy no alcanza, sumando todos los productos, porque un mismo insumo sirve a varios. Botellitas, tetinas y etiquetas frenan el envasado y marcan el producto como <em>falta material</em>; las partes de caja no lo frenan (las arma el otro sector) pero sin ellas el producto no se puede vender, y aparecen al final como <em>falta caja</em>.`)
+    +tablaMaterial;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
