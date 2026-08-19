@@ -3150,12 +3150,14 @@ function renderCompras(){
   el.innerHTML=`
     <div class="tabs" style="margin-bottom:20px;">
       <div class="tab ${comprasVista==='alertas'?'active':''}" onclick="setComprasVista('alertas')">Alertas</div>
-      <div class="tab ${comprasVista==='ranking'?'active':''}" onclick="setComprasVista('ranking')">Ranking</div>
+      <div class="tab ${comprasVista==='ranking'?'active':''}" onclick="setComprasVista('ranking')">Ranking Proveedor</div>
+      <div class="tab ${comprasVista==='ranking-insumo'?'active':''}" onclick="setComprasVista('ranking-insumo')">Ranking Insumo</div>
       <div class="tab ${comprasVista==='analisis'?'active':''}" onclick="setComprasVista('analisis')">Análisis</div>
     </div>
     <div id="compras-content"></div>
   `;
   if(comprasVista==='alertas') renderComprasAlertas();
+  else if(comprasVista==='ranking-insumo') renderComprasRankingInsumo();
   else if(comprasVista==='ranking') renderComprasRanking();
   else renderComprasAnalisis();
 }
@@ -3498,6 +3500,81 @@ function renderComprasRanking(){
   });
   h+=`</div>`;
   el.innerHTML=nota+h;
+}
+
+// Mismo universo y misma métrica que Ranking Proveedor (días de cobertura - plazo), pero
+// sin agrupar: todos los insumos juntos en una sola lista, de lo más cerca a lo más lejos.
+function comprasSetRankingInsPeriodo(campo,v){ comprasState[campo]=v; renderComprasRankingInsumo(); }
+function renderComprasRankingInsumo(){
+  const el=document.getElementById('compras-content');
+  if(!DATA.proveedores.length){
+    el.innerHTML=`<div class="empty" style="padding:40px 0;">Todavía no hay datos de proveedores cargados.</div>`;
+    return;
+  }
+  const recetas=comprasRecetas();
+  const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
+  if(!comprasState.rankingInsDesde) comprasState.rankingInsDesde=periodos[Math.max(0,periodos.length-3)]||'';
+  if(!comprasState.rankingInsHasta) comprasState.rankingInsHasta=periodos[periodos.length-1]||'';
+  const desde=comprasState.rankingInsDesde, hasta=comprasState.rankingInsHasta;
+  const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
+  const optsHasta=periodos.map(p=>`<option value="${p}" ${p===hasta?'selected':''}>${p}</option>`).join('');
+  const periodoSel=`<div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;">
+    <div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Consumo desde</div>
+      <select class="v-select" style="width:120px;" onchange="comprasSetRankingInsPeriodo('rankingInsDesde',this.value)">${optsDesde}</select>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">hasta</div>
+      <select class="v-select" style="width:120px;" onchange="comprasSetRankingInsPeriodo('rankingInsHasta',this.value)">${optsHasta}</select>
+    </div>
+  </div>`;
+  if(!desde||!hasta){ el.innerHTML=periodoSel+`<div class="empty" style="padding:40px 0;">Sin datos de ventas para calcular consumo.</div>`; return; }
+
+  const consumo=comprasConsumo(desde,hasta,recetas);
+  const diasRango=comprasDias(desde,hasta);
+  const armado=comprasStockArmado(recetas);
+  const stockD={},nomD={},unD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
+  const provMap=comprasProveedorMap();
+
+  const items=[];
+  Object.entries(provMap).forEach(([sku,info])=>{
+    const cons=consumo[sku]||0, diario=cons/diasRango;
+    const stockSuelto=stockD[sku]||0, stockArm=armado[sku]||0, stock=stockSuelto+stockArm;
+    const diasHoy=diario>0?stock/diario:Infinity;
+    items.push({sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',proveedor:info.proveedores.join(' / '),plazo:info.dias,
+      stock,stockSuelto,stockArm,diario,diasHoy,margen:diasHoy-info.dias});
+  });
+  items.sort((a,b)=>a.margen-b.margen);
+
+  const nota=periodoSel+`<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Consumo calculado sobre ${desde} a ${hasta} (${diasRango} días) · todos los insumos con proveedor cargado, juntos, ordenados de lo que está más cerca a lo que está más lejos del plazo de su proveedor.</div>`;
+
+  const rows=items.map(it=>{
+    const critico=it.margen<0;
+    const diasFmt=it.diasHoy===Infinity?'—':Math.round(it.diasHoy).toLocaleString('es-AR');
+    const margenFmt=it.margen===Infinity?'—':(it.margen>=0?'+':'')+Math.round(it.margen).toLocaleString('es-AR')+' días';
+    const stockDetalle=it.stockArm>0.001?`<br><span style="font-size:9px;">${Math.round(it.stockSuelto).toLocaleString('es-AR')} suelto + ${Math.round(it.stockArm).toLocaleString('es-AR')} armado</span>`:'';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;">${it.nombre} <span class="sku-badge" style="margin-left:4px;">${it.sku}</span></td>
+      <td style="padding:8px 10px;font-size:11px;color:var(--muted);">${it.proveedor}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${it.plazo} días</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${it.stock.toLocaleString('es-AR')} ${it.unidad}${stockDetalle}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${critico?'var(--accent3)':'var(--text)'};">${diasFmt} días</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;color:${critico?'var(--accent3)':'var(--muted)'};">${margenFmt}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML=nota+`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">
+        <th style="text-align:left;font-size:10px;padding:8px 10px;">Producto</th>
+        <th style="text-align:left;font-size:10px;padding:8px 10px;">Proveedor</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Plazo</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Stock hoy</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Cobertura</th>
+        <th style="text-align:right;font-size:10px;padding:8px 10px;">Margen</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
