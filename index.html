@@ -3012,7 +3012,7 @@ function renderConsumoInsumos(){
 // que Consumo/Proyección) → rango de fechas para el ritmo de consumo real →
 // días de cobertura objetivo (el lead time del proveedor) → cuánto falta o sobra.
 let comprasState = { modo:'rubro', rubros:new Set(), proveedores:new Set(), desde:'', hasta:'', dias:'', sel:new Set(), calculado:false, soloFaltantes:false };
-let comprasVista = 'analisis';
+let comprasVista = 'alertas';
 
 function comprasRecetas(){
   const recetas={};
@@ -3149,12 +3149,15 @@ function renderCompras(){
   el.style.display='block';
   el.innerHTML=`
     <div class="tabs" style="margin-bottom:20px;">
-      <div class="tab ${comprasVista==='analisis'?'active':''}" onclick="setComprasVista('analisis')">Análisis</div>
       <div class="tab ${comprasVista==='alertas'?'active':''}" onclick="setComprasVista('alertas')">Alertas</div>
+      <div class="tab ${comprasVista==='ranking'?'active':''}" onclick="setComprasVista('ranking')">Ranking</div>
+      <div class="tab ${comprasVista==='analisis'?'active':''}" onclick="setComprasVista('analisis')">Análisis</div>
     </div>
     <div id="compras-content"></div>
   `;
-  if(comprasVista==='analisis') renderComprasAnalisis(); else renderComprasAlertas();
+  if(comprasVista==='alertas') renderComprasAlertas();
+  else if(comprasVista==='ranking') renderComprasRanking();
+  else renderComprasAnalisis();
 }
 function setComprasVista(v){ comprasVista=v; renderCompras(); }
 
@@ -3409,6 +3412,92 @@ function renderComprasAlertas(){
         <th style="text-align:right;font-size:10px;padding:8px 10px;">Plazo del proveedor</th>
       </tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
+}
+
+// Todos los insumos con proveedor cargado (no solo los críticos), agrupados por proveedor
+// de mayor a menor plazo de entrega, y adentro de cada uno de lo más cerca a lo más lejos
+// de ese plazo. Grupos contraídos por default (mismo componente +/− que usan Stock/Consumo).
+function comprasSetRankingPeriodo(campo,v){ comprasState[campo]=v; renderComprasRanking(); }
+function renderComprasRanking(){
+  const el=document.getElementById('compras-content');
+  if(!DATA.proveedores.length){
+    el.innerHTML=`<div class="empty" style="padding:40px 0;">Todavía no hay datos de proveedores cargados.</div>`;
+    return;
+  }
+  const recetas=comprasRecetas();
+  const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
+  if(!comprasState.rankingDesde) comprasState.rankingDesde=periodos[Math.max(0,periodos.length-3)]||'';
+  if(!comprasState.rankingHasta) comprasState.rankingHasta=periodos[periodos.length-1]||'';
+  const desde=comprasState.rankingDesde, hasta=comprasState.rankingHasta;
+  const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
+  const optsHasta=periodos.map(p=>`<option value="${p}" ${p===hasta?'selected':''}>${p}</option>`).join('');
+  const periodoSel=`<div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;">
+    <div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Consumo desde</div>
+      <select class="v-select" style="width:120px;" onchange="comprasSetRankingPeriodo('rankingDesde',this.value)">${optsDesde}</select>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">hasta</div>
+      <select class="v-select" style="width:120px;" onchange="comprasSetRankingPeriodo('rankingHasta',this.value)">${optsHasta}</select>
+    </div>
+  </div>`;
+  if(!desde||!hasta){ el.innerHTML=periodoSel+`<div class="empty" style="padding:40px 0;">Sin datos de ventas para calcular consumo.</div>`; return; }
+
+  const consumo=comprasConsumo(desde,hasta,recetas);
+  const diasRango=comprasDias(desde,hasta);
+  const armado=comprasStockArmado(recetas);
+  const stockD={},nomD={},unD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); stockD[c]=num(r['Stock Disponible']); nomD[c]=r['Producto']||''; unD[c]=(r['Unidad']||'UNIDAD').toUpperCase(); });
+  const provMap=comprasProveedorMap();
+
+  const items=[];
+  Object.entries(provMap).forEach(([sku,info])=>{
+    const cons=consumo[sku]||0, diario=cons/diasRango;
+    const stockSuelto=stockD[sku]||0, stockArm=armado[sku]||0, stock=stockSuelto+stockArm;
+    const diasHoy=diario>0?stock/diario:Infinity;
+    items.push({sku,nombre:nomD[sku]||sku,unidad:unD[sku]||'UNIDAD',proveedor:info.proveedores.join(' / '),plazo:info.dias,
+      stock,stockSuelto,stockArm,diario,diasHoy,margen:diasHoy-info.dias});
+  });
+
+  const nota=periodoSel+`<div style="font-size:11px;color:var(--muted);margin-bottom:16px;">Consumo calculado sobre ${desde} a ${hasta} (${diasRango} días) · todos los insumos con proveedor cargado, agrupados de mayor a menor plazo de entrega · adentro de cada proveedor, de lo que está más cerca a lo que está más lejos de ese plazo.</div>`;
+
+  const porProveedor={};
+  items.forEach(it=>{ if(!porProveedor[it.proveedor]) porProveedor[it.proveedor]=[]; porProveedor[it.proveedor].push(it); });
+  const proveedoresOrden=Object.keys(porProveedor).sort((a,b)=>porProveedor[b][0].plazo-porProveedor[a][0].plazo);
+  proveedoresOrden.forEach(p=>porProveedor[p].sort((a,b)=>a.margen-b.margen));
+
+  const NS='rk';
+  let h=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
+  h+=`<div class="tr nc" style="border-top:none;padding:8px 12px;">
+    <span style="width:16px;margin-right:8px;"></span>
+    <span class="tl" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);">Proveedor / Producto</span>
+    <span style="min-width:90px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Stock hoy</span>
+    <span style="min-width:70px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-right:8px;">Cobertura</span>
+    <span style="min-width:80px;text-align:right;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Margen</span>
+  </div>`;
+  proveedoresOrden.forEach(p=>{
+    const grupo=porProveedor[p];
+    const plazo=grupo[0].plazo;
+    const key=NS+'-'+p.replace(/\W+/g,'-');
+    h+=TR(NS,key,0,`${p} <span style="color:var(--muted);font-size:10px;font-weight:400;">· ${grupo.length} insumo${grupo.length>1?'s':''}</span>`,
+      `<span style="min-width:100px;text-align:right;display:inline-block;color:var(--muted);">${plazo} días de plazo</span>`,'',true,false);
+    const leaves=grupo.map(it=>{
+      const critico=it.margen<0;
+      const diasFmt=it.diasHoy===Infinity?'—':Math.round(it.diasHoy).toLocaleString('es-AR');
+      const margenFmt=it.margen===Infinity?'—':(it.margen>=0?'+':'')+Math.round(it.margen).toLocaleString('es-AR')+'d';
+      const stockDetalle=it.stockArm>0.001?`<br><span style="font-size:9px;">${Math.round(it.stockSuelto).toLocaleString('es-AR')} suelto + ${Math.round(it.stockArm).toLocaleString('es-AR')} armado</span>`:'';
+      return `<div class="tr l1 nc">
+        <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+        <span class="tl">${it.nombre} <span class="sku-badge" style="margin-left:4px;">${it.sku}</span></span>
+        <span style="min-width:90px;text-align:right;font-size:11px;color:var(--muted);margin-right:8px;">${it.stock.toLocaleString('es-AR')} ${it.unidad}${stockDetalle}</span>
+        <span style="min-width:70px;text-align:right;font-size:12px;font-weight:600;color:${critico?'var(--accent3)':'var(--text)'};margin-right:8px;">${diasFmt} días</span>
+        <span style="min-width:80px;text-align:right;font-size:11px;color:var(--muted);">${margenFmt}</span>
+      </div>`;
+    }).join('');
+    h+=TC(NS,key,leaves,false);
+  });
+  h+=`</div>`;
+  el.innerHTML=nota+h;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
