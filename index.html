@@ -751,7 +751,7 @@ function startApp(u){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('sidebar').style.display='flex';
   document.getElementById('main').style.display='flex';
-  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',proyeccion:'nav-proyeccion',kh:'nav-kh',mayoristas:'nav-mayoristas',fin:'nav-fin',edr:'nav-edr',mesencurso:'nav-mesencurso'};
+  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',compras:'nav-compras',laboratorio:'nav-laboratorio',proyeccion:'nav-proyeccion',kh:'nav-kh',mayoristas:'nav-mayoristas',fin:'nav-fin',edr:'nav-edr',mesencurso:'nav-mesencurso'};
   Object.entries(NAVMAP).forEach(([m,id])=>{ const el=document.getElementById(id); if(el) el.style.display=roleAllows(m)?'flex':'none'; });
   document.getElementById('user-label').textContent=u.label;
   currentModule=(ROLE_MODULES[u.role]&&ROLE_MODULES[u.role][0])||'stock';
