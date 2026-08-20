@@ -582,6 +582,9 @@
     <div class="nav-item" onclick="showModule('pub')" id="nav-pub">
       <span class="nav-icon">◈</span> Publicidad
     </div>
+    <div class="nav-item" onclick="showModule('pubmeta')" id="nav-pubmeta">
+      <span class="nav-icon">◇</span> Dashboard Publicidad
+    </div>
     <div class="nav-item" onclick="showModule('stock')" id="nav-stock">
       <span class="nav-icon">◈</span> Stock
     </div>
@@ -648,6 +651,7 @@
     <div id="module-semanal" style="display:none;"></div>
     <div id="module-fin" style="display:none;"></div>
     <div id="module-pub" style="display:none;"></div>
+    <div id="module-pubmeta" style="display:none;"></div>
     <div id="module-compras" style="display:none;"></div>
     <div id="module-laboratorio" style="display:none;"></div>
     <div id="module-proyeccion" style="display:none;"></div>
@@ -676,7 +680,7 @@ const AUTH_USERS = {
   'ad1cf5b7a33cad4cfa0cddf2f09fd14ffe9aeaa7c8321f7649b3cac9f0ceedda': {role:'sofi',   label:'Sofi'},
 };
 const ROLE_MODULES = {
-  admin:  ['fin','mesencurso','ventas','semanal','pub','stock','compras','laboratorio','proyeccion','kh','mayoristas','edr'],
+  admin:  ['fin','mesencurso','ventas','semanal','pub','pubmeta','stock','compras','laboratorio','proyeccion','kh','mayoristas','edr'],
   ventas: ['semanal','pub','stock','compras','proyeccion'],
   house:  ['stock','compras','laboratorio','proyeccion','kh','ventas'],
   cajas:  ['kh'],
@@ -915,6 +919,7 @@ async function loadData() {
   document.getElementById('module-kh').style.display='none';
   document.getElementById('module-mayoristas').style.display='none';
   document.getElementById('module-pub').style.display='none';
+  document.getElementById('module-pubmeta').style.display='none';
   try {
     const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT,cjT,vmT,smT,cnT,vcT,pvT] = await Promise.all([
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.dux):Promise.resolve(''),
@@ -1044,7 +1049,7 @@ function showModule(mod) {
   currentModule=mod;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
-  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':mod==='compras'?'Compras':mod==='laboratorio'?'Laboratorio':'Proyección';
+  document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':mod==='pubmeta'?'Dashboard Publicidad':mod==='compras'?'Compras':mod==='laboratorio'?'Laboratorio':'Proyección';
   document.getElementById('module-stock').style.display='none';
   document.getElementById('module-ventas').style.display='none';
   document.getElementById('module-semanal').style.display='none';
@@ -1079,6 +1084,7 @@ function renderCurrentModule(){
   if(currentModule==='mesencurso') renderMesEnCurso();
   if(currentModule==='kh')         renderKayaHouse();
   if(currentModule==='pub')        renderPublicidad();
+  if(currentModule==='pubmeta')    renderPubMeta();
   if(currentModule==='mayoristas') renderMayoristas();
 }
 
@@ -5278,6 +5284,449 @@ function renderPublicidad(){
     </div>
     <div id="pub-tab-content"></div>`;
   renderPubContent();
+}
+
+
+// ══ DASHBOARD PUBLICIDAD (META ADS) ════════════════════════════════
+// Datos traídos de la API de Meta Ads (cuenta KAYA PESOS 1160111476024838),
+// nivel campaña, semanas lunes→domingo (mismo corte que la hoja semanal de TN).
+// Cada fila: [nombre, inversión, compras, facturación, alcance, impresiones,
+//             clics en el enlace, add to cart, checkouts iniciados]
+const MW_UPD  = '19/08/2026';   // última extracción desde la API
+const MW_NOTA = 'Semana 10–16/08: la venta atribuida por Meta ($80,7M) es la más alta desde Hot Sale, pero se apoya casi toda en <b>3X2 CBO</b>, que estrenó semana con $7,7M de inversión y 326 compras (ROAS 4,56x). Retargeting sigue siendo lo más eficiente del mix (ABO Retarget 7,40x con menos de $1M) y CBO TEST se achicó a la mitad. El dato a mirar no es el ROAS sino la cobertura: Meta se atribuye el 92% de todo lo que vendió Tienda Nube esa semana, así que ese 4,63x es prácticamente "venta total de la tienda ÷ inversión", no venta incremental.';
+const MW = [
+{"s":"2026-03-02","c":[["Black Winners",978254,60,5019174,135490,222948,3490,247,75],["White Winners",419226,24,1562874,46884,57775,1296,157,36],["CBO TEST",2100293,133,11549380,90663,244816,3968,619,168]]},
+{"s":"2026-03-09","c":[["Black Winners",546336,35,2386344,77837,125750,1944,165,45],["White Winners",213205,6,400896,22463,26109,609,52,12],["CBO TEST",1377328,66,5948404,76066,179414,2722,359,99],["3X2 ABO",1845591,93,10520547,28217,151924,3351,732,130]]},
+{"s":"2026-03-16","c":[["Black Winners",348433,14,1159096,59591,89317,1076,144,26],["CBO TEST",1050450,65,5671285,68301,142740,2162,310,69],["3X2 ABO",2411338,141,15765766,37759,228430,4726,1004,172],["Retargeting ABO",336515,27,2907206,7777,19920,277,133,33]]},
+{"s":"2026-03-23","c":[["Black Winners",349641,29,2356407,48114,76568,1363,138,31],["CBO TEST",1045857,67,5645154,58348,143463,2512,428,97],["3X2 ABO",2076039,112,12534759,25736,146964,4235,901,146],["Retargeting ABO",345119,27,2963240,8346,20926,358,120,30]]},
+{"s":"2026-03-30","c":[["Black Winners",476643,22,2083860,74139,107644,1707,163,36],["CBO TEST",1171212,66,5807280,83777,181631,2968,442,103],["3X2 ABO",1326445,57,6326924,21415,99382,2931,386,84],["Retargeting ABO",421036,41,3431619,9614,29301,481,169,45]]},
+{"s":"2026-04-06","c":[["Black Winners",706402,48,3975640,70853,117725,2282,201,57],["CBO TEST",1805593,122,11878231,94938,227044,3795,556,135],["Retargeting ABO",726959,75,7920087,10727,37689,749,296,74],["CBO OFERTA 2",1378625,133,14655270,51049,127768,1869,631,134]]},
+{"s":"2026-04-13","c":[["Black Winners",701443,32,2434616,95007,135913,2563,164,44],["CBO TEST",2391487,98,8767852,134621,323558,5137,528,157],["Retargeting ABO",996853,69,6272722,14156,53393,1193,243,76],["CBO OFERTA 2",1983347,110,10845616,75860,167002,2827,685,171]]},
+{"s":"2026-04-20","c":[["Black Winners",691965,36,2799952,122149,164522,2892,149,44],["CBO TEST",2437909,81,7254712,134780,315699,5625,458,126],["Retargeting ABO",1042170,62,6008601,15235,53521,1256,270,88],["CBO OFERTA 2",2060590,89,8765981,59313,146760,2902,555,150]]},
+{"s":"2026-04-27","c":[["Black Winners",707606,30,2332903,96388,138814,2652,210,51],["CBO TEST",2451289,86,8356199,129014,294885,6617,556,127],["Retargeting ABO",1085556,78,8461026,15251,56569,1617,347,87],["CBO OFERTA 2",1466247,61,6655709,44503,101937,2212,511,108],["Engagement",51695,0,0,8999,11068,1599,0,0]]},
+{"s":"2026-05-04","c":[["Black Winners",897207,57,4138569,89394,141554,2950,271,90],["CBO TEST",2738716,203,18561799,84120,299942,6449,874,233],["Retargeting ABO",820312,50,4284211,13721,51213,1437,214,72],["Engagement",179701,0,0,146317,188065,13997,1,0],["HOT SALE",3420923,320,29628752,64099,271512,5071,1550,359]]},
+{"s":"2026-05-11","c":[["Black Winners",720331,55,3780040,115341,150382,1895,304,95],["CBO TEST",3449465,194,17269657,107630,299533,4892,923,263],["Engagement",214933,0,0,37302,152757,32348,6,1],["HOT SALE",10507699,732,66517151,185381,752765,10229,3291,877]]},
+{"s":"2026-05-18","c":[["Black Winners",692047,19,1179809,186179,229007,2073,100,35],["CBO TEST",3544137,111,10467590,244940,590042,6744,527,148],["Retargeting ABO",545113,5,474780,42197,58087,363,24,7],["Engagement",53873,0,0,8311,36468,9368,0,0],["HOT SALE",145491,19,1418523,13228,15620,245,80,25],["ABO TEST (Concepts)",4835829,121,14603527,123739,440605,6873,546,154],["ABO Retarget",924634,39,3951989,19852,60148,1031,226,62],["CBO MENOPAUSIA (exc CP)",870063,10,1097378,47183,80332,1332,61,13]]},
+{"s":"2026-05-25","c":[["Black Winners",151559,2,98742,37108,42685,412,20,3],["CBO TEST",4123619,120,11873829,278647,667675,7481,597,173],["ABO TEST (Concepts)",4476851,129,15384766,124612,447701,9286,498,152],["ABO Retarget",2977339,144,13758880,45264,190290,3162,645,191],["CATALOG",400860,7,803746,22171,48459,1938,36,10],["CBO Retarget",1605559,49,3807305,25783,93253,1172,286,75]]},
+{"s":"2026-06-01","c":[["CBO TEST",3635578,103,9538539,231792,550139,5389,508,156],["ABO TEST (Concepts)",3867050,123,12212838,151565,395542,5532,544,157],["ABO Retarget",3334218,116,10056685,57551,231194,3305,498,143],["CATALOG",356668,20,1685291,15086,38913,1406,55,19],["CBO Retarget",2774799,86,7399810,84704,205445,2218,448,142]]},
+{"s":"2026-06-08","c":[["CBO TEST",3460521,123,11203894,124546,352764,4262,530,157],["ABO TEST (Concepts)",4393604,128,13469626,137074,407342,4872,566,166],["ABO Retarget",4104726,148,13520157,73284,270474,3603,669,210],["CATALOG",542479,28,2936021,20041,53785,2142,88,28],["CBO Retarget",1425016,60,5513663,37004,90292,1034,211,80],["ENGAGE",96328,0,0,18840,22509,366,14,2]]},
+{"s":"2026-06-15","c":[["CBO TEST",2884503,94,8581687,98653,277550,3226,408,135],["ABO TEST (Concepts)",6412581,183,21034518,200592,642533,7957,807,259],["ABO Retarget",2597940,85,7452921,71143,181831,2660,437,122],["CATALOG",830813,31,3228456,31378,98177,2956,115,30],["ENGAGE",212046,1,72963,63862,84724,1000,18,2]]},
+{"s":"2026-06-22","c":[["CBO TEST",2401289,95,9658649,70584,244307,2573,304,95],["ABO TEST (Concepts)",6509294,218,25621707,308319,804072,10006,958,300],["ABO Retarget",2078618,82,9367478,50616,144977,1941,326,114],["CATALOG",857713,28,2553846,29470,97970,2366,92,24],["ENGAGE",210947,2,290387,49710,61809,749,22,3]]},
+{"s":"2026-06-29","c":[["CBO TEST",2463959,76,8420879,61814,230903,2720,246,102],["ABO TEST (Concepts)",7559069,226,29170922,322069,837650,9905,944,319],["ABO Retarget",2435627,82,10498594,69070,179140,2045,380,97],["CATALOG",884721,45,5052098,31533,97850,2094,116,44],["ENGAGE",209061,2,244667,49454,61157,765,18,7]]},
+{"s":"2026-07-06","c":[["CBO TEST",2426406,96,11093171,60975,223708,2444,348,117],["ABO TEST (Concepts)",6723212,219,24403469,302046,812147,9167,945,285],["ABO Retarget",1868943,72,8267730,50978,122726,1419,301,98],["CATALOG",863032,41,3880911,30984,93880,1764,153,49],["ENGAGE",347958,0,0,67451,89601,2970,5,0]]},
+{"s":"2026-07-13","c":[["CBO TEST",2415940,79,8296679,61905,247661,3680,343,117],["ABO TEST (Concepts)",6427571,171,17174363,274123,761796,9064,725,255],["ABO Retarget",1356236,54,5395151,19777,82835,1137,274,108],["CATALOG",870447,30,3080428,32379,104200,1596,133,40],["ENGAGE",413823,0,0,87832,117803,4216,18,4],["GRAVEYARD CBO CPR",685260,22,2392296,38622,79030,1312,78,25]]},
+{"s":"2026-07-20","c":[["CBO TEST",2502366,91,8955770,70409,269793,5839,348,103],["ABO TEST (Concepts)",5631631,172,16903639,316273,810123,10853,744,240],["ABO Retarget",3082517,156,16212526,36852,193360,3011,779,229],["CATALOG",887684,26,2764123,31982,107438,1734,118,26],["ENGAGE",233008,0,0,65521,75979,1130,29,5],["GRAVEYARD CBO CPR",1411009,42,4056442,86238,183318,2848,157,50]]},
+{"s":"2026-07-27","c":[["CBO TEST",2479847,90,9467191,73017,237385,5146,282,108],["ABO TEST (Concepts)",7030778,211,20369394,390386,963995,14175,928,332],["ABO Retarget",3447889,254,26755368,38121,196542,2866,1003,365],["CATALOG",888991,55,5239578,27541,98161,1934,158,51],["ENGAGE",213660,2,66663,55874,68508,842,7,5],["GRAVEYARD CBO CPR",1419859,54,4999953,86432,160017,2131,149,64]]},
+{"s":"2026-08-03","c":[["CBO TEST",2361502,98,10672786,92832,223769,4517,397,115],["ABO TEST (Concepts)",10160897,313,33379396,443668,1305472,18406,1623,460],["ABO Retarget",3044674,145,15024090,49476,190176,2327,615,208],["CATALOG",899520,52,5110207,29735,91285,1737,196,58],["ENGAGE",190432,0,0,50878,61648,677,5,0],["GRAVEYARD CBO CPR",1228676,40,3585049,72422,133562,2301,166,54]]},
+{"s":"2026-08-10","c":[["CBO TEST",1232272,55,6041561,61713,107510,2595,346,58],["ABO TEST (Concepts)",6930919,280,28603232,255615,857938,15067,1813,346],["ABO Retarget",953194,69,7052783,17007,53241,1295,337,78],["CATALOG",662438,38,4110924,23660,64721,1258,207,41],["3X2 CBO",7652439,326,34857104,99193,560721,8382,3018,438]]}
+];
+
+let mwSem=null, mwCmp='', mwTab='resumen', mwOpen=null;
+
+const MW_MES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function mwLbl(s){ const [y,m,d]=s.split('-').map(Number); const e=new Date(y,m-1,d+6);
+  const p=n=>String(n).padStart(2,'0');
+  return `${p(d)}/${p(m)} – ${p(e.getDate())}/${p(e.getMonth()+1)}`; }
+function mwShort(s){ const [,m,d]=s.split('-').map(Number); return `${d} ${MW_MES[m-1]}`; }
+function mwGet(s){ return MW.find(w=>w.s===s); }
+function mwN(n){ return Math.round(n).toLocaleString('es-AR'); }
+function mwD(n,d){ return (n||0).toLocaleString('es-AR',{minimumFractionDigits:d===undefined?2:d,maximumFractionDigits:d===undefined?2:d}); }
+
+// Costo variable → ROAS de equilibrio (usa los mismos % que el módulo Publicidad)
+function mwBreakeven(){ const c=pubGetCosts(); const pct=(c.cmv+c.cobranza+c.impuestos+c.logistica)/100;
+  return pct>=1?0:1/(1-pct); }
+
+function mwCamp(a){ const [n,sp,p,rv,re,im,cl,at,ch]=a;
+  return {n,sp,p,rv,re,im,cl,at,ch, ro:sp?rv/sp:0, cp:p?sp/p:0, ct:im?cl/im*100:0, cv:cl?p/cl*100:0}; }
+function mwCamps(w){ return w.c.map(mwCamp).filter(c=>c.sp>100).sort((a,b)=>b.ro-a.ro); }
+function mwTot(w){ let sp=0,p=0,rv=0,re=0,im=0,cl=0,at=0,ch=0;
+  w.c.forEach(a=>{sp+=a[1];p+=a[2];rv+=a[3];re+=a[4];im+=a[5];cl+=a[6];at+=a[7];ch+=a[8];});
+  return {sp,p,rv,re,im,cl,at,ch, ro:sp?rv/sp:0, cp:p?sp/p:0, ct:im?cl/im*100:0, cv:cl?p/cl*100:0}; }
+
+function mwRc(r){ const be=mwBreakeven();
+  return r<be?'#c0392b':r<be*1.8?'#e67e22':r<5?'#b89021':'#27ae60'; }
+function mwRl(r){ const be=mwBreakeven();
+  return r<be?'Bajo el equilibrio':r<be*1.8?'Flojo':r<5?'Bueno':'Excelente'; }
+function mwDelta(cur,prev,inv){
+  if(!prev) return '';
+  const pct=(cur-prev)/Math.abs(prev)*100;
+  const bien=inv?pct<0:pct>0;
+  return ` <span style="font-size:10px;color:${bien?'#27ae60':'#c0392b'};">${pct>0?'↑':'↓'}${mwD(Math.abs(pct),1)}%</span>`;
+}
+
+// Venta real de Tienda Nube (hoja semanal, NETA de envíos) para esa semana
+function mwTN(s){ if(!DATA.semanal||!DATA.semanal.length) return null;
+  const a=semAgg(s); return a.venta>0?a:null; }
+
+function mwSetSem(v){ mwSem=v; mwOpen=null; if(mwCmp===v) mwCmp=''; renderPubMeta(); }
+function mwSetCmp(v){ mwCmp=v; renderPubMeta(); }
+function mwSetTab(t){ mwTab=t; mwOpen=null; renderPubMeta(); }
+function mwToggle(n){ mwOpen=mwOpen===n?null:n; renderPubMeta(); }
+
+function mwKPI(label,val,sub,color){
+  return `<div class="v-kpi"><div class="v-kpi-label">${label}</div><div class="v-kpi-val" style="color:${color||'var(--text)'};">${val}</div>${sub?`<div class="v-kpi-sub">${sub}</div>`:''}</div>`;
+}
+
+// ── RESUMEN ───────────────────────────────────────────────────────
+function mwResumen(w,cw){
+  const t=mwTot(w), ct=cw?mwTot(cw):null, camps=mwCamps(w), be=mwBreakeven();
+  const tn=mwTN(w.s);
+  let h=`<div class="v-kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+    ${mwKPI('Inversión',pesos(t.sp),'ARS con impuestos'+(ct?'':''),'var(--accent2)')}
+    ${mwKPI('Facturación atribuida',pesos(t.rv),'Meta Ads'+(ct?mwDelta(t.rv,ct.rv):''),'var(--accent)')}
+    ${mwKPI('ROAS',mwD(t.ro)+'x',mwRl(t.ro)+' · equilibrio '+mwD(be)+'x'+(ct?mwDelta(t.ro,ct.ro):''),mwRc(t.ro))}
+    ${mwKPI('Compras',mwN(t.p),'CPP '+pesos(t.cp)+(ct?mwDelta(t.p,ct.p):''))}
+  </div>
+  <div class="v-kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+    ${mwKPI('Alcance',mwN(t.re),'cuentas alcanzadas')}
+    ${mwKPI('Impresiones',mwN(t.im),'CTR '+mwD(t.ct)+'%')}
+    ${mwKPI('Clics en el enlace',mwN(t.cl),'CVR '+mwD(t.cv)+'%')}
+    ${tn?mwKPI('Inversión / venta TN',mwD(t.sp/tn.venta*100,1)+'%',pesos(tn.venta)+' de venta real','var(--accent2)'):mwKPI('Inversión / venta TN','—','sin dato de la hoja semanal')}
+  </div>`;
+
+  h+=`<div class="v-chart-wrap"><div class="v-chart-title">ROAS por campaña · línea punteada = equilibrio (${mwD(be)}x)</div>`;
+  const maxRo=Math.max(...camps.map(c=>c.ro),8);
+  camps.forEach(c=>{
+    const pc=cw?mwCamps(cw).find(x=>x.n===c.n):null;
+    h+=`<div style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:12px;">${c.n}</span>
+        <span style="font-size:12px;font-weight:500;color:${mwRc(c.ro)};">${mwD(c.ro)}x${pc?mwDelta(c.ro,pc.ro):''}</span>
+      </div>
+      <div style="height:8px;background:var(--surface2);border-radius:4px;position:relative;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(c.ro/maxRo*100,100)}%;background:${mwRc(c.ro)};border-radius:4px;"></div>
+        <div style="position:absolute;left:${(be/maxRo*100).toFixed(1)}%;top:0;bottom:0;width:1px;background:#c0392b;opacity:0.55;"></div>
+      </div></div>`;
+  });
+  h+=`</div>`;
+
+  h+=`<div class="v-chart-wrap"><div class="v-chart-title">Distribución de la inversión</div>`;
+  camps.slice().sort((a,b)=>b.sp-a.sp).forEach(c=>{
+    const pct=t.sp?c.sp/t.sp*100:0;
+    h+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:9px;">
+      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.n}</span>
+      <div style="width:140px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct.toFixed(1)}%;background:var(--accent);"></div></div>
+      <span style="font-size:11px;color:var(--muted);width:44px;text-align:right;">${mwD(pct,1)}%</span>
+      <span style="font-size:12px;width:110px;text-align:right;font-variant-numeric:tabular-nums;">${pesos(c.sp)}</span>
+    </div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+
+// ── CAMPAÑAS ──────────────────────────────────────────────────────
+function mwCampanas(w,cw){
+  const camps=mwCamps(w), t=mwTot(w);
+  let h='<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">Clic en una campaña para ver su historial de ROAS semana a semana.</div>';
+  camps.forEach(c=>{
+    const pc=cw?mwCamps(cw).find(x=>x.n===c.n):null;
+    const met=[['Inversión',pesos(c.sp),c.sp,pc?pc.sp:0,1],['Compras',mwN(c.p),c.p,pc?pc.p:0,0],
+      ['CPP',c.p?pesos(c.cp):'—',c.cp,pc?pc.cp:0,1],['Facturación',pesos(c.rv),c.rv,pc?pc.rv:0,0],
+      ['CTR',mwD(c.ct)+'%',c.ct,pc?pc.ct:0,0],['CVR',mwD(c.cv)+'%',c.cv,pc?pc.cv:0,0],
+      ['Add to cart',mwN(c.at),c.at,pc?pc.at:0,0],['Checkouts',mwN(c.ch),c.ch,pc?pc.ch:0,0],
+      ['Alcance',mwN(c.re),c.re,pc?pc.re:0,0],['% del presupuesto',mwD(t.sp?c.sp/t.sp*100:0,1)+'%',0,0,0]];
+    h+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px;margin-bottom:12px;cursor:pointer;" onclick="mwToggle('${c.n.replace(/'/g,"\\'")}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <span style="font-size:14px;">${c.n}</span>
+        <span style="font-size:12px;font-weight:500;padding:3px 12px;border-radius:12px;background:${mwRc(c.ro)}1a;color:${mwRc(c.ro)};">ROAS ${mwD(c.ro)}x${pc?mwDelta(c.ro,pc.ro):''}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+        ${met.map(m=>`<div><div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">${m[0]}</div><div style="font-size:13px;font-variant-numeric:tabular-nums;">${m[1]}${m[3]?mwDelta(m[2],m[3],m[4]):''}</div></div>`).join('')}
+      </div>`;
+    if(mwOpen===c.n){
+      const hist=[]; MW.forEach(wk=>{ const cc=wk.c.find(x=>x[0]===c.n); if(cc&&cc[1]>100) hist.push({s:wk.s,ro:cc[3]/cc[1],p:cc[2],sp:cc[1]}); });
+      const mx=Math.max(...hist.map(x=>x.ro),1);
+      h+=`<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
+        <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">Historial de ROAS · ${hist.length} semanas</div>
+        <div style="display:flex;align-items:flex-end;gap:4px;height:90px;">
+        ${hist.map(x=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:flex-end;height:100%;" title="${mwLbl(x.s)} · ${mwD(x.ro)}x · ${x.p} compras · ${pesos(x.sp)}">
+            <span style="font-size:8px;color:${mwRc(x.ro)};">${mwD(x.ro,1)}</span>
+            <div style="width:100%;max-width:24px;height:${(x.ro/mx*70).toFixed(0)}%;min-height:2px;background:${mwRc(x.ro)};border-radius:2px 2px 0 0;opacity:${x.s===w.s?1:0.45};"></div>
+            <span style="font-size:7px;color:var(--muted);white-space:nowrap;">${mwShort(x.s)}</span>
+          </div>`).join('')}
+        </div></div>`;
+    }
+    h+=`</div>`;
+  });
+  return h;
+}
+
+// ── FUNNEL ────────────────────────────────────────────────────────
+function mwFunnel(w,cw){
+  const t=mwTot(w), ct=cw?mwTot(cw):null, camps=mwCamps(w);
+  const pasos=[
+    ['Impresiones',t.im,'100%',100],
+    ['Clics en el enlace',t.cl,t.im?mwD(t.cl/t.im*100)+'% de impresiones':'—',55],
+    ['Add to cart',t.at,t.cl?mwD(t.at/t.cl*100)+'% de clics':'—',34],
+    ['Checkouts iniciados',t.ch,t.at?mwD(t.ch/t.at*100)+'% de ATC':'—',20],
+    ['Compras',t.p,t.ch?mwD(t.p/t.ch*100)+'% de checkouts':'—',11]];
+  let h=`<div class="v-chart-wrap"><div class="v-chart-title">Embudo de la semana</div>`;
+  pasos.forEach((s,i)=>{
+    h+=`<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+        <span style="font-size:12px;">${s[0]}</span>
+        <span style="font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;">${mwN(s[1])} <span style="color:var(--accent);">(${s[2]})</span></span>
+      </div>
+      <div style="height:24px;background:var(--surface2);border-radius:4px;display:flex;justify-content:center;overflow:hidden;">
+        <div style="height:100%;width:${s[3]}%;background:var(--accent);opacity:${1-i*0.14};border-radius:4px;"></div>
+      </div></div>`;
+  });
+  h+=`</div>`;
+
+  const perdidos=t.at-t.ch, pctPerd=t.at?perdidos/t.at*100:0;
+  h+=`<div class="v-kpi-grid" style="grid-template-columns:repeat(4,1fr);">
+    ${mwKPI('Carritos sin checkout',mwN(perdidos),mwD(pctPerd,0)+'% de los add to cart','var(--accent3)')}
+    ${mwKPI('Checkouts sin compra',mwN(t.ch-t.p),t.ch?mwD((t.ch-t.p)/t.ch*100,0)+'% de los checkouts':'—','var(--accent3)')}
+    ${mwKPI('Ticket atribuido',t.p?pesos(t.rv/t.p):'—','facturación ÷ compras')}
+    ${mwKPI('Costo por clic',t.cl?pesos(t.sp/t.cl):'—','inversión ÷ clics'+(ct&&ct.cl?mwDelta(t.sp/t.cl,ct.sp/ct.cl,1):''))}
+  </div>`;
+
+  h+=`<div class="v-chart-wrap"><div class="v-chart-title">Conversión (CVR) por campaña · compras ÷ clics</div>`;
+  camps.filter(c=>c.p>0).sort((a,b)=>b.cv-a.cv).forEach(c=>{
+    const col=c.cv>5?'#27ae60':c.cv>2?'#b89021':'#e67e22';
+    h+=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:9px;">
+      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.n}</span>
+      <div style="width:140px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${Math.min(c.cv/10*100,100)}%;background:${col};"></div></div>
+      <span style="font-size:12px;width:52px;text-align:right;color:${col};">${mwD(c.cv)}%</span>
+    </div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+
+// ── META vs TIENDA NUBE ───────────────────────────────────────────
+function mwVsTN(w){
+  if(!DATA.semanal||!DATA.semanal.length)
+    return '<div class="empty" style="padding:60px 0;">No se pudo leer la hoja semanal de Tienda Nube.</div>';
+  const filas=MW.map(x=>{ const tn=mwTN(x.s); if(!tn) return null;
+    const t=mwTot(x); return {s:x.s,sp:t.sp,rv:t.rv,p:t.p,tn:tn.venta,cob:t.rv/tn.venta*100,roMeta:t.ro,roReal:tn.venta/t.sp,inv:t.sp/tn.venta*100};
+  }).filter(Boolean);
+  if(!filas.length) return '<div class="empty" style="padding:60px 0;">Todavía no hay semanas en común entre Meta y la hoja semanal de TN.</div>';
+
+  const cur=filas.find(f=>f.s===w.s);
+  const T=filas.reduce((a,f)=>({sp:a.sp+f.sp,rv:a.rv+f.rv,tn:a.tn+f.tn}),{sp:0,rv:0,tn:0});
+
+  let h=`<div style="background:var(--surface);border-left:3px solid var(--accent);border-radius:6px;padding:12px 16px;margin-bottom:22px;font-size:11px;line-height:1.6;color:var(--muted);">
+    <b style="color:var(--text);">Cómo leer esto.</b> La columna <b>Venta Meta</b> es lo que Meta se atribuye (incluye envíos e impuestos, ventana de atribución de Meta).
+    La columna <b>Venta TN</b> sale de la hoja semanal del dashboard: venta real de Tienda Nube, <b>neta de envíos</b>, sin Mercado Libre ni mayorista.
+    Por eso la cobertura real es algo menor a la que se ve acá. <b>ROAS real</b> = toda la venta de TN ÷ inversión en Meta: es el número de negocio, no el de la plataforma.
+  </div>`;
+
+  if(cur){
+    const brecha=cur.tn-cur.rv;
+    h+=`<div class="v-kpi-grid" style="grid-template-columns:repeat(5,1fr);">
+      ${mwKPI('Venta atribuida Meta',pesos(cur.rv),mwLbl(cur.s),'var(--accent)')}
+      ${mwKPI('Venta real TN',pesos(cur.tn),'neta de envíos','var(--accent2)')}
+      ${mwKPI('Cobertura Meta',mwD(cur.cob,1)+'%',brecha>=0?'Meta explica esa parte':'Meta se atribuye de más',cur.cob>90?'#c0392b':'var(--text)')}
+      ${mwKPI('ROAS Meta',mwD(cur.roMeta)+'x','según la plataforma',mwRc(cur.roMeta))}
+      ${mwKPI('ROAS real',mwD(cur.roReal)+'x','venta TN ÷ inversión',mwRc(cur.roReal))}
+    </div>`;
+  }
+
+  h+=`<div class="v-chart-wrap"><div class="v-chart-title">Cobertura de Meta sobre la venta real de Tienda Nube</div>`;
+  const maxC=Math.max(...filas.map(f=>f.cob),100);
+  h+=`<div style="display:flex;align-items:flex-end;gap:3px;height:150px;">`;
+  filas.forEach(f=>{
+    const col=f.cob>90?'#c0392b':f.cob>70?'#e67e22':'#b89021';
+    h+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:flex-end;height:100%;" title="${mwLbl(f.s)} · cobertura ${mwD(f.cob,1)}% · Meta ${pesos(f.rv)} · TN ${pesos(f.tn)}">
+      <span style="font-size:8px;color:${col};">${mwD(f.cob,0)}</span>
+      <div style="width:100%;max-width:26px;height:${(f.cob/maxC*80).toFixed(0)}%;min-height:2px;background:${col};border-radius:2px 2px 0 0;opacity:${f.s===w.s?1:0.5};"></div>
+      <span style="font-size:7px;color:var(--muted);white-space:nowrap;">${mwShort(f.s)}</span>
+    </div>`;
+  });
+  h+=`</div></div>`;
+
+  h+=`<div class="v-chart-wrap"><div class="v-chart-title">Semana a semana</div>
+    <table class="v-rubro-table"><thead><tr>
+      <th>Semana</th><th style="text-align:right;">Inversión</th><th style="text-align:right;">Venta Meta</th>
+      <th style="text-align:right;">Venta TN</th><th style="text-align:right;">Brecha</th><th style="text-align:right;">Cobertura</th>
+      <th style="text-align:right;">ROAS Meta</th><th style="text-align:right;">ROAS real</th><th style="text-align:right;">Inv./venta</th>
+    </tr></thead><tbody>`;
+  filas.forEach(f=>{
+    const sel=f.s===w.s;
+    h+=`<tr style="${sel?'background:var(--surface2);':''}">
+      <td style="${sel?'font-weight:500;':''}">${mwLbl(f.s)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;">${pesos(f.sp)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;">${pesos(f.rv)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;">${pesos(f.tn)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${pesos(f.tn-f.rv)}</td>
+      <td style="text-align:right;color:${f.cob>90?'#c0392b':'var(--text)'};">${mwD(f.cob,1)}%</td>
+      <td style="text-align:right;color:${mwRc(f.roMeta)};">${mwD(f.roMeta)}x</td>
+      <td style="text-align:right;color:${mwRc(f.roReal)};">${mwD(f.roReal)}x</td>
+      <td style="text-align:right;">${mwD(f.inv,1)}%</td>
+    </tr>`;
+  });
+  h+=`<tr style="border-top:2px solid var(--border);font-weight:500;">
+      <td>TOTAL ${filas.length} semanas</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;">${pesos(T.sp)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;">${pesos(T.rv)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;">${pesos(T.tn)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">${pesos(T.tn-T.rv)}</td>
+      <td style="text-align:right;">${mwD(T.rv/T.tn*100,1)}%</td>
+      <td style="text-align:right;color:${mwRc(T.rv/T.sp)};">${mwD(T.rv/T.sp)}x</td>
+      <td style="text-align:right;color:${mwRc(T.tn/T.sp)};">${mwD(T.tn/T.sp)}x</td>
+      <td style="text-align:right;">${mwD(T.sp/T.tn*100,1)}%</td>
+    </tr></tbody></table></div>`;
+  return h;
+}
+
+// ── OBSERVACIONES ─────────────────────────────────────────────────
+function mwObsCard(titulo,texto,color){
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${color};border-radius:8px;padding:16px 18px;margin-bottom:12px;">
+    <div style="font-size:13px;font-weight:500;margin-bottom:6px;">${titulo}</div>
+    <div style="font-size:12px;line-height:1.65;color:var(--muted);">${texto}</div></div>`;
+}
+function mwObs(w,cw){
+  const t=mwTot(w), camps=mwCamps(w), be=mwBreakeven(), ct=cw?mwTot(cw):null;
+  if(!camps.length) return '<div class="empty">Sin campañas con inversión esa semana.</div>';
+  const mejor=camps[0];
+  const mayor=camps.slice().sort((a,b)=>b.sp-a.sp)[0];
+  const cppBajo=camps.filter(c=>c.p>0).sort((a,b)=>a.cp-b.cp)[0];
+  const perdedoras=camps.filter(c=>c.ro<be);
+  const flojas=camps.filter(c=>c.ro>=be&&c.ro<be*1.8);
+  const top=camps.filter(c=>c.ro>=5);
+  const tn=mwTN(w.s);
+  let h='';
+
+  if(MW_NOTA) h+=`<div style="background:var(--surface2);border-radius:8px;padding:16px 18px;margin-bottom:20px;">
+    <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent2);margin-bottom:8px;">Lectura de la semana · ${MW_UPD}</div>
+    <div style="font-size:12px;line-height:1.7;">${MW_NOTA}</div></div>`;
+
+  h+=mwObsCard(`ROAS de equilibrio: ${mwD(be)}x`,
+    `Con los costos variables cargados en el módulo Publicidad (CMV, cobranza, impuestos y logística) cada peso de venta deja ${mwD((1-1/be)*100,1)}% de contribución. Una campaña recién empieza a aportar arriba de <b>${mwD(be)}x</b>; abajo de eso vende, pero pone plata. Esta semana el ROAS global fue <b style="color:${mwRc(t.ro)}">${mwD(t.ro)}x</b>${ct?` (semana comparada: ${mwD(ct.ro)}x)`:''}.`,
+    'var(--accent2)');
+
+  h+=mwObsCard(`${mejor.n} es la campaña más eficiente`,
+    `ROAS ${mwD(mejor.ro)}x con ${mwN(mejor.p)} compras y CPP de ${pesos(mejor.cp)}. Generó ${pesos(mejor.rv)} con ${pesos(mejor.sp)} de inversión (${mwD(mejor.sp/t.sp*100,1)}% del presupuesto de la semana).`,
+    '#27ae60');
+
+  if(cppBajo&&cppBajo.n!==mejor.n)
+    h+=mwObsCard(`${cppBajo.n} tiene el costo por compra más bajo`,
+      `CPP de ${pesos(cppBajo.cp)} con ${mwN(cppBajo.p)} compras y ROAS ${mwD(cppBajo.ro)}x.` +
+      (cppBajo.sp/t.sp<0.15?` Se lleva apenas el ${mwD(cppBajo.sp/t.sp*100,1)}% del presupuesto: hay margen para escalarla.`:''),
+      'var(--accent)');
+
+  if(perdedoras.length){
+    const plata=perdedoras.reduce((s,c)=>s+c.sp,0);
+    h+=mwObsCard(perdedoras.length===1?`${perdedoras[0].n} está abajo del equilibrio`:`${perdedoras.length} campañas abajo del equilibrio`,
+      `${perdedoras.map(c=>c.n+' ('+mwD(c.ro)+'x)').join(', ')}. Suman ${pesos(plata)} (${mwD(plata/t.sp*100,1)}% del presupuesto) con ROAS por debajo de ${mwD(be)}x: esa inversión no cubre ni el costo variable de lo que vende.`,
+      '#c0392b');
+  }
+
+  if(mayor&&mayor.sp/t.sp>0.3&&mayor.ro<be*2.4)
+    h+=mwObsCard(`${mayor.n} concentra el ${mwD(mayor.sp/t.sp*100,1)}% del presupuesto`,
+      `Invierte ${pesos(mayor.sp)} con ROAS ${mwD(mayor.ro)}x y CPP ${pesos(mayor.cp)}. Es la campaña que más mueve el ROAS global: conviene abrirla por ad set antes de tocar el resto.`,
+      '#e67e22');
+
+  if(top.length)
+    h+=mwObsCard('Campañas con ROAS arriba de 5x',
+      `${top.map(c=>c.n+' ('+mwD(c.ro)+'x)').join(', ')}. Son las que sostienen el resultado; vale mirar qué creatividades y audiencias usan para replicarlas.`,
+      '#27ae60');
+
+  if(flojas.length){
+    const plata=flojas.reduce((s,c)=>s+c.sp,0);
+    h+=mwObsCard(`${flojas.length} campaña${flojas.length>1?'s':''} en zona gris (entre ${mwD(be)}x y ${mwD(be*1.8)}x)`,
+      `${flojas.map(c=>c.n+' ('+mwD(c.ro)+'x)').join(', ')}. Suman ${pesos(plata)} (${mwD(plata/t.sp*100,1)}%): dejan contribución positiva pero muy fina, no aguantan un mal día.`,
+      '#e67e22');
+  }
+
+  const perd=t.at-t.ch, pct=t.at?perd/t.at*100:0;
+  if(pct>50)
+    h+=mwObsCard(`El embudo pierde ${mwD(pct,0)}% entre carrito y checkout`,
+      `${mwN(perd)} personas agregaron al carrito y no arrancaron el checkout. Recuperar el 10% serían ~${mwN(perd*0.1)} compras más, unos ${pesos(perd*0.1*(t.p?t.rv/t.p:0))} de facturación con la misma inversión.`,
+      'var(--accent)');
+
+  if(tn){
+    const cob=t.rv/tn.venta*100;
+    h+=mwObsCard(`Meta se atribuye el ${mwD(cob,1)}% de la venta real de Tienda Nube`,
+      `Meta declara ${pesos(t.rv)} y Tienda Nube facturó ${pesos(tn.venta)} (neta de envíos, sin MELI ni mayorista). ` +
+      (cob>85?`Con una cobertura así, el ROAS de la plataforma es prácticamente <b>venta total de la tienda ÷ inversión</b>: incluye recompra y tráfico que hubiera comprado igual. El número honesto de negocio es el ROAS real de ${mwD(tn.venta/t.sp)}x y, sobre todo, la inversión sobre venta: ${mwD(t.sp/tn.venta*100,1)}%.`
+             :`Todavía queda una parte relevante de la venta que Meta no explica; el ROAS real de la semana fue ${mwD(tn.venta/t.sp)}x.`),
+      cob>85?'#c0392b':'var(--accent2)');
+  }
+  return h;
+}
+
+// ── ACCIONES ──────────────────────────────────────────────────────
+function mwAcc(w,cw){
+  const t=mwTot(w), camps=mwCamps(w), be=mwBreakeven();
+  if(!camps.length) return '<div class="empty">Sin campañas con inversión esa semana.</div>';
+  const mayor=camps.slice().sort((a,b)=>b.sp-a.sp)[0];
+  const perdedoras=camps.filter(c=>c.ro<be);
+  const flojas=camps.filter(c=>c.ro>=be&&c.ro<be*1.8);
+  const escalables=camps.filter(c=>c.ro>=4&&c.sp/t.sp<0.2);
+  const perd=t.at-t.ch;
+  const tn=mwTN(w.s);
+
+  function grupo(titulo,color,items){
+    if(!items.length) return '';
+    return `<div style="background:var(--surface);border:1px solid ${color}55;border-radius:8px;padding:18px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:500;color:${color};letter-spacing:0.06em;text-transform:uppercase;margin-bottom:14px;">${titulo}</div>
+      ${items.map((it,i)=>`<div style="padding:10px 0;${i<items.length-1?'border-bottom:1px solid var(--border);':''}">
+        <div style="font-size:13px;margin-bottom:3px;">${i+1}. ${it[0]}</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;">${it[1]}</div></div>`).join('')}
+    </div>`;
+  }
+
+  const urgente=[];
+  perdedoras.forEach(c=>urgente.push([`Cortar o rearmar ${c.n}`,
+    `ROAS ${mwD(c.ro)}x contra un equilibrio de ${mwD(be)}x. Se llevó ${pesos(c.sp)} esta semana. Antes de pausar, revisar si es una campaña nueva en aprendizaje; si ya lleva más de una semana así, mover ese presupuesto a las que superan 4x.`]));
+  if(mayor&&mayor.ro<be*1.8) urgente.push([`Auditar ${mayor.n} por ad set`,
+    `Concentra ${mwD(mayor.sp/t.sp*100,1)}% del presupuesto (${pesos(mayor.sp)}) con ROAS ${mwD(mayor.ro)}x. Bajar los ad sets por debajo de ${mwD(be*1.5)}x y redistribuir dentro de la misma campaña para no perder aprendizaje.`]);
+
+  const optim=[];
+  escalables.forEach(c=>optim.push([`Escalar ${c.n} un 15-20%`,
+    `ROAS ${mwD(c.ro)}x con solo ${mwD(c.sp/t.sp*100,1)}% del presupuesto y CPP ${pesos(c.cp)}. Subir el budget de a poco y mirar 3-4 días antes del siguiente escalón.`]));
+  if(perd>200) optim.push(['Recuperar carritos abandonados',
+    `${mwN(perd)} carritos sin checkout esta semana. Es la palanca más barata que hay: no cuesta inversión publicitaria. Automatizar mail/WhatsApp de recupero.`]);
+  flojas.forEach(c=>{ if(mayor&&c.n===mayor.n) return;
+    optim.push([`Renovar creatividades en ${c.n}`,`ROAS ${mwD(c.ro)}x, CPP ${pesos(c.cp)}, CTR ${mwD(c.ct)}%. Está sobre el equilibrio pero sin colchón.`]); });
+
+  const estrat=[];
+  estrat.push(['Mirar inversión sobre venta, no solo ROAS',
+    tn?`Esta semana la inversión en Meta fue el ${mwD(t.sp/tn.venta*100,1)}% de la venta real de Tienda Nube. Ese ratio es el que se compara contra el EERR y contra el punto de equilibrio: el ROAS de la plataforma sube y baja con la atribución, este no.`
+      :`Cuando esté cargada la semana en la hoja de Tienda Nube, comparar la inversión contra la venta real: ese ratio es el que se lleva al Estado de Resultados.`]);
+  estrat.push(['Reglas automáticas en Meta',
+    `Pausar ad sets con CPP arriba de ${pesos(t.cp*1.3)} (30% peor que el promedio de la semana) y escalar +15% cada 3 días los que superen 5x.`]);
+  estrat.push(['Chequear la brecha de atribución cada mes',
+    `Si Meta se atribuye más del 85% de la venta de TN, el ROAS de la plataforma dejó de medir incrementalidad. La forma barata de testearlo es apagar una campaña de retargeting una semana y ver si la venta total cae o no.`]);
+
+  return grupo('Acciones inmediatas','#c0392b',urgente)+grupo('Optimizaciones','#e67e22',optim)+grupo('Estratégicas','var(--accent2)',estrat);
+}
+
+// ── RENDER ────────────────────────────────────────────────────────
+function renderPubMeta(){
+  const el=document.getElementById('module-pubmeta');
+  el.style.display='block';
+  if(!MW.length){ el.innerHTML='<div class="empty" style="padding:60px 0;">Sin datos de Meta Ads.</div>'; return; }
+  if(!mwSem||!mwGet(mwSem)) mwSem=MW[MW.length-1].s;
+  const w=mwGet(mwSem), cw=mwCmp?mwGet(mwCmp):null;
+  const camps=mwCamps(w);
+
+  const selSem=`<select class="v-select" onchange="mwSetSem(this.value)">
+    ${MW.slice().reverse().map(x=>`<option value="${x.s}" ${x.s===mwSem?'selected':''}>${mwLbl(x.s)}</option>`).join('')}
+  </select>`;
+  const selCmp=`<select class="v-select" onchange="mwSetCmp(this.value)">
+    <option value="" ${mwCmp?'':'selected'}>Sin comparar</option>
+    ${MW.slice().reverse().filter(x=>x.s!==mwSem).map(x=>`<option value="${x.s}" ${x.s===mwCmp?'selected':''}>${mwLbl(x.s)}</option>`).join('')}
+  </select>`;
+
+  const tabs=[['resumen','Resumen'],['campanas','Campañas'],['funnel','Funnel'],['vstn','Meta vs Tienda Nube'],['obs','Observaciones'],['acc','Acciones']];
+
+  el.innerHTML=`
+    <div class="v-filters">
+      <span class="v-filter-label">Semana</span>${selSem}
+      <span class="v-filter-label" style="margin-left:8px;">Comparar con</span>${selCmp}
+      <span style="margin-left:auto;font-size:10px;color:var(--muted);">${camps.length} campañas activas · datos de Meta Ads al ${MW_UPD}</span>
+    </div>
+    <div class="v-tabs">${tabs.map(([t,l])=>`<div class="v-tab ${mwTab===t?'active':''}" onclick="mwSetTab('${t}')">${l}</div>`).join('')}</div>
+    <div>${
+      mwTab==='campanas'?mwCampanas(w,cw):
+      mwTab==='funnel'  ?mwFunnel(w,cw):
+      mwTab==='vstn'    ?mwVsTN(w):
+      mwTab==='obs'     ?mwObs(w,cw):
+      mwTab==='acc'     ?mwAcc(w,cw):
+                         mwResumen(w,cw)}</div>`;
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
