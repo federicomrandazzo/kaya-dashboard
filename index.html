@@ -681,7 +681,7 @@ const AUTH_USERS = {
 };
 const ROLE_MODULES = {
   admin:  ['fin','mesencurso','ventas','semanal','pub','pubmeta','stock','compras','laboratorio','proyeccion','kh','mayoristas','edr'],
-  ventas: ['semanal','pub','stock','compras','proyeccion'],
+  ventas: ['semanal','pub','pubmeta','stock','compras','proyeccion'],
   house:  ['stock','compras','laboratorio','proyeccion','kh','ventas'],
   cajas:  ['kh'],
   lab:    ['kh'],
@@ -755,13 +755,13 @@ function startApp(u){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('sidebar').style.display='flex';
   document.getElementById('main').style.display='flex';
-  const NAVMAP={ventas:'nav-ventas',semanal:'nav-semanal',pub:'nav-pub',stock:'nav-stock',compras:'nav-compras',laboratorio:'nav-laboratorio',proyeccion:'nav-proyeccion',kh:'nav-kh',mayoristas:'nav-mayoristas',fin:'nav-fin',edr:'nav-edr',mesencurso:'nav-mesencurso'};
-  Object.entries(NAVMAP).forEach(([m,id])=>{ const el=document.getElementById(id); if(el) el.style.display=roleAllows(m)?'flex':'none'; });
+  // Visibilidad del sidebar por rol (generico: cada nav-item deriva su modulo del id)
+  document.querySelectorAll('.nav-item[id^="nav-"]').forEach(el=>{ el.style.display=roleAllows(el.id.slice(4))?'flex':'none'; });
   document.getElementById('user-label').textContent=u.label;
   currentModule=(ROLE_MODULES[u.role]&&ROLE_MODULES[u.role][0])||'stock';
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+currentModule); if(n) n.classList.add('active');
-  const TITULOS={ventas:'Ventas',semanal:'Ventas Semanal',pub:'Publicidad',stock:'Stock',proyeccion:'Proyección',kh:'Operaciones',mayoristas:'Mayoristas',fin:'Finanzas',edr:'Estado de Resultados',mesencurso:'Mes en curso'};
+  const TITULOS={ventas:'Ventas',semanal:'Ventas Semanal',pub:'Publicidad',pubmeta:'Dashboard Publicidad',laboratorio:'Laboratorio',stock:'Stock',proyeccion:'Proyección',kh:'Operaciones',mayoristas:'Mayoristas',fin:'Finanzas',edr:'Estado de Resultados',mesencurso:'Mes en curso'};
   document.getElementById('topbar-title').textContent=TITULOS[currentModule]||'Stock';
   loadData();
 }
