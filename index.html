@@ -1050,18 +1050,8 @@ function showModule(mod) {
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const n=document.getElementById('nav-'+mod); if(n) n.classList.add('active');
   document.getElementById('topbar-title').textContent=mod==='stock'?'Stock':mod==='ventas'?'Ventas':mod==='semanal'?'Ventas Semanal':mod==='fin'?'Finanzas':mod==='edr'?'Estado de Resultados':mod==='mesencurso'?'Mes en curso':mod==='kh'?'Operaciones':mod==='mayoristas'?'Mayoristas':mod==='pub'?'Publicidad':mod==='pubmeta'?'Dashboard Publicidad':mod==='compras'?'Compras':mod==='laboratorio'?'Laboratorio':'Proyección';
-  document.getElementById('module-stock').style.display='none';
-  document.getElementById('module-ventas').style.display='none';
-  document.getElementById('module-semanal').style.display='none';
-  document.getElementById('module-fin').style.display='none';
-  document.getElementById('module-compras').style.display='none';
-  document.getElementById('module-laboratorio').style.display='none';
-  document.getElementById('module-proyeccion').style.display='none';
-  document.getElementById('module-edr').style.display='none';
-  document.getElementById('module-mesencurso').style.display='none';
-  document.getElementById('module-kh').style.display='none';
-  document.getElementById('module-mayoristas').style.display='none';
-  document.getElementById('module-pub').style.display='none';
+  // Oculta TODOS los modulos (generico: no hay que acordarse de sumar cada modulo nuevo)
+  document.querySelectorAll('#content > div[id^="module-"]').forEach(el=>el.style.display='none');
   // Show/hide sticky bars: only show when below inline KPIs (via IntersectionObserver)
   if(window._stickyObs){ window._stickyObs.disconnect(); window._stickyObs=null; }
   const sb=document.getElementById('sbar-stock');
