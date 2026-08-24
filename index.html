@@ -3034,9 +3034,13 @@ function comprasRecetas(){
   });
   return recetas;
 }
+// Excepción: productos que arma un laboratorio externo (Coloid), no Kaya. Le mandamos los
+// insumos (envase, tapa) y nos devuelven el producto ya armado — es una compra de servicio,
+// no manos propias, aunque en Dux tenga receta de 2+ insumos.
+const COMPRAS_ARMADO_EXTERNO = new Set(['CRE']);
 // Un SKU se compra (no se fabrica en casa) si no tiene receta o su receta es de un solo
 // insumo (ej. una etiqueta) — no es "suma de insumos" armada acá.
-function comprasEsComprado(sku,recetas){ return !recetas[sku] || recetas[sku].length<2; }
+function comprasEsComprado(sku,recetas){ return COMPRAS_ARMADO_EXTERNO.has(sku) || !recetas[sku] || recetas[sku].length<2; }
 
 function comprasRubros(recetas){
   const set=new Set();
@@ -3055,14 +3059,17 @@ function comprasProductosDeRubros(rubros,recetas){
 }
 // Explota cada venta del rango recursivamente por receta hasta llegar a un SKU comprado
 // (kits → productos → insumos, a la profundidad que haga falta), y acumula el consumo ahí.
+// Un SKU de armado externo (ej. CRE) acumula consumo propio Y sigue bajando a sus insumos
+// (CR50/TAPA50) — así cada uno tiene su número real, sin que uno tape al otro.
 function comprasConsumo(desde,hasta,recetas){
   const rows=DATA.ventas.filter(r=>{ const p=(r['periodo']||'').trim(); return p>=desde&&p<=hasta; });
   const cons={};
   function explode(sku,qty,depth){
     if(depth>8||!sku||!qty) return;
     const rec=recetas[sku];
+    const esHoja=!rec||rec.length<2||COMPRAS_ARMADO_EXTERNO.has(sku);
+    if(esHoja) cons[sku]=(cons[sku]||0)+qty;
     if(rec&&rec.length>=2) rec.forEach(c=>explode(c.comp,qty*c.qty,depth+1));
-    else cons[sku]=(cons[sku]||0)+qty;
   }
   rows.forEach(r=>explode(getSku(r),num(r['qty']),0));
   return cons;
@@ -3082,12 +3089,16 @@ function comprasStockArmado(recetas){
     const stockCompuesto=stockDux[compSku]||0;
     if(!stockCompuesto) return;
     const ratios={};
-    (function walk(sku,mult,depth){
+    // Arranca desde los componentes de compSku (no desde compSku mismo) para no contar el
+    // propio stock de un SKU de armado externo como "armado dentro de sí mismo".
+    function walk(sku,mult,depth){
       if(depth>8) return;
       const r2=recetas[sku];
+      const esHoja=!r2||r2.length<2||COMPRAS_ARMADO_EXTERNO.has(sku);
+      if(esHoja) ratios[sku]=(ratios[sku]||0)+mult;
       if(r2&&r2.length>=2) r2.forEach(c=>walk(c.comp,mult*c.qty,depth+1));
-      else ratios[sku]=(ratios[sku]||0)+mult;
-    })(compSku,1,0);
+    }
+    rec.forEach(c=>walk(c.comp,c.qty,1));
     Object.entries(ratios).forEach(([insumo,ratio])=>{ armado[insumo]=(armado[insumo]||0)+stockCompuesto*ratio; });
   });
   return armado;
