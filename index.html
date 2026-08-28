@@ -616,7 +616,7 @@
     .v-select, .v-metric-btn { font-size:12px; padding:8px 10px; }
     input.v-select, select.v-select { font-size:14px; }
     /* iPhone hace zoom solo si el texto del campo mide menos de 16px */
-    html.ios input.v-select, html.ios select.v-select { font-size:16px; }
+    html.ios input.v-select { font-size:16px; }
 
     /* Finanzas: la carga de saldos ocupaba casi una pantalla por cuenta */
     input.fin-cuenta-input { width:150px !important; }   /* entra "Reservas MP Ry" completo */
@@ -626,15 +626,79 @@
     #fin-saldos-body td, #fin-total-row td { padding:4px 6px !important; }
     #fin-saldos-body input { border-radius:5px; }
 
+    /* --- Tablas anchas: la primera columna queda fija al deslizar ---
+       Sin esto hay que elegir entre leer el concepto o leer los numeros. */
+    table.m-fix1 { min-width:100%; }
+    table.m-fix1 tr { background:var(--bg); }
+    /* Las columnas de numeros no se parten: asi la tabla se ensancha y desliza
+       en vez de comprimirse hasta que todo quede en cuatro renglones. */
+    table.m-fix1 td, table.m-fix1 th { white-space:nowrap; }
+    table.m-fix1 th:first-child,
+    table.m-fix1 td:first-child {
+      position:sticky; left:0; z-index:3;
+      background:inherit;
+      box-shadow:1px 0 0 var(--border);
+      width:148px; min-width:148px; max-width:148px;
+      white-space:normal; overflow-wrap:anywhere;
+    }
+    /* Las filas de encabezado de grupo (COLOID SAS, etc.) van a todo el ancho */
+    table.m-fix1 td:first-child[colspan] {
+      width:auto; min-width:0; max-width:none; white-space:nowrap;
+    }
+    /* Publicidad semana a semana: fijas las dos primeras (semana + inversion) */
+    table.m-fix2 th:nth-child(2), table.m-fix2 td:nth-child(2) {
+      position:sticky; left:var(--fix1w,120px); z-index:3;
+      background:inherit; box-shadow:1px 0 0 var(--border);
+    }
+    table.m-fix2 th:first-child, table.m-fix2 td:first-child { box-shadow:none; }
+
+    /* --- Listas tipo arbol (consumo, margen, stock): mismo criterio ---
+       El bloque se desliza y la columna del nombre queda anclada. */
+    .m-trwrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .m-trwrap .tr { width:max-content; min-width:100%; background:var(--surface); }
+    .m-trwrap .tr.l0 { background:var(--surface2); }
+    .m-trwrap .tl {
+      position:sticky; left:0; z-index:2;
+      flex:0 0 136px; min-width:136px;
+      background:inherit; box-shadow:1px 0 0 var(--border);
+      padding-right:8px; font-size:11px; line-height:1.25; overflow-wrap:anywhere;
+    }
+    .m-trwrap .tc { overflow:visible; }   /* si no, corta el anclaje del nombre */
+    .m-trwrap .tr.l1 .tl, .m-trwrap .tr.l2 .tl { font-size:10.5px; }
+    /* El codigo de SKU al lado del nombre sumaba un renglon por fila y en
+       pantalla chica no aporta: se oculta y el nombre entra en dos lineas. */
+    .m-trwrap .sku-badge { display:none; }
+
     /* --- Tablas anchas: se deslizan dentro de su caja --- */
     .v-chart-wrap, .linechart-wrap { padding:14px 10px; }
     .v-bar-label { font-size:7px; }
 
-    /* --- Arbol (stock, EDR): mas aire para el dedo --- */
-    .tr { padding:11px 10px; }
-    .tr.l1 { padding-left:22px; } .tr.l2 { padding-left:36px; } .tr.l3 { padding-left:48px; }
-    .tv { min-width:88px; font-size:12px; }
-    .tu { margin-right:8px; }
+    /* --- Graficos de linea: la referencia va abajo, no al costado ---
+       Al costado se comia dos tercios del ancho y el grafico no se leia. */
+    .sem-lineas-wrap { flex-direction:column; gap:10px; }
+    .sem-legend { width:100% !important; max-height:none !important; order:2; padding:10px 12px !important; }
+    .sem-legend-items { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+    .sem-legend-title { margin-bottom:8px !important; }
+
+    /* --- Arbol (stock, consumos, EDR): mas compacto para que entre mas --- */
+    .tr { padding:8px 10px; font-size:11px; }
+    .tr.l1 { padding-left:16px; } .tr.l2 { padding-left:26px; } .tr.l3 { padding-left:36px; }
+    .tv { min-width:88px; font-size:11px; }
+    .tu { margin-right:8px; font-size:10px; }
+
+    /* --- Nombres largos (compras, laboratorio, rankings): que no ocupen
+       cuatro renglones en la columna anclada --- */
+    table.m-fix1 td:first-child { font-size:11px !important; line-height:1.25; }
+    table.m-fix1 .sku-badge { display:none; }   /* el codigo sumaba un renglon por fila */
+    table.m-fix1 td { padding-top:6px !important; padding-bottom:6px !important; }
+    table.m-fix1 th { padding-bottom:6px !important; }
+
+    /* --- Publicidad: los filtros de arriba ocupaban dos renglones --- */
+    .v-filters .v-filter-label { font-size:9px; }
+    .v-filters select.v-select { font-size:12px; padding:6px 8px; max-width:170px; }
+    .v-filters > span[style*="margin-left:auto"] { margin-left:0 !important; font-size:9px; }
+    /* etiquetas de metricas de campana: "% del presupuesto" se salia del cuadro */
+    #module-pubmeta [style*="text-transform:uppercase"] { overflow-wrap:anywhere; }
 
     .section-header { flex-wrap:wrap; gap:6px; }
     #modal-box { max-width:none !important; width:94% !important; }
@@ -2394,16 +2458,16 @@ function semLineLegend(ventas){
     .filter(x=>kinds.includes(x.s.kind))
     .sort((a,b)=>(b.s.total?1:0)-(a.s.total?1:0)||b.tot-a.tot);
   const visibles=items.filter(x=>!semLineHidden.has(x.s.name)).length;
-  return `<div style="width:250px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;max-height:560px;overflow-y:auto;">
-    <div style="font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Referencias · mayor a menor <span style="float:right;">${visibles} en el gráfico</span></div>
-    ${items.map(x=>{
+  return `<div class="sem-legend" style="width:250px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;max-height:560px;overflow-y:auto;">
+    <div class="sem-legend-title" style="font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Referencias · mayor a menor <span style="float:right;">${visibles} en el gráfico</span></div>
+    <div class="sem-legend-items">${items.map(x=>{
       const off=semLineHidden.has(x.s.name);
       return `<div onclick="toggleSemLine(${x.i})" style="display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;${off?'opacity:0.45;':''}">
         <span style="width:14px;height:${x.s.total?'4':'3'}px;border-radius:2px;background:${x.s.color};flex-shrink:0;"></span>
         <span style="flex:1;font-size:10px;color:var(--text);${off?'text-decoration:line-through;':''}white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${x.s.name}</span>
         <span style="font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;">$${(x.tot/1e6).toFixed(1)}M</span>
       </div>`;
-    }).join('')}
+    }).join('')}</div>
   </div>`;
 }
 function renderSemLineas(){
@@ -2421,7 +2485,7 @@ function renderSemLineas(){
   const presets=[['total','Total'],['linea','Por línea'],['negra','Negra'],['blanca','Blanca'],['kits','Kits']];
   const btnRow=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${presets.map(([k,l])=>`<button onclick="semApplyPreset('${k}')" style="padding:5px 12px;border-radius:4px;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:1px solid ${semLinePreset===k?'var(--accent)':'var(--border)'};background:${semLinePreset===k?'var(--accent)':'transparent'};color:${semLinePreset===k?'#fff':'var(--muted)'};font-family:inherit;">${l}</button>`).join('')}</div>`;
   return weekPills+btnRow+`<div style="font-size:10px;color:var(--muted);margin-bottom:14px;">El gráfico muestra el top 7 de la vista elegida; en las referencias podés prender y apagar cualquier serie. La línea negra gruesa es el total del negocio.</div>
-    <div style="display:flex;gap:16px;align-items:flex-start;">
+    <div class="sem-lineas-wrap" style="display:flex;gap:16px;align-items:flex-start;">
       <div style="flex:1;min-width:0;">
         <div class="subsection" style="margin-bottom:24px;">
           <div class="subsection-label" style="margin-bottom:12px;">Ventas por semana ($)</div>
@@ -5618,10 +5682,13 @@ function mwFunnel(w,cw){
 }
 
 // ── META vs TIENDA NUBE ───────────────────────────────────────────
+const MWTN_DESDE='2026-05-11';
 function mwVsTN(w){
   if(!DATA.semanal||!DATA.semanal.length)
     return '<div class="empty" style="padding:60px 0;">No se pudo leer la hoja semanal de Tienda Nube.</div>';
-  const filas=MW.map(x=>{ const tn=mwTN(x.s); if(!tn) return null;
+  // Arranca el 11/05: antes de esa semana la comparacion no cierra contra la hoja
+  // semanal y estirar la serie hacia atras deja la tabla ilegible en el reporte.
+  const filas=MW.filter(x=>x.s>=MWTN_DESDE).map(x=>{ const tn=mwTN(x.s); if(!tn) return null;
     const t=mwTot(x); return {s:x.s,sp:t.sp,rv:t.rv,p:t.p,tn:tn.venta,cob:t.rv/tn.venta*100,roMeta:t.ro,roReal:tn.venta/t.sp,inv:t.sp/tn.venta*100};
   }).filter(Boolean);
   if(!filas.length) return '<div class="empty" style="padding:60px 0;">Todavía no hay semanas en común entre Meta y la hoja semanal de TN.</div>';
@@ -5660,7 +5727,7 @@ function mwVsTN(w){
   h+=`</div></div>`;
 
   h+=`<div class="v-chart-wrap"><div class="v-chart-title">Semana a semana</div>
-    <table class="v-rubro-table"><thead><tr>
+    <table class="v-rubro-table mw-sxs"><thead><tr>
       <th>Semana</th><th style="text-align:right;">Inversión</th><th style="text-align:right;">Venta Meta</th>
       <th style="text-align:right;">Venta TN</th><th style="text-align:right;">Brecha</th><th style="text-align:right;">Cobertura</th>
       <th style="text-align:right;">ROAS Meta</th><th style="text-align:right;">ROAS real</th><th style="text-align:right;">Inv./venta</th>
@@ -6382,21 +6449,67 @@ function toggleNav(forzar){
 // En escritorio la funcion sale en la primera linea y no toca nada.
 function wrapTablasMovil(){
   if(!esMovil()) return;
+  // Se desconecta el vigia mientras se toca el DOM (si no, se llama a si mismo).
+  if(window._mObs) window._mObs.disconnect();
+  try { ajustesMovil(); } finally { vigilarContenido(); }
+}
+
+// Cada modulo tiene solapas internas que se redibujan sin pasar por
+// renderCurrentModule(). En vez de tocar quince funciones de render, un vigia
+// mira el contenido y reaplica los ajustes cada vez que cambia.
+function vigilarContenido(){
+  const cont=document.getElementById('content');
+  if(!cont) return;
+  if(!window._mObs){
+    window._mObs=new MutationObserver(()=>{
+      clearTimeout(window._mObsT);
+      window._mObsT=setTimeout(wrapTablasMovil,60);
+    });
+  }
+  window._mObs.observe(cont,{childList:true,subtree:true});
+}
+
+function ajustesMovil(){
 
   // 1) Tablas anchas (EDR, ventas por rubro, mayoristas): no entran en 375px.
   //    En vez de comprimirlas hasta que no se lean, se envuelven en una caja
-  //    que se desliza con el dedo.
+  //    que se desliza con el dedo y se ancla la primera columna, para no tener
+  //    que elegir entre leer el concepto o leer los numeros.
   document.querySelectorAll('#content table').forEach(t=>{
     const p=t.parentElement;
-    if(!p || p.classList.contains('tbl-scroll')) return;
-    if(getComputedStyle(p).overflowX==='auto') return;   // ya tiene su propio scroll
-    const w=document.createElement('div');
-    w.className='tbl-scroll';
-    p.insertBefore(w,t);
-    w.appendChild(t);
+    if(p && !p.classList.contains('tbl-scroll') && getComputedStyle(p).overflowX!=='auto'){
+      const w=document.createElement('div');
+      w.className='tbl-scroll';
+      p.insertBefore(w,t);
+      w.appendChild(t);
+    }
+    t.classList.add('m-fix1');
   });
 
-  // 2) Filas de tarjetas de KPI: los modulos las arman de a 3 o 4 columnas
+  // 2) Listas tipo arbol (consumo, margen semanal, stock): son filas flex, no
+  //    tablas. El bloque contenedor pasa a deslizarse y el nombre queda anclado.
+  const arboles=new Set();
+  document.querySelectorAll('#content .tr').forEach(tr=>{
+    let p=tr.parentElement;
+    while(p && p.classList.contains('tc')) p=p.parentElement;
+    if(p && p.id!=='content' && !(p.id||'').startsWith('module-')) arboles.add(p);
+  });
+  // Publicidad, semana a semana: Federico pidio ver la semana Y la inversion
+  // mientras desliza el resto de las columnas.
+  const sxs=document.querySelector('#content table.mw-sxs');
+  if(sxs){
+    const c1=sxs.querySelector('tbody td');
+    if(c1) sxs.style.setProperty('--fix1w', Math.round(c1.getBoundingClientRect().width)+'px');
+    sxs.classList.add('m-fix2');
+  }
+
+  arboles.forEach(w=>{
+    w.classList.add('m-trwrap');
+    w.style.overflowX='auto';      // el contenedor viene con overflow:hidden inline
+    w.style.overflowY='hidden';
+  });
+
+  // 3) Filas de tarjetas de KPI: los modulos las arman de a 3 o 4 columnas
   //    escritas en el propio HTML. En celular se pasan a 2 (una regla CSS no
   //    puede pisar un estilo escrito en el elemento, por eso se hace aca).
   document.querySelectorAll('#content [style*="grid-template-columns"]').forEach(el=>{
