@@ -614,7 +614,17 @@
     .tab, .v-tab { flex:0 0 auto; padding:10px 14px; }
     .v-filters { gap:8px; }
     .v-select, .v-metric-btn { font-size:12px; padding:8px 10px; }
-    input.v-select, select.v-select { font-size:16px; }  /* evita el zoom automatico de iOS */
+    input.v-select, select.v-select { font-size:14px; }
+    /* iPhone hace zoom solo si el texto del campo mide menos de 16px */
+    html.ios input.v-select, html.ios select.v-select { font-size:16px; }
+
+    /* Finanzas: la carga de saldos ocupaba casi una pantalla por cuenta */
+    input.fin-cuenta-input { width:150px !important; }   /* entra "Reservas MP Ry" completo */
+    input.fin-saldo-input  { width:106px !important; }
+    input.fin-cuenta-input, input.fin-saldo-input { font-size:13px; padding:6px 8px; }
+    html.ios input.fin-cuenta-input, html.ios input.fin-saldo-input { font-size:16px; }
+    #fin-saldos-body td, #fin-total-row td { padding:4px 6px !important; }
+    #fin-saldos-body input { border-radius:5px; }
 
     /* --- Tablas anchas: se deslizan dentro de su caja --- */
     .v-chart-wrap, .linechart-wrap { padding:14px 10px; }
@@ -6360,6 +6370,7 @@ function renderMesEnCurso(){
 
 // ══ CELULAR + APP INSTALABLE ════════════════════════════
 const esMovil = () => window.matchMedia('(max-width: 820px)').matches;
+if(/iphone|ipad|ipod/i.test(navigator.userAgent)) document.documentElement.classList.add('ios');
 
 // Cajon de navegacion. Sin argumento alterna; con false siempre cierra.
 function toggleNav(forzar){

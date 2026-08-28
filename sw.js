@@ -4,7 +4,7 @@
 // - HTML/JS propio -> network-first (cache solo como salvavidas sin senal)
 // - logo e iconos   -> cache-first (no cambian)
 // - Google Sheets / Apps Script -> ni se tocan (siempre red)
-const CACHE = 'kaya-v1';
+const CACHE = 'kaya-v2';
 const ASSETS = ['./logo-kaya.png', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './manifest.json'];
 
 self.addEventListener('install', e => {
