@@ -2641,16 +2641,56 @@ function finPagos(){
   items.forEach(p=>{
     if(!/laboral/i.test(p.concRaw)){ out.push(p); return; }
     const k=(p.cuenta||'?')+'|'+p.fecha.getTime();
-    if(!gruposSueldos[k]){ gruposSueldos[k]={...p,monto:0,filas:[],personas:0}; out.push(gruposSueldos[k]); }
+    if(!gruposSueldos[k]){ gruposSueldos[k]={...p,monto:0,filas:[],personas:0,hijos:[]}; out.push(gruposSueldos[k]); }
     const g=gruposSueldos[k];
     g.monto+=p.monto; g.filas.push(p.fila); g.personas++;
+    g.hijos.push({nombre:p.detalle||p.label,monto:p.monto});
   });
   Object.values(gruposSueldos).forEach(g=>{
     g.detalle=`Sueldos por ${g.cuenta||'(sin cuenta)'} · ${g.personas} ${g.personas===1?'pago':'pagos'}`;
     g.label=g.detalle;
     g.fila=g.filas.join(',');
+    g.hijos.sort((a,b)=>b.monto-a.monto);
   });
   return out.sort((a,b)=>a.fecha-b.fecha);
+}
+// Sueldos: la linea agrupada se puede abrir para ver persona por persona (pedido de Federico, sep 2026).
+// Los hijos se pintan siempre, ocultos, debajo de la fila madre y se muestran por DOM (sin re-render),
+// asi no se pierden los tildes de la Lista de gastos por pagar.
+function finTogSueldo(ev){
+  ev.stopPropagation();
+  const el=ev.currentTarget||ev.target;
+  const fila=el.closest('tr')||el.closest('.tr');
+  if(!fila) return;
+  let n=fila.nextElementSibling, abrir=null;
+  while(n&&n.classList.contains('fin-sld-hijo')){
+    if(abrir===null) abrir=(n.style.display==='none');
+    n.style.display=abrir?'':'none';
+    n=n.nextElementSibling;
+  }
+  el.textContent=abrir?'\u25b4 ocultar detalle':'\u25be ver detalle';
+}
+function finSueldoTog(p){
+  if(!p.hijos||!p.hijos.length) return '';
+  return ` <span onclick="finTogSueldo(event)" style="font-size:10px;color:var(--accent);cursor:pointer;white-space:nowrap;text-decoration:underline;margin-left:6px;">\u25be ver detalle</span>`;
+}
+function finSueldoHijos(p,modo){
+  if(!p.hijos||!p.hijos.length) return '';
+  const monto=h=>`<span style="min-width:110px;text-align:right;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;">${pesos(h.monto)}</span>`;
+  return p.hijos.map(h=>{
+    if(modo==='kpi') return `<tr class="fin-sld-hijo" style="display:none;background:var(--surface2);border-bottom:1px solid #f0ead8;"><td></td><td style="padding:4px 10px 4px 24px;font-size:11px;color:var(--muted);">${h.nombre}</td><td></td><td></td><td style="padding:4px 10px;text-align:right;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;">${pesos(h.monto)}</td></tr>`;
+    if(modo==='lista') return `<tr class="fin-sld-hijo" style="display:none;background:var(--surface2);border-bottom:1px solid #f0ead8;"><td></td><td style="padding:4px 10px 4px 24px;font-size:11px;color:var(--muted);">${h.nombre}</td><td></td><td style="padding:4px 10px;text-align:right;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;">${pesos(h.monto)}</td><td></td><td></td></tr>`;
+    if(modo==='arbol') return `<div class="tr l2 nc fin-sld-hijo" style="display:none;background:var(--surface2);">
+      <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
+      <span class="tl" style="font-size:11px;color:var(--muted);padding-left:14px;">${h.nombre}</span>
+      <span style="min-width:80px;margin-right:14px;"></span>${monto(h)}
+    </div>`;
+    return `<div class="tr nc fin-sld-hijo" style="display:none;background:var(--surface2);">
+      <span style="min-width:86px;flex-shrink:0;"></span>
+      <span class="tl" style="font-size:11px;color:var(--muted);padding-left:14px;">${h.nombre}</span>
+      <span style="min-width:80px;margin-right:14px;"></span>${monto(h)}
+    </div>`;
+  }).join('');
 }
 function finSaldos(){
   let rows=DATA.saldos.map(r=>({cuenta:r.cuenta,saldo:num(r.saldo)}));
@@ -2793,11 +2833,11 @@ function renderFinanzas(){
         const grande=p.monto>=UMBRAL_GRANDE, venc=p.fecha<hoy;
         return `<tr style="border-bottom:1px solid #f0ead8;">
           <td style="padding:6px 10px;font-size:11px;color:${venc?'var(--accent3)':'var(--muted)'};white-space:nowrap;">${venc?'vencido · ':''}${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</td>
-          <td style="padding:6px 10px;font-size:12px;">${p.label}</td>
+          <td style="padding:6px 10px;font-size:12px;">${p.label}${finSueldoTog(p)}</td>
           <td style="padding:6px 10px;"><span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);">${p.fuente}</span></td>
           <td style="padding:6px 10px;text-align:right;font-size:11px;color:var(--muted);">${p.cuenta||'—'}</td>
           <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</td>
-        </tr>`;
+        </tr>`+finSueldoHijos(p,'kpi');
       }).join('');
       kpiDet=`<div class="subsection" style="margin-bottom:28px;">
         <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
@@ -2862,10 +2902,10 @@ function renderFinanzas(){
     const cluster=grande&&grandesPorDia[dKey(p.fecha)]>=2;
     return `<div class="tr nc" style="${grande?'background:#fdf3f1;':''}">
       <span style="min-width:86px;font-size:11px;color:var(--muted);flex-shrink:0;">${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</span>
-      <span class="tl">${p.label} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.fuente}</span>${cluster?`<span style="font-size:9px;color:var(--accent3);margin-left:8px;font-weight:600;">⚠ ${grandesPorDia[dKey(p.fecha)]} grandes ese día</span>`:''}</span>
+      <span class="tl">${p.label} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.fuente}</span>${cluster?`<span style="font-size:9px;color:var(--accent3);margin-left:8px;font-weight:600;">⚠ ${grandesPorDia[dKey(p.fecha)]} grandes ese día</span>`:''}${finSueldoTog(p)}</span>
       <span style="min-width:80px;text-align:right;font-size:10px;color:var(--muted);margin-right:14px;">${p.cuenta||'—'}</span>
       <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</span>
-    </div>`;
+    </div>`+finSueldoHijos(p,'agenda');
   };
   const NSA='finag';
   let agendaH='';
@@ -2905,10 +2945,10 @@ function renderFinanzas(){
         const grande=p.monto>=UMBRAL_GRANDE;
         itemH+=`<div class="tr l2 nc" style="${grande?'background:#fdf3f1;':''}">
           <span style="width:16px;margin-right:8px;flex-shrink:0;"></span>
-          <span class="tl">${p.detalle} <span style="font-size:10px;color:${p.fecha<hoy?'var(--accent3)':'var(--muted)'};margin-left:8px;">${p.fecha<hoy?'vencido · ':''}${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</span></span>
+          <span class="tl">${p.detalle} <span style="font-size:10px;color:${p.fecha<hoy?'var(--accent3)':'var(--muted)'};margin-left:8px;">${p.fecha<hoy?'vencido · ':''}${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</span>${finSueldoTog(p)}</span>
           <span style="min-width:80px;text-align:right;font-size:10px;color:var(--muted);margin-right:14px;">${p.cuenta||'—'}</span>
           <span style="min-width:110px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</span>
-        </div>`;
+        </div>`+finSueldoHijos(p,'arbol');
       });
       concH+=TC(NSF,'c-'+ck,itemH,false);
     });
@@ -3026,12 +3066,12 @@ function renderFinanzas(){
       const grande=p.monto>=UMBRAL_GRANDE, venc=p.fecha<hoy;
       return `<tr style="border-bottom:1px solid #f0ead8;${venc?'background:#fdf6f4;':''}" data-fila="${p.fila}" data-fuente="${p.fuenteRaw.replace(/"/g,'&quot;')}" data-concepto="${p.concRaw.replace(/"/g,'&quot;')}">
         <td style="padding:7px 10px;font-size:11px;white-space:nowrap;color:${venc?'var(--accent3)':'var(--muted)'};">${venc?'vencido · ':''}${DSEM[p.fecha.getDay()]} ${fF(p.fecha)}</td>
-        <td style="padding:7px 10px;font-size:12px;">${p.label} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.fuente}</span></td>
+        <td style="padding:7px 10px;font-size:12px;">${p.label} <span class="pill" style="background:var(--surface2);color:#5a4a2a;border:1px solid var(--border);margin-left:6px;">${p.fuente}</span>${finSueldoTog(p)}</td>
         <td style="padding:7px 10px;text-align:right;font-size:11px;color:var(--muted);">${p.cuenta||'—'}</td>
         <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;font-weight:${grande?'700':'400'};color:${grande?'var(--accent3)':'var(--text)'};">${pesos(p.monto)}</td>
         <td style="padding:7px 10px;text-align:center;width:60px;"><input type="checkbox" class="fin-pag-check" style="width:15px;height:15px;accent-color:#b89021;cursor:pointer;"></td>
         <td style="padding:7px 10px;text-align:right;"><input class="fin-pag-fecha v-select" placeholder="dd/mm/aaaa" oninput="if(this.value.trim()) this.closest('tr').querySelector('.fin-pag-check').checked=true;" style="width:110px;font-size:11px;text-align:center;"></td>
-      </tr>`;
+      </tr>`+finSueldoHijos(p,'lista');
     }).join('');
     el.innerHTML=finTabs+`<div class="subsection">
       <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
