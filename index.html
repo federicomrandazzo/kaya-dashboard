@@ -1058,6 +1058,11 @@ function periodoDefault(periodos){
   const d=new Date(), mes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   return periodos.includes(mes)?mes:periodos[periodos.length-1];
 }
+// "Desde" por defecto de Compras: últimos 6 meses (5 períodos antes del "hasta" por defecto).
+function periodoDesde6m(periodos){
+  const h=periodoDefault(periodos), i=periodos.indexOf(h);
+  return i<0?h:periodos[Math.max(0,i-5)];
+}
 
 // ── TREE ENGINE ─────────────────────────────────────────────────
 const TS = {};
@@ -3549,7 +3554,7 @@ function renderComprasAnalisis(){
   const el=document.getElementById('compras-content');
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.desde) comprasState.desde=periodoDefault(periodos);
+  if(!comprasState.desde) comprasState.desde=periodoDesde6m(periodos);
   if(!comprasState.hasta) comprasState.hasta=periodoDefault(periodos);
 
   const modo=comprasState.modo;
@@ -3722,7 +3727,7 @@ function renderComprasAlertas(){
   }
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.alertasDesde) comprasState.alertasDesde=periodoDefault(periodos);
+  if(!comprasState.alertasDesde) comprasState.alertasDesde=periodoDesde6m(periodos);
   if(!comprasState.alertasHasta) comprasState.alertasHasta=periodoDefault(periodos);
   const desde=comprasState.alertasDesde, hasta=comprasState.alertasHasta;
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
@@ -3810,7 +3815,7 @@ function renderComprasRanking(){
   }
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.rankingDesde) comprasState.rankingDesde=periodoDefault(periodos);
+  if(!comprasState.rankingDesde) comprasState.rankingDesde=periodoDesde6m(periodos);
   if(!comprasState.rankingHasta) comprasState.rankingHasta=periodoDefault(periodos);
   const desde=comprasState.rankingDesde, hasta=comprasState.rankingHasta;
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
@@ -3895,7 +3900,7 @@ function renderComprasRankingInsumo(){
   }
   const recetas=comprasRecetas();
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
-  if(!comprasState.rankingInsDesde) comprasState.rankingInsDesde=periodoDefault(periodos);
+  if(!comprasState.rankingInsDesde) comprasState.rankingInsDesde=periodoDesde6m(periodos);
   if(!comprasState.rankingInsHasta) comprasState.rankingInsHasta=periodoDefault(periodos);
   const desde=comprasState.rankingInsDesde, hasta=comprasState.rankingInsHasta;
   const optsDesde=periodos.map(p=>`<option value="${p}" ${p===desde?'selected':''}>${p}</option>`).join('');
