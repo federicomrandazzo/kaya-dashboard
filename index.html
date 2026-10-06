@@ -3417,10 +3417,20 @@ function comprasRubros(recetas){
   });
   return [...set].sort();
 }
+// El "envasado" de un producto que llega terminado (BUT, AM125, CRE, PIE) es el mismo producto
+// con otro código, no algo que se compre aparte: se oculta de la lista para no pedirlo dos veces.
+// Sigue en el cálculo por debajo (su receta cascadea a envase/tapa si los mandamos nosotros).
+function comprasOcultos(recetas){
+  const rubD={}; DATA.dux.forEach(r=>{ rubD[(r['Código Producto']||'').trim()]=(r['Rubro']||'').trim().toUpperCase(); });
+  const set=new Set();
+  COMPRAS_ARMADO_EXTERNO.forEach(sku=>(recetas[sku]||[]).forEach(c=>{ if(rubD[c.comp]==='ENVASADOS') set.add(c.comp); }));
+  return set;
+}
 function comprasProductosDeRubros(rubros,recetas){
+  const ocultos=comprasOcultos(recetas);
   return DATA.dux.filter(r=>{
     const sku=(r['Código Producto']||'').trim(); const rb=(r['Rubro']||'').trim();
-    return sku&&rubros.has(rb)&&comprasEsComprado(sku,recetas);
+    return sku&&rubros.has(rb)&&comprasEsComprado(sku,recetas)&&!ocultos.has(sku);
   }).map(r=>({sku:(r['Código Producto']||'').trim(),nombre:r['Producto']||'',stock:num(r['Stock Disponible']),unidad:(r['Unidad']||'UNIDAD').toUpperCase(),rubro:(r['Rubro']||'').trim()}))
     .sort((a,b)=>a.rubro===b.rubro?a.nombre.localeCompare(b.nombre):a.rubro.localeCompare(b.rubro));
 }
