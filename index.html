@@ -3399,12 +3399,12 @@ function comprasRecetas(){
   });
   return recetas;
 }
-// Excepción: productos que arma un laboratorio externo (Coloid), no Kaya. Le mandamos los
-// insumos (envase, tapa) y nos devuelven el producto ya armado — es una compra de servicio,
-// no manos propias, aunque en Dux tenga receta de 2+ insumos.
+// Excepción: productos que llegan terminados de un proveedor externo (Coloid, Piedras Argentinas), no Kaya.
+// Se toma el producto final aunque en Dux tenga receta de 2+ insumos (envase, etiqueta, folleto).
 // Línea Coloid completa (Tomi, 06/10/2026): crema, antiage, body butter y agua micelar llegan
 // etiquetadas; shampoo, acond., jabón y leche ya entran solos (sin receta o receta de 1 insumo).
-const COMPRAS_ARMADO_EXTERNO = new Set(['CRE','CRE-AGE','BOD-BUT','AGU-ROS']);
+// Gua sha (06/10/2026): se toma el producto terminado, no la piedra + folleto.
+const COMPRAS_ARMADO_EXTERNO = new Set(['CRE','CRE-AGE','BOD-BUT','AGU-ROS','GUA-SHA']);
 // Un SKU se compra (no se fabrica en casa) si no tiene receta o su receta es de un solo
 // insumo (ej. una etiqueta) — no es "suma de insumos" armada acá.
 function comprasEsComprado(sku,recetas){ return COMPRAS_ARMADO_EXTERNO.has(sku) || !recetas[sku] || recetas[sku].length<2; }
