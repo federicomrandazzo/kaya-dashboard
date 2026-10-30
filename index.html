@@ -2915,6 +2915,73 @@ async function guardarPagados(){
   }
 }
 
+// ── Almanaque de cheques (pedido de Federico, 30/10/2026) ──
+// Cruz en los días donde vencen cheques por ≥ $1M (suma del día) y del 1 al 5 de cada mes,
+// para mandarle la captura a Gastón y que no pida cheques grandes esas fechas.
+// Sin montos en la grilla a propósito: la captura va a un tercero (el detalle queda en el tooltip).
+const UMBRAL_CHEQUE_ALM = 1000000;
+let finAlmDesde=0; // corrimiento en meses respecto del mes actual
+function setFinAlm(d){ finAlmDesde=d===0?0:finAlmDesde+d; renderFinanzas(); }
+function finAlmanaque(pagos,hoy){
+  const MES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const porDia={};
+  pagos.filter(p=>/CHEQUE/i.test(p.fuente)).forEach(p=>{
+    const k=p.fecha.getFullYear()+'-'+p.fecha.getMonth()+'-'+p.fecha.getDate();
+    (porDia[k]=porDia[k]||{total:0,items:[]}).total+=p.monto;
+    porDia[k].items.push(p);
+  });
+  const mesHTML=(y,m)=>{
+    const ini=new Date(y,m,1), dias=new Date(y,m+1,0).getDate(), off=(ini.getDay()+6)%7;
+    let celdas='<div class="alm-dsem">L</div><div class="alm-dsem">M</div><div class="alm-dsem">M</div><div class="alm-dsem">J</div><div class="alm-dsem">V</div><div class="alm-dsem">S</div><div class="alm-dsem">D</div>';
+    for(let i=0;i<off;i++) celdas+='<div></div>';
+    for(let d=1;d<=dias;d++){
+      const f=new Date(y,m,d), ch=porDia[y+'-'+m+'-'+d];
+      const cheque=ch&&ch.total>=UMBRAL_CHEQUE_ALM, inicio=d<=5, cruz=cheque||inicio;
+      const pasado=f<hoy, esHoy=f.getTime()===hoy.getTime(), finde=f.getDay()===0||f.getDay()===6;
+      const tip=cheque?ch.items.map(p=>p.label+' · '+pesos(p.monto)).join('\n'):(inicio?'Del 1 al 5 del mes':'');
+      celdas+=`<div class="alm-dia${cruz?' alm-x':''}${pasado?' alm-pas':''}${esHoy?' alm-hoy':''}${finde?' alm-finde':''}"${tip?` title="${tip.replace(/"/g,'&quot;')}"`:''}><span>${d}</span></div>`;
+    }
+    return `<div class="alm-mes"><div class="alm-tit">${MES[m]} ${y}</div><div class="alm-grid">${celdas}</div></div>`;
+  };
+  let meses='';
+  for(let i=0;i<3;i++){ const d=new Date(hoy.getFullYear(),hoy.getMonth()+finAlmDesde+i,1); meses+=mesHTML(d.getFullYear(),d.getMonth()); }
+  const btn=(t,a)=>`<button onclick="setFinAlm(${a})" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 12px;border-radius:4px;font-size:11px;cursor:pointer;font-family:inherit;">${t}</button>`;
+  return `<style>
+    .alm-wrap{background:#fff;border:1px solid var(--border);border-radius:8px;padding:22px 20px 18px;}
+    .alm-head{text-align:center;margin-bottom:18px;}
+    .alm-head h3{font-family:'Tenor Sans',serif;font-weight:400;font-size:20px;letter-spacing:0.06em;margin:0 0 4px;color:#2a2418;}
+    .alm-head div{font-size:11px;color:#7a6c4f;}
+    .alm-meses{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;}
+    .alm-tit{font-family:'Tenor Sans',serif;font-size:14px;letter-spacing:0.08em;text-transform:uppercase;color:#b89021;text-align:center;margin-bottom:8px;}
+    .alm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+    .alm-dsem{font-size:10px;color:#9a8b6a;text-align:center;padding-bottom:3px;font-weight:600;}
+    .alm-dia{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:12px;font-variant-numeric:tabular-nums;color:#2a2418;border-radius:4px;background:#faf7ef;}
+    .alm-finde{background:#f3eee2;color:#8a7c5c;}
+    .alm-pas{opacity:0.35;}
+    .alm-hoy{outline:2px solid #b89021;outline-offset:-2px;}
+    .alm-x{background:#fbe9e5;color:#8a2c1c;font-weight:600;}
+    .alm-x::before,.alm-x::after{content:'';position:absolute;left:8%;right:8%;top:50%;height:2px;background:#c0392b;border-radius:2px;}
+    .alm-x::before{transform:rotate(45deg);} .alm-x::after{transform:rotate(-45deg);}
+    .alm-x span{position:relative;z-index:1;background:rgba(251,233,229,0.85);padding:0 2px;border-radius:2px;}
+    .alm-ley{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-top:16px;font-size:11px;color:#5a4a2a;}
+    .alm-ley i{display:inline-block;width:14px;height:14px;vertical-align:-3px;margin-right:6px;}
+  </style>
+  <div class="subsection">
+    <div class="subsection-label" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span>Almanaque · fechas sin cheques grandes</span>
+      <span style="display:flex;gap:6px;">${btn('‹ Anterior',-1)}${btn('Hoy',0)}${btn('Siguiente ›',1)}</span>
+    </div>
+    <div class="alm-wrap">
+      <div class="alm-head"><h3>Fechas a evitar para cheques grandes</h3><div>Actualizado al ${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}</div></div>
+      <div class="alm-meses">${meses}</div>
+      <div class="alm-ley">
+        <span><i class="alm-dia alm-x" style="aspect-ratio:auto;"></i>No pedir cheques grandes ese día</span>
+        <span><i style="outline:2px solid #b89021;outline-offset:-2px;border-radius:3px;"></i>Hoy</span>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:10px;color:var(--muted);">Cruz = del 1 al 5 de cada mes + días donde ya vencen cheques por $${(UMBRAL_CHEQUE_ALM/1e6).toFixed(0)}M o más (sumando los del día). Pasá el mouse sobre un día para ver los cheques. Los montos no se muestran en la grilla para que la captura se pueda mandar.</div>
+  </div>`;
+}
 function renderFinanzas(){
   const el=document.getElementById('module-fin');
   el.style.display='block';
@@ -3199,7 +3266,10 @@ function renderFinanzas(){
   const finTabs=`<div class="tabs" style="margin-bottom:22px;">
     <div class="tab ${finTab==='tablero'?'active':''}" onclick="setFinTab('tablero')">Tablero de control</div>
     <div class="tab ${finTab==='pagar'?'active':''}" onclick="setFinTab('pagar')">Lista de gastos por pagar</div>
+    <div class="tab ${finTab==='almanaque'?'active':''}" onclick="setFinTab('almanaque')">Almanaque de cheques</div>
   </div>`;
+
+  if(finTab==='almanaque'){ el.innerHTML=finTabs+finAlmanaque(pagos,hoy); return; }
 
   if(finTab==='pagar'){
     const listaRows=pagos.map(p=>{
