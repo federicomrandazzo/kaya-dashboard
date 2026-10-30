@@ -2916,7 +2916,7 @@ async function guardarPagados(){
 }
 
 // ── Almanaque de cheques (pedido de Federico, 30/10/2026) ──
-// Cruz en los días donde vencen cheques por ≥ $1M (suma del día) y del 1 al 5 de cada mes,
+// Cruz en los días donde vencen cheques por ≥ $1M (suma del día), el IVA y del 1 al 5 de cada mes,
 // para mandarle la captura a Gastón y que no pida cheques grandes esas fechas.
 // Sin montos en la grilla a propósito: la captura va a un tercero (el detalle queda en el tooltip).
 const UMBRAL_CHEQUE_ALM = 1000000;
@@ -2930,15 +2930,22 @@ function finAlmanaque(pagos,hoy){
     (porDia[k]=porDia[k]||{total:0,items:[]}).total+=p.monto;
     porDia[k].items.push(p);
   });
+  // IVA: se tacha siempre, sin importar el monto (gastos fijos con ítem "iva"; agregado 30/10/2026)
+  const ivaDia={};
+  pagos.filter(p=>!/CHEQUE/i.test(p.fuente)&&/^iva$/i.test(p.detalle)).forEach(p=>{
+    const k=p.fecha.getFullYear()+'-'+p.fecha.getMonth()+'-'+p.fecha.getDate();
+    (ivaDia[k]=ivaDia[k]||[]).push(p);
+  });
   const mesHTML=(y,m)=>{
     const ini=new Date(y,m,1), dias=new Date(y,m+1,0).getDate(), off=(ini.getDay()+6)%7;
     let celdas='<div class="alm-dsem">L</div><div class="alm-dsem">M</div><div class="alm-dsem">M</div><div class="alm-dsem">J</div><div class="alm-dsem">V</div><div class="alm-dsem">S</div><div class="alm-dsem">D</div>';
     for(let i=0;i<off;i++) celdas+='<div></div>';
     for(let d=1;d<=dias;d++){
       const f=new Date(y,m,d), ch=porDia[y+'-'+m+'-'+d];
-      const cheque=ch&&ch.total>=UMBRAL_CHEQUE_ALM, inicio=d<=5, cruz=cheque||inicio;
+      const iva=ivaDia[y+'-'+m+'-'+d];
+      const cheque=ch&&ch.total>=UMBRAL_CHEQUE_ALM, inicio=d<=5, cruz=cheque||inicio||!!iva;
       const pasado=f<hoy, esHoy=f.getTime()===hoy.getTime(), finde=f.getDay()===0||f.getDay()===6;
-      const tip=cheque?ch.items.map(p=>p.label+' · '+pesos(p.monto)).join('\n'):(inicio?'Del 1 al 5 del mes':'');
+      const tip=[...(inicio?['Del 1 al 5 del mes']:[]),...(iva||[]).map(p=>'Vence IVA · '+pesos(p.monto)),...(cheque?ch.items.map(p=>p.label+' · '+pesos(p.monto)):[])].join('\n');
       celdas+=`<div class="alm-dia${cruz?' alm-x':''}${pasado?' alm-pas':''}${esHoy?' alm-hoy':''}${finde?' alm-finde':''}"${tip?` title="${tip.replace(/"/g,'&quot;')}"`:''}><span>${d}</span></div>`;
     }
     return `<div class="alm-mes"><div class="alm-tit">${MES[m]} ${y}</div><div class="alm-grid">${celdas}</div></div>`;
@@ -2979,7 +2986,7 @@ function finAlmanaque(pagos,hoy){
         <span><i style="outline:2px solid #b89021;outline-offset:-2px;border-radius:3px;"></i>Hoy</span>
       </div>
     </div>
-    <div style="margin-top:10px;font-size:10px;color:var(--muted);">Cruz = del 1 al 5 de cada mes + días donde ya vencen cheques por $${(UMBRAL_CHEQUE_ALM/1e6).toFixed(0)}M o más (sumando los del día). Pasá el mouse sobre un día para ver los cheques. Los montos no se muestran en la grilla para que la captura se pueda mandar.</div>
+    <div style="margin-top:10px;font-size:10px;color:var(--muted);">Cruz = del 1 al 5 de cada mes + vencimientos de IVA + días donde ya vencen cheques por $${(UMBRAL_CHEQUE_ALM/1e6).toFixed(0)}M o más (sumando los del día). Pasá el mouse sobre un día para ver el detalle. Los montos no se muestran en la grilla para que la captura se pueda mandar.</div>
   </div>`;
 }
 function renderFinanzas(){
