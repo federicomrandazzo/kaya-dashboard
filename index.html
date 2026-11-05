@@ -988,7 +988,7 @@ const SKU_MAP = {
   'FUN-SHI-100':'FUN-SHI100','TIN-ASH-100':'TIN-ASH100','TIN-GIN-100':'TIN-GIN100',
   'JOJ60':'JOJ-60','JOJ125':'JOJ-125',
 };
-const ADAPTOGENOS = ['MELENA','CORDYCEPS','REISHI','SHIITAKE','PAVO','ASHWAGANDHA','GINSENG','TREM'];
+const ADAPTOGENOS = ['MELENA','CORDYCEPS','REISHI','SHIITAKE','PAVO','ASHWAGANDHA','GINSENG','TREM','VITEX','CHAGA','RHODIOLA'];
 const DIST_ADAPTO = [{ml:50,pct:0.65},{ml:100,pct:0.35}];
 const DIST_JOJOBA = [{ml:30,pct:0.38},{ml:60,pct:0.36},{ml:125,pct:0.26}];
 const ADAPTO_SKU_MAP = {
@@ -996,6 +996,8 @@ const ADAPTO_SKU_MAP = {
   'REISHI':{50:'FUN-REI',100:'FUN-REI100'},'SHIITAKE':{50:'FUN-SHI',100:'FUN-SHI100'},
   'PAVO':{50:'FUN-CDP',100:'FUN - CDP100'},'ASHWAGANDHA':{50:'TIN-ASH',100:'TIN-ASH100'},
   'GINSENG':{50:'TIN-GIN',100:'TIN-GIN100'},'TREM':{50:'TIN-TREM',100:'TIN-TREM100'},
+  'VITEX':{50:'FUN-VIT',100:'FUN-VIT-100'},'CHAGA':{50:'FUN-CHA',100:'FUN-CHA-100'},
+  'RHODIOLA':{50:'FUN-RHO',100:'FUN-RHO-100'},
 };
 const JOJOBA_SKU_MAP = {30:'JOJ-30G',60:'JOJ-60',125:'JOJ-125'};
 const MOSQUETA_SKU = 'ROS-MOS';
@@ -1611,7 +1613,7 @@ function buildArmarCards(){
       if(pos<mn){mn=pos;lim={nombre:c.nombre,codigo:c.comp,stock:st,qty:c.qty};}
       return {...c,st,pos:pos===Infinity?9999:pos};
     });
-    return {unidades:mn===Infinity?0:mn,limitante:lim,detalle:det};
+    return {unidades:mn===Infinity?0:Math.max(0,mn),limitante:lim,detalle:det};
   }
   const cards=[];
   DATA.dux.filter(r=>ADAPTOGENOS.includes((r['Código Producto']||'').trim())).forEach(r=>{
