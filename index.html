@@ -873,7 +873,7 @@ const ROLE_MODULES = {
   ventas: ['semanal','diaria','pub','stock','compras','proyeccion'],
   house:  ['stock','compras','laboratorio','proyeccion','kh','ventas'],
   cajas:  ['kh'],
-  lab:    ['kh'],
+  lab:    ['laboratorio','kh'],   // en Laboratorio ve solo el plan (sin editar)
   sofi:   ['mayoristas'],
 };
 // Pestañas de Operaciones visibles por rol (si el rol no figura, ve todas)
@@ -1119,9 +1119,9 @@ async function loadData() {
   document.getElementById('module-pubmeta').style.display='none';
   try {
     const [dT,tT,cT,vT,oT,pT,aT,pdT,pbT,edT,swT,fnT,slT,mlT,cjT,vmT,smT,cnT,vcT,pvT] = await Promise.all([
-      (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.dux):Promise.resolve(''),
+      (roleAllows('stock')||roleAllows('proyeccion')||roleAllows('laboratorio'))?fetchCSV(URLS.dux):Promise.resolve(''),
       (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.tn):Promise.resolve(''),
-      (roleAllows('stock')||roleAllows('proyeccion'))?fetchCSV(URLS.compuestos):Promise.resolve(''),
+      (roleAllows('stock')||roleAllows('proyeccion')||roleAllows('laboratorio'))?fetchCSV(URLS.compuestos):Promise.resolve(''),
       (roleAllows('ventas')||roleAllows('proyeccion'))?fetchCSV(URLS.ventas):Promise.resolve(''),
       (roleAllows('ventas')||roleAllows('proyeccion'))?fetchCSV(URLS.ordenes):Promise.resolve(''),
       khTabAllows('produccion')?fetchCSV(URLS.produccion):Promise.resolve(''),
@@ -1234,7 +1234,7 @@ async function actualizarDatos(){
         }
         if(roleAllows('semanal')) DATA.semanal = parseCSV(j.semanal).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test((r['semana']||'').trim()));
         if(roleAllows('diaria')) setDiaria(j.diaria);
-        if(roleAllows('stock')||roleAllows('proyeccion')){
+        if(roleAllows('stock')||roleAllows('proyeccion')||roleAllows('laboratorio')){
           if(j.dux) DATA.dux = parseCSV(j.dux.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-');
           if(j.tn)  DATA.tn  = parseCSV(j.tn);
         }
@@ -4061,7 +4061,7 @@ function renderComprasRankingInsumo(){
 // CONFIRMADO con Tomi (ago 2026): la producción se ingresa a Dux AL ENVASAR y etiquetar,
 // no cuando armado cierra la caja. Por eso el Stock Disponible de Dux del producto
 // terminado es, para este módulo, "lo que hay envasado" — la cajita se junta después.
-let labState = { desde:'', hasta:'', objetivo:7, alerta:3, tanda:0 };
+let labState = { tab:'plan', desde:'', hasta:'', objetivo:7, alerta:3, tanda:0 };
 
 // Los productos del laboratorio no se listan a mano: son los que llevan un componente de
 // rubro PRODUCTO LIQUIDO en su receta de Dux (el granel que se envasa). Si mañana entra un
@@ -4169,9 +4169,21 @@ function labCalc(){
   });
   return {filas,granel,insumos,diasRango};
 }
+// Dos solapas: "Plan del laboratorio" (lo que Tomi le pide al lab y cómo viene) y
+// "Qué envasar" (la sugerencia calculada). El rol lab ve solo el plan, sin editar.
+function labSetTab(t){ labState.tab=t; renderLaboratorio(); }
 function renderLaboratorio(){
-  const el=document.getElementById('module-laboratorio');
-  el.style.display='block';
+  const mod=document.getElementById('module-laboratorio');
+  mod.style.display='block';
+  const conSugerencia=labEditor();
+  // Mientras el plan no esté conectado a la planilla, Tomi entra directo a la sugerencia.
+  if(!labState.tabIni){ labState.tabIni=true; labState.tab=LAB.url?'plan':'sugerencia'; }
+  if(!conSugerencia) labState.tab='plan';
+  mod.innerHTML=(conSugerencia?`<div class="v-tabs">
+      ${[['plan','Plan del laboratorio'],['sugerencia','Qué envasar']].map(([t,l])=>`<div class="v-tab ${labState.tab===t?'active':''}" onclick="labSetTab('${t}')">${l}</div>`).join('')}
+    </div>`:'')+'<div id="lab-body"></div>';
+  const el=document.getElementById('lab-body');
+  if(labState.tab==='plan'){ renderLabPlan(el); return; }
   const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
   if(!labState.desde) labState.desde=periodoDefault(periodos);
   if(!labState.hasta) labState.hasta=periodoDefault(periodos);
@@ -4295,6 +4307,337 @@ function renderLaboratorio(){
     +tablaGranel
     +sub('¿Alcanza el resto del material?',`Lo que pide el plan y hoy no alcanza, sumando todos los productos, porque un mismo insumo sirve a varios. Botellitas, tetinas y etiquetas frenan el envasado y marcan el producto como <em>falta material</em>; las partes de caja no lo frenan (las arma el otro sector) pero sin ellas el producto no se puede vender, y aparecen al final como <em>falta caja</em>.`)
     +tablaMaterial;
+}
+
+// ── PLAN DEL LABORATORIO ─────────────────────────────────────────
+// Tomi arma el plan (qué tiene que envasar el lab en los próximos días, horizonte libre)
+// y va cargando las entregas a medida que el lab termina; el lab mira qué le falta y si
+// le alcanzan los insumos para eso. Tomi carga cada entrega cuando da de alta el producto
+// terminado en Dux, que es el momento en que Dux descuenta los insumos de la receta.
+// Plan y entregas viven en la planilla de producción (apps-script-laboratorio.gs) y se
+// leen al momento, sin el retraso del CSV publicado. Un solo plan abierto a la vez.
+const LAB = { url:'', token:'kaya-lab', plan:null, entregas:[], cargado:false, error:'', guardando:false,
+              editando:false, borrador:null, inp:{}, tick:0, timer:null,
+              responsable:(()=>{ try{ return localStorage.getItem('kayaLabResp')||''; }catch(e){ return ''; } })() };
+const LAB_RESPONSABLES = ['Christian Simon','Tomas Ferreira','Tomas Floss','Mateo Hernandez'];
+function labEditor(){ return !!(USER&&(USER.role==='admin'||USER.role==='house')); }
+function labEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function labFechaTxt(iso){ const p=(iso||'').split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:(iso||''); }
+function labHoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function labN(v,dec){ return Number(v||0).toLocaleString('es-AR',{maximumFractionDigits:dec||0}); }
+
+async function labFetch(){
+  if(!LAB.url){ LAB.cargado=true; return; }
+  try{
+    const j=await fetch(LAB.url+'?token='+encodeURIComponent(LAB.token)).then(r=>r.json());
+    if(j&&j.ok){ LAB.plan=j.plan; LAB.entregas=j.entregas||[]; LAB.error=''; }
+    else LAB.error=(j&&j.error)||'respuesta inválida';
+  }catch(e){ LAB.error='No se pudo consultar la planilla del laboratorio.'; }
+  LAB.cargado=true;
+}
+// POST como text/plain (sin encabezados) para que el navegador no pida permiso CORS previo.
+async function labPost(payload){
+  if(!LAB.url||LAB.guardando) return false;
+  LAB.guardando=true; labRepintar(true);
+  try{
+    const j=await fetch(LAB.url,{method:'POST',body:JSON.stringify(Object.assign({token:LAB.token,usuario:USER?USER.label:''},payload))}).then(r=>r.json());
+    if(j&&j.ok){ LAB.plan=j.plan; LAB.entregas=j.entregas||[]; LAB.error=''; return true; }
+    alert('No se pudo guardar: '+((j&&j.error)||'respuesta inválida'));
+    return false;
+  }catch(e){ alert('No se pudo guardar: no hay conexión con la planilla.'); return false; }
+  finally{ LAB.guardando=false; labRepintar(true); }
+}
+// El repintado automático no pisa lo que alguien está escribiendo.
+function labRepintar(forzar){
+  if(currentModule!=='laboratorio'||labState.tab!=='plan') return;
+  const a=document.activeElement;
+  if(!forzar&&a&&a.closest&&a.closest('#module-laboratorio')&&/INPUT|SELECT/.test(a.tagName)) return;
+  renderLaboratorio();
+}
+// Cada minuto trae plan y entregas; cada 10 minutos, también el stock de Dux.
+function labPoll(){
+  if(LAB.timer) return;
+  LAB.timer=setInterval(async()=>{
+    if(currentModule!=='laboratorio'||labState.tab!=='plan'||document.visibilityState!=='visible'||LAB.editando) return;
+    LAB.tick++;
+    if(LAB.tick%10===0){
+      const t=await fetchCSV(URLS.dux);
+      const d=t?parseCSV(t.split('\n').slice(2).join('\n')).filter(r=>r['Código Producto']&&r['Código Producto']!=='-'):[];
+      if(d.length) DATA.dux=d;
+      consultarInfoDux();
+    }
+    await labFetch();
+    labRepintar(false);
+  },60000);
+}
+
+// Catálogo del laboratorio: los mismos productos que detecta labProductos (todo lo que
+// lleva granel en la receta: tinturas, jojoba y rosa mosqueta), con nombre corto.
+function labCatalogo(){
+  const prods=labProductos(), nomD={}, stockD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); nomD[c]=r['Producto']||''; stockD[c]=num(r['Stock Disponible']); });
+  const cat={};
+  Object.entries(prods).forEach(([sku,p])=>{
+    const nombre=(nomD[sku]||sku).replace(/\s*-?\s*\d+\s*ML/i,'').replace(/^TINTURA MADRE\s*-\s*/i,'').replace(/\(NUEVO\)/i,'').trim();
+    cat[sku]={sku,nombre,medida:labMedida(nomD[sku],p.litros),stock:stockD[sku]||0,granel:p.granel};
+  });
+  return cat;
+}
+function labOrden(a,b){ return a.nombre.localeCompare(b.nombre)||(parseInt(a.medida)||0)-(parseInt(b.medida)||0); }
+
+// Avance del plan e insumos para lo que falta.
+// Insumos: lo que falta envasar × receta (granel en litros + botella, tetina, etiqueta),
+// contra el stock disponible de Dux. Las partes de caja no entran: no frenan el envasado.
+// El stock de Dux es una foto del último sync; las entregas cargadas DESPUÉS ya bajaron
+// insumos en Dux pero todavía no en esa foto, así que se descuentan acá.
+function labPlanCalc(){
+  const plan=LAB.plan; if(!plan) return null;
+  const cat=labCatalogo();
+  const ent={};
+  LAB.entregas.forEach(e=>{ ent[e.sku]=(ent[e.sku]||0)+(Number(e.cantidad)||0); });
+  const skus=[...new Set([...(plan.items||[]).map(i=>i.sku),...Object.keys(ent)])];
+  const filas=skus.map(sku=>{
+    const it=(plan.items||[]).find(i=>i.sku===sku);
+    const p=it?Number(it.cantidad)||0:0, e=ent[sku]||0;
+    return Object.assign({sku,nombre:sku,medida:'',stock:0},cat[sku]||{},{plan:p,entregado:e,falta:Math.max(0,p-e)});
+  });
+  const totPlan=filas.reduce((s,f)=>s+f.plan,0);
+  const totHecho=filas.reduce((s,f)=>s+Math.min(f.entregado,f.plan),0);
+  const totFalta=filas.reduce((s,f)=>s+f.falta,0);
+
+  const recetas=comprasRecetas();
+  const nomD={},stockD={},rubD={};
+  DATA.dux.forEach(r=>{ const c=(r['Código Producto']||'').trim(); nomD[c]=r['Producto']||''; stockD[c]=num(r['Stock Disponible']); rubD[c]=(r['Rubro']||'').trim(); });
+  const graneles=new Set(Object.values(labProductos()).map(p=>p.granel));
+  const corte=DUX_SYNC.last?Number(DUX_SYNC.last):0;
+  const post={}; let nPost=0;
+  if(corte) LAB.entregas.forEach(e=>{ if(Date.parse(e.fecha_hora)>corte){ post[e.sku]=(post[e.sku]||0)+(Number(e.cantidad)||0); nPost++; } });
+  const ins={};
+  const sumar=(sku,u,campo)=>{
+    if(!u) return;
+    (recetas[sku]||[]).forEach(c=>{
+      if(!c.comp||/CAJA/i.test(rubD[c.comp]||'')) return;
+      if(!ins[c.comp]) ins[c.comp]={sku:c.comp,nombre:nomD[c.comp]||c.comp,esGranel:graneles.has(c.comp),stock:stockD[c.comp]||0,necesita:0,usado:0};
+      ins[c.comp][campo]+=u*c.qty;
+    });
+  };
+  filas.forEach(f=>sumar(f.sku,f.falta,'necesita'));
+  Object.entries(post).forEach(([sku,u])=>sumar(sku,u,'usado'));
+  const insumos=Object.values(ins).filter(i=>i.necesita>0.0001).map(i=>{
+    const disp=i.stock-i.usado;
+    return Object.assign(i,{disponible:disp,falta:Math.max(0,i.necesita-disp)});
+  });
+  insumos.sort((a,b)=>(b.falta>0.0001)-(a.falta>0.0001)||(b.esGranel-a.esGranel)||a.nombre.localeCompare(b.nombre));
+  // Producto frenado: algún insumo de su receta no alcanza para lo que le falta.
+  const faltan=new Set(insumos.filter(i=>i.falta>0.0001).map(i=>i.sku));
+  filas.forEach(f=>{ f.frenado=f.falta>0&&(recetas[f.sku]||[]).some(c=>faltan.has(c.comp)); });
+  filas.sort((a,b)=>(b.falta>0)-(a.falta>0)||b.falta-a.falta||labOrden(a,b));
+  return {filas,insumos,totPlan,totHecho,totFalta,corte,nPost};
+}
+
+function renderLabPlan(el){
+  labPoll();
+  if(!LAB.cargado){
+    el.innerHTML=`<div class="empty" style="padding:40px 0;">Cargando el plan…</div>`;
+    labFetch().then(()=>labRepintar(true));
+    return;
+  }
+  if(!LAB.url){
+    el.innerHTML=`<div class="empty" style="padding:40px 0;">El plan del laboratorio todavía no está conectado a la planilla de producción.</div>`;
+    return;
+  }
+  if(LAB.editando&&labEditor()){ renderLabEditor(el); return; }
+  const ed=labEditor(), plan=LAB.plan;
+  const btn=(txt,fn,prim)=>`<button onclick="${fn}" ${LAB.guardando?'disabled':''} style="background:${prim?'var(--accent)':'transparent'};color:${prim?'#fff':'var(--text)'};border:1px solid ${prim?'var(--accent)':'var(--border)'};padding:8px 14px;border-radius:4px;cursor:pointer;font-family:'Red Hat Display',sans-serif;font-size:12px;">${txt}</button>`;
+  const err=LAB.error?`<div style="color:var(--accent3);font-size:12px;margin-bottom:12px;">${labEsc(LAB.error)}</div>`:'';
+  if(!plan){
+    el.innerHTML=err+`<div class="empty" style="padding:40px 0;">Todavía no hay un plan cargado.${ed?`<div style="margin-top:16px;">${btn('Armar el primer plan','labNuevoPlan()',true)}</div>`:''}</div>`;
+    return;
+  }
+  const c=labPlanCalc();
+  const abierto=plan.estado==='abierto';
+  const hoy=labHoy();
+  const quedan=Math.round((new Date(plan.hasta+'T00:00')-new Date(hoy+'T00:00'))/86400000);
+  const plazo=!abierto?'plan cerrado':quedan>1?`quedan ${quedan} días`:quedan===1?'termina mañana':quedan===0?'termina hoy':`venció hace ${-quedan} día${quedan===-1?'':'s'}`;
+  const pct=c.totPlan>0?c.totHecho/c.totPlan:0;
+  const insFaltan=c.insumos.filter(i=>i.falta>0.0001);
+
+  const cab=`<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+    <div>
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">${abierto?'Plan en curso':'Último plan (cerrado)'}</div>
+      <div style="font-size:18px;font-weight:500;">${plan.desde===plan.hasta?labFechaTxt(plan.desde):`${labFechaTxt(plan.desde)} al ${labFechaTxt(plan.hasta)}`} <span style="font-size:12px;color:${!abierto||quedan<0?'var(--accent3)':'var(--muted)'};margin-left:6px;">${plazo}</span></div>
+    </div>
+    ${ed?`<div style="display:flex;gap:8px;flex-wrap:wrap;">${btn('Nuevo plan','labNuevoPlan()',!abierto||c.totFalta===0)}${abierto?btn('Cerrar plan','labCerrarPlan()'):''}</div>`:''}
+  </div>`;
+
+  const kpi=(lbl,val,det,col)=>`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;">
+    <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">${lbl}</div>
+    <div style="font-size:22px;font-weight:500;color:${col};font-variant-numeric:tabular-nums;">${val}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:4px;">${det}</div>
+  </div>`;
+  const barra=`<div style="height:6px;background:var(--border);border-radius:3px;margin-top:10px;overflow:hidden;"><div style="height:100%;width:${Math.min(100,pct*100).toFixed(1)}%;background:var(--accent);"></div></div>`;
+  const kpis=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;">
+    ${kpi('Avance',Math.round(pct*100)+'%',`${labN(c.totHecho)} de ${labN(c.totPlan)} u. entregadas`+barra,'var(--accent)')}
+    ${kpi('Falta envasar',labN(c.totFalta)+' u.',`${c.filas.filter(f=>f.falta>0).length} de ${c.filas.filter(f=>f.plan>0).length} productos con pendiente`,c.totFalta?'var(--text)':'var(--accent)')}
+    ${kpi('Insumos que no alcanzan',insFaltan.length,insFaltan.length?'para lo que falta del plan':'alcanza todo para terminar el plan',insFaltan.length?'var(--accent3)':'var(--text)')}
+  </div>`;
+
+  const sub=(t,d)=>`<div style="margin:28px 0 12px;"><div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent2);margin-bottom:4px;">${t}</div><div style="font-size:11px;color:var(--muted);">${d}</div></div>`;
+  const th=(t,izq)=>`<th style="text-align:${izq?'left':'right'};font-size:10px;padding:8px 10px;">${t}</th>`;
+  const tabla=(cabs,filas)=>`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+      <thead><tr style="border-bottom:2px solid #d4c5a0;">${cabs}</tr></thead><tbody>${filas}</tbody></table></div></div>`;
+
+  // Carga de entregas (solo Tomi y admin): una fila por producto con su casillero.
+  const cargar=ed&&abierto;
+  const opResp=[...new Set([...LAB_RESPONSABLES,...(DATA.produccion||[]).map(r=>(r['responsable']||'').trim()).filter(Boolean)])].sort();
+  const selResp=cargar?`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-4px 0 12px;font-size:12px;">
+      <span style="color:var(--muted);">Entrega de</span>
+      <input list="lab-resp" class="v-select" style="width:190px;" value="${labEsc(LAB.responsable)}" placeholder="quién envasó" oninput="labSetResp(this.value)">
+      <datalist id="lab-resp">${opResp.map(r=>`<option value="${labEsc(r)}">`).join('')}</datalist>
+      <span style="color:var(--muted);font-size:11px;">Cargá cada entrega al darla de alta en Dux.</span>
+    </div>`:'';
+  const estado=f=>f.plan===0?`<span class="sku-badge">fuera del plan</span>`
+    :f.falta===0?`<span class="sku-badge" style="color:var(--accent);border-color:var(--accent);">listo</span>`
+    :f.frenado?`<span class="sku-badge" style="color:var(--accent3);border-color:var(--accent3);">falta insumo</span>`
+    :f.entregado>0?`<span class="sku-badge">en curso</span>`:`<span class="sku-badge" style="color:var(--muted);">sin empezar</span>`;
+  const filaP=f=>`<tr style="border-bottom:1px solid var(--border);${f.falta===0?'opacity:0.6;':''}">
+      <td style="padding:8px 10px;font-size:12px;${f.falta>0?'font-weight:600;':''}">${labEsc(f.nombre)} ${f.medida?`<span style="color:var(--muted);">${f.medida}</span>`:''}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${labN(f.plan)}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${labN(f.entregado)}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px;font-weight:600;color:${f.falta?'var(--text)':'var(--muted)'};">${f.falta?labN(f.falta):'—'}</td>
+      <td style="padding:8px 10px;text-align:right;">${estado(f)}</td>
+      ${cargar?`<td style="padding:6px 10px;text-align:right;white-space:nowrap;">
+        <input type="number" min="1" inputmode="numeric" class="v-select" style="width:76px;" placeholder="u." value="${LAB.inp[f.sku]||''}" oninput="LAB.inp['${f.sku}']=this.value" onkeydown="if(event.key==='Enter')labEntrega('${f.sku}')">
+        <button onclick="labEntrega('${f.sku}')" ${LAB.guardando?'disabled':''} style="background:var(--accent);color:#fff;border:none;padding:7px 12px;border-radius:4px;cursor:pointer;font-size:11px;margin-left:4px;">Cargar</button></td>`:''}
+    </tr>`;
+  const tablaPlan=tabla(th('Producto',1)+th('Planificado')+th('Entregado')+th('Falta')+th('Estado')+(cargar?th('Entrega'):''),c.filas.map(filaP).join(''));
+
+  const filaI=i=>{
+    const u=i.esGranel?' L':'', dec=i.esGranel?1:0, f=i.falta>0.0001;
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;${f?'font-weight:600;':''}">${labEsc(i.nombre)}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${labN(i.esGranel?i.necesita:Math.ceil(i.necesita),dec)}${u}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${labN(Math.max(0,i.disponible),dec)}${u}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:${f?'600':'400'};color:${f?'var(--accent3)':'var(--muted)'};">${f?'faltan '+labN(i.esGranel?i.falta:Math.ceil(i.falta),dec)+u:'alcanza'}</td>
+    </tr>`;
+  };
+  const fotoDux=c.corte?`Stock de Dux al ${fmtHora(new Date(c.corte))}${c.nPost?`, descontando ${c.nPost} entrega${c.nPost>1?'s':''} cargada${c.nPost>1?'s':''} después`:''}.`:'Stock de Dux de la última actualización.';
+  const tablaIns=c.insumos.length
+    ?tabla(th('Insumo',1)+th('Necesita')+th('Disponible')+th('Situación'),c.insumos.map(filaI).join(''))
+    :`<div class="empty" style="padding:28px 0;">${c.totFalta?'Sin receta cargada en Dux para lo que falta.':'El plan está completo: no hace falta ningún insumo más.'}</div>`;
+
+  const ents=[...LAB.entregas].sort((a,b)=>(b.fecha_hora||'').localeCompare(a.fecha_hora||''));
+  const cat=labCatalogo();
+  const filaE=e=>{
+    const p=cat[e.sku]||{nombre:e.sku,medida:''}, d=new Date(e.fecha_hora);
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:11px;color:var(--muted);white-space:nowrap;">${isNaN(d)?'':fmtHora(d)}</td>
+      <td style="padding:8px 10px;font-size:12px;">${labEsc(p.nombre)} <span style="color:var(--muted);">${p.medida}</span></td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px;font-weight:600;">${labN(e.cantidad)}</td>
+      <td style="padding:8px 10px;font-size:11px;color:var(--muted);">${labEsc(e.responsable||'—')}</td>
+      ${cargar?`<td style="padding:6px 10px;text-align:right;"><span onclick="labAnular('${labEsc(e.id)}')" title="Anular esta entrega" style="cursor:pointer;color:var(--muted);font-size:14px;padding:0 6px;">×</span></td>`:''}
+    </tr>`;
+  };
+  const tablaEnt=ents.length
+    ?tabla(th('Cuándo',1)+th('Producto',1)+th('Unidades')+th('Envasó',1)+(cargar?th(''):''),ents.map(filaE).join(''))
+    :`<div class="empty" style="padding:28px 0;">Todavía no se cargó ninguna entrega de este plan.</div>`;
+
+  el.innerHTML=err+cab+kpis
+    +sub('Qué falta envasar',`Lo que pidió Tomi para ${plan.desde===plan.hasta?'el día':'el período'}, contra lo que el laboratorio ya entregó. Se actualiza solo cada minuto.`)
+    +selResp+tablaPlan
+    +sub('Insumos para lo que falta',`Granel, botellas, tetinas y etiquetas que necesita lo que falta del plan. ${fotoDux} Las partes de caja no se cuentan: no frenan el envasado.`)
+    +tablaIns
+    +sub('Entregas cargadas',ents.length?`${ents.length} entrega${ents.length>1?'s':''} · ${labN(ents.reduce((s,e)=>s+(Number(e.cantidad)||0),0))} u.`:'')
+    +tablaEnt;
+}
+function labSetResp(v){ LAB.responsable=v; try{ localStorage.setItem('kayaLabResp',v); }catch(e){} }
+async function labEntrega(sku){
+  const n=Math.round(Number(String(LAB.inp[sku]||'').replace(',','.')));
+  if(!n||n<=0){ alert('Poné cuántas unidades entregó.'); return; }
+  if(!LAB.responsable.trim()&&!confirm('No elegiste quién envasó. ¿Cargar igual?')) return;
+  if(await labPost({accion:'entrega',plan_id:LAB.plan.id,sku,cantidad:n,responsable:LAB.responsable.trim()})) delete LAB.inp[sku];
+}
+async function labAnular(id){
+  if(!confirm('¿Anular esta entrega? Vuelve a sumar como pendiente.')) return;
+  await labPost({accion:'anularEntrega',id});
+}
+async function labCerrarPlan(){
+  const c=labPlanCalc();
+  if(!confirm(c&&c.totFalta?`Quedan ${labN(c.totFalta)} u. sin entregar. ¿Cerrar el plan igual?`:'¿Cerrar el plan?')) return;
+  await labPost({accion:'cerrarPlan',id:LAB.plan.id});
+}
+
+// ── Editor del plan ──
+// Arranca precargado con la sugerencia de "Qué envasar" (con los parámetros de esa
+// solapa); Tomi corrige. Lo que quedó sin entregar del plan anterior se muestra al lado
+// y se puede sumar con un botón: arrastrarlo o descartarlo es decisión de Tomi.
+function labNuevoPlan(){
+  const sug={};
+  if(DATA.ventas.length&&DATA.compuestos.length){
+    const periodos=[...new Set(DATA.ventas.map(r=>(r['periodo']||'').trim()).filter(Boolean))].sort();
+    if(!labState.desde) labState.desde=periodoDefault(periodos);
+    if(!labState.hasta) labState.hasta=periodoDefault(periodos);
+    labCalc().filas.forEach(f=>{ if(f.envasar>0) sug[f.sku]=f.envasar; });
+  }
+  const c=LAB.plan?labPlanCalc():null, pend={};
+  if(c&&LAB.plan.estado==='abierto') c.filas.forEach(f=>{ if(f.falta>0) pend[f.sku]=f.falta; });
+  LAB.borrador={desde:labHoy(),hasta:labHoy(),cant:Object.assign({},sug),sug,pend};
+  LAB.editando=true;
+  renderLaboratorio();
+}
+function labBorr(campo,v){ LAB.borrador[campo]=v; }
+function labBorrCant(sku,v){ const n=Math.round(Number(String(v).replace(',','.'))); if(n>0) LAB.borrador.cant[sku]=n; else delete LAB.borrador.cant[sku]; labTotalBorr(); }
+function labTotalBorr(){ const t=document.getElementById('lab-borr-total'); if(t) t.textContent=labN(Object.values(LAB.borrador.cant).reduce((s,n)=>s+n,0))+' u.'; }
+function labBorrAccion(a){
+  const b=LAB.borrador;
+  if(a==='sug') b.cant=Object.assign({},b.sug);
+  if(a==='vaciar') b.cant={};
+  if(a==='arrastrar') Object.entries(b.pend).forEach(([s,n])=>{ b.cant[s]=(b.cant[s]||0)+n; });
+  renderLaboratorio();
+}
+function labCancelar(){ LAB.editando=false; LAB.borrador=null; renderLaboratorio(); }
+async function labGuardarPlan(){
+  const b=LAB.borrador;
+  if(!b.desde||!b.hasta||b.hasta<b.desde){ alert('Revisá las fechas: el "hasta" no puede ser anterior al "desde".'); return; }
+  const items=Object.entries(b.cant).filter(([,n])=>n>0).map(([sku,cantidad])=>({sku,cantidad}));
+  if(!items.length){ alert('El plan no tiene ningún producto.'); return; }
+  const pend=Object.values(b.pend).reduce((s,n)=>s+n,0);
+  if(LAB.plan&&LAB.plan.estado==='abierto'&&!confirm(`Al guardar se cierra el plan actual${pend?` (quedaban ${labN(pend)} u. sin entregar)`:''}. ¿Seguir?`)) return;
+  if(await labPost({accion:'crearPlan',desde:b.desde,hasta:b.hasta,items})){ LAB.editando=false; LAB.borrador=null; renderLaboratorio(); }
+}
+function renderLabEditor(el){
+  const b=LAB.borrador, cat=labCatalogo();
+  const lista=Object.values(cat).sort(labOrden);
+  const hayPend=Object.keys(b.pend).length>0;
+  const btn=(txt,fn,prim)=>`<button onclick="${fn}" ${LAB.guardando?'disabled':''} style="background:${prim?'var(--accent)':'transparent'};color:${prim?'#fff':'var(--text)'};border:1px solid ${prim?'var(--accent)':'var(--border)'};padding:8px 14px;border-radius:4px;cursor:pointer;font-family:'Red Hat Display',sans-serif;font-size:12px;">${txt}</button>`;
+  const lbl=t=>`<div style="font-size:10px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">${t}</div>`;
+  const total=Object.values(b.cant).reduce((s,n)=>s+n,0);
+  const controles=`<div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px;">
+    <div>${lbl('Desde')}<input type="date" class="v-select" style="width:150px;" value="${b.desde}" onchange="labBorr('desde',this.value)"></div>
+    <div>${lbl('Hasta')}<input type="date" class="v-select" style="width:150px;" value="${b.hasta}" onchange="labBorr('hasta',this.value)"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">${btn('Usar sugerencia',"labBorrAccion('sug')")}${hayPend?btn('Sumar lo que quedó',"labBorrAccion('arrastrar')"):''}${btn('Vaciar',"labBorrAccion('vaciar')")}</div>
+  </div>`;
+  const fila=p=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 10px;font-size:12px;">${labEsc(p.nombre)} ${p.medida?`<span style="color:var(--muted);">${p.medida}</span>`:''}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${labN(p.stock)}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:11px;color:var(--muted);">${b.sug[p.sku]?labN(b.sug[p.sku]):'—'}</td>
+      ${hayPend?`<td style="padding:8px 10px;text-align:right;font-size:11px;color:${b.pend[p.sku]?'var(--accent3)':'var(--muted)'};">${b.pend[p.sku]?labN(b.pend[p.sku]):'—'}</td>`:''}
+      <td style="padding:6px 10px;text-align:right;"><input type="number" min="0" inputmode="numeric" class="v-select" style="width:86px;" value="${b.cant[p.sku]||''}" placeholder="0" oninput="labBorrCant('${p.sku}',this.value)"></td>
+    </tr>`;
+  const th=(t,izq)=>`<th style="text-align:${izq?'left':'right'};font-size:10px;padding:8px 10px;">${t}</th>`;
+  el.innerHTML=`<div style="margin-bottom:16px;">
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;">Nuevo plan del laboratorio</div>
+      <div style="font-size:11px;color:var(--muted);">Elegí el período (uno o varios días) y cuánto tiene que envasar el lab de cada producto. Viene precargado con la sugerencia de <em>Qué envasar</em> (objetivo ${labState.objetivo} días de cobertura).${hayPend?' En rojo, lo que quedó sin entregar del plan actual.':''}</div>
+    </div>`+controles
+    +`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:'Red Hat Display',sans-serif;">
+        <thead><tr style="border-bottom:2px solid #d4c5a0;">${th('Producto',1)+th('Stock disponible')+th('Sugerido')+(hayPend?th('Quedó del plan actual'):'')+th('A envasar')}</tr></thead>
+        <tbody>${lista.map(fila).join('')}</tbody></table></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;">
+      <div style="font-size:12px;color:var(--muted);">Total del plan: <b id="lab-borr-total" style="color:var(--text);">${labN(total)} u.</b></div>
+      <div style="display:flex;gap:8px;">${btn('Cancelar','labCancelar()')}${btn(LAB.guardando?'Guardando…':'Guardar plan','labGuardarPlan()',true)}</div>
+    </div>`;
 }
 
 // ── PROYECCIÓN ───────────────────────────────────────────────────
