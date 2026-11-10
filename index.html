@@ -4319,7 +4319,7 @@ function renderLaboratorio(){
 // se envasa después. Tomi escribe "ANTICIPADA" en las observaciones del ingreso; acá no
 // cuenta como entregada sino como pendiente del lab, hasta que Tomi toca "Ya se envasó".
 // Sus insumos ya los descontó Dux, así que no se vuelven a pedir.
-const LAB = { url:'', token:'kaya-lab', plan:null, ingresos:[], ultimoSync:0, cargado:false, error:'',
+const LAB = { url:'https://script.google.com/macros/s/AKfycbzSTa0mMqTM3Y8PHMAUmrwASL6nKmIoGU90lIgdEqPiI8gPb5V_y5kNsOUnZiZTiCnuSQ/exec', token:'kaya-lab', plan:null, ingresos:[], ultimoSync:0, cargado:false, error:'',
               guardando:false, trayendo:false, editando:false, borrador:null, tick:0, timer:null };
 function labEditor(){ return !!(USER&&(USER.role==='admin'||USER.role==='house')); }
 function labEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -4435,7 +4435,8 @@ function labPlanCalc(){
   // receta; cualquier otro ingreso (p. ej. botellas que entraron) suma a su propio stock.
   const mov={}; let nPost=0;
   if(corte) LAB.ingresos.forEach(i=>{
-    if(!(i.visto_en>corte)) return;
+    // Solo los de hoy: la primera lectura del script marcó como "recién vistos" ingresos viejos que ya están en la foto.
+    if(!(i.visto_en>corte)||i.fecha<labHoy()) return;
     nPost++;
     if(cat[i.sku]) (recetas[i.sku]||[]).forEach(c=>{ if(c.comp) mov[c.comp]=(mov[c.comp]||0)-i.cantidad*c.qty; });
     else mov[i.sku]=(mov[i.sku]||0)+i.cantidad;
